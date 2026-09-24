@@ -136,7 +136,8 @@ OBSERVATION_COLS = [
     "seller_offers_count", "is_by_homeowner", "photos_count", "edited_at",
     "unmapped_keys", "title", "pets_source", "pets_platform_allowed",
     "description_minhash", "is_duplicated_description", "seller_rating",
-    "seller_experience_since",
+    "seller_experience_since", "price_estimate_low", "price_estimate_high",
+    "price_label", "owner_verified", "platform_duplicate_ids",
 ]
 
 
@@ -206,7 +207,8 @@ def upsert_observations(conn, parsed: list[dict], run_id: int) -> None:
     for p in parsed:
         obs = dict(p["observation"])
         obs["run_id"] = run_id
-        for jsonb_col in ("unmapped_keys", "description_minhash"):
+        for jsonb_col in ("unmapped_keys", "description_minhash",
+                          "platform_duplicate_ids"):
             if obs.get(jsonb_col) is not None:
                 obs[jsonb_col] = Jsonb(obs[jsonb_col])
         rows.append(tuple(obs.get(c) for c in OBSERVATION_COLS))

@@ -8,7 +8,8 @@
 import pytest
 
 from src.dedup import (
-    AREA_TOLERANCE,
+    AREA_TOLERANCE_ABS,
+    AREA_TOLERANCE_REL,
     TEXT_THRESHOLD,
     UnionFind,
     attributes_match,
@@ -69,8 +70,25 @@ def test_area_tolerance_absorbs_rounding():
 
 
 def test_area_difference_beyond_tolerance_is_a_different_flat():
-    assert not attributes_match(offer("a", area=54.0),
-                                offer("b", area=54.0 + AREA_TOLERANCE + 0.1))
+    assert not attributes_match(offer("a", area=54.0), offer("b", area=60.0))
+
+
+def test_area_tolerance_scales_with_flat_size():
+    """Агентства указывают площадь по-разному — кто-то с лоджией, кто-то
+    без, — и расхождение растёт вместе с размером. Плоский допуск в метр
+    терял настоящие дубли: у пар, которые площадка сама объявила одной
+    квартирой, медианное расхождение составило 4 м²."""
+    # 200 м²: допуск 10 м², расхождение в 8 допустимо
+    assert attributes_match(offer("a", area=200.0), offer("b", area=208.0))
+    # 30 м²: допуск остаётся метром, те же 8 м² — это другая квартира
+    assert not attributes_match(offer("a", area=30.0), offer("b", area=38.0))
+
+
+def test_small_flats_keep_the_absolute_floor():
+    """У маленькой квартиры 5% — это сантиметры, и без нижней границы
+    правило не пережило бы обычного округления 54.3 против 54."""
+    assert AREA_TOLERANCE_ABS >= 1.0
+    assert attributes_match(offer("a", area=20.0), offer("b", area=21.0))
 
 
 def test_different_floor_is_a_different_flat():

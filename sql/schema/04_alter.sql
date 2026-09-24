@@ -186,3 +186,26 @@ create table if not exists core.duplicate_suspect (
     reason     text not null,
     found_at   timestamptz not null default now()
 );
+
+-- ---------------------------------------------------------------------
+-- Поля площадки, которые разбор сначала пропустил.
+--
+-- Нашлись через unmapped_keys — колонку, куда складываются нераспознанные
+-- ключи. Ради этого она и заведена: площадка добавляет поля молча, и без
+-- такого журнала заметить пропажу нечем.
+-- ---------------------------------------------------------------------
+alter table core.offer_observation
+    -- Собственная оценка цены площадкой: «Хорошая цена», диапазон
+    -- «52 000—63 000 ₽/мес». Готовый ориентир чужой модели — есть с чем
+    -- сравнить свою гедонистическую регрессию.
+    add column if not exists price_estimate_low  numeric(12,2),
+    add column if not exists price_estimate_high numeric(12,2),
+    add column if not exists price_label text,
+
+    -- Площадка проверила документы собственника. Признак доверия, и
+    -- заодно надёжнее собственного флага isByHomeowner.
+    add column if not exists owner_verified boolean,
+
+    -- Дубли, найденные самой площадкой («У других арендодателей»).
+    -- Это эталон, по которому проверяется наша дедупликация.
+    add column if not exists platform_duplicate_ids jsonb;

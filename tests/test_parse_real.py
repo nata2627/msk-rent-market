@@ -41,12 +41,38 @@ def test_every_offer_parses(parsed):
     assert all(p is not None for p in parsed)
 
 
-def test_unmapped_fields_are_recorded_not_swallowed(parsed):
+def test_unmapped_fields_are_recorded_not_swallowed():
     """Площадка добавляет поля молча. Нераспознанное не выбрасывается,
     а складывается в unmapped_keys — это единственный способ заметить,
-    что схема изменилась."""
-    unmapped = {k for p in parsed for k in (p["observation"]["unmapped_keys"] or [])}
-    assert "contextToken" in unmapped
+    что схема изменилась.
+
+    Механизм уже окупился: через него нашлись goodPrice (собственная
+    оценка цены площадкой), homeownerProofs и identicalOffers — чужая
+    дедупликация, годная как эталон для нашей."""
+    import copy
+
+    payload = copy.deepcopy(OFFERS[0])
+    payload["совершенноНовоеПоле"] = {"что-то": 1}
+    keys = parse_offer(payload, TODAY)["observation"]["unmapped_keys"]
+    assert keys == ["совершенноНовоеПоле"]
+
+
+def test_known_fields_are_not_reported_as_unmapped(parsed):
+    """После разбора goodPrice и соседей журнал должен опустеть —
+    иначе он зашумлён и перестаёт работать как сигнал."""
+    for p in parsed:
+        assert p["observation"]["unmapped_keys"] is None
+
+
+def test_platform_price_estimate_is_parsed(parsed):
+    """Оценка приходит строкой «52 000—63 000 ₽/мес». Как строка она ни
+    с чем не сравнивается, а сравнить есть с чем: это оценка чужой модели
+    той же величины, которую моделируем мы."""
+    with_estimate = [p for p in parsed if p["observation"]["price_estimate_low"]]
+    assert with_estimate, "ни у одного объявления в фикстуре нет оценки площадки"
+    obs = with_estimate[0]["observation"]
+    assert obs["price_estimate_low"] < obs["price_estimate_high"]
+    assert obs["price_label"]
 
 
 def test_area_really_arrives_as_a_string():

@@ -263,6 +263,54 @@ def metro_walk_min(stations: list[dict]) -> int | None:
 
 
 # ---------------------------------------------------------------------
+# Поля, найденные через журнал нераспознанных ключей
+# ---------------------------------------------------------------------
+_RANGE = re.compile(r"([\d\s\u00a0]+)\s*[—–-]\s*([\d\s\u00a0]+)")
+
+
+def parse_price_estimate(good_price) -> dict:
+    """Оценка цены самой площадкой.
+
+    Приходит текстом: {"priceLabel": "Хорошая цена",
+                       "estimationRange": "52 000—63 000 ₽/мес"}.
+    Разбирается в два числа, потому что как строка оно ни с чем не
+    сравнивается, а сравнить есть с чем: это оценка чужой модели той же
+    величины, которую моделируем мы.
+    """
+    # Ключи возвращаются всегда, даже пустыми: словарь наблюдения
+    # собирается через ** и должен иметь одинаковый набор полей для всех
+    # объявлений, иначе запись в базу споткнётся на первом же без оценки.
+    out = {"price_label": None, "price_estimate_low": None,
+           "price_estimate_high": None}
+    if not isinstance(good_price, dict):
+        return out
+
+    out["price_label"] = good_price.get("priceLabel")
+    m = _RANGE.search(good_price.get("estimationRange") or "")
+    if m:
+        def num(x):
+            return float(re.sub(r"[^\d]", "", x) or 0) or None
+        out["price_estimate_low"] = num(m.group(1))
+        out["price_estimate_high"] = num(m.group(2))
+    return out
+
+
+def parse_platform_duplicates(identical) -> list[str] | None:
+    """Дубли, найденные самой площадкой.
+
+    Подпись у блока — «У других арендодателей», то есть площадка считает
+    это одной квартирой у разных продавцов. Ровно то, что ищет наша
+    дедупликация, — значит есть с чем сверяться.
+    """
+    if not isinstance(identical, dict):
+        return None
+    ids = identical.get("duplicatesOffersIds")
+    if not ids:
+        return None
+    return [str(i) for i in ids]
+
+
+# ---------------------------------------------------------------------
 # Главная функция разбора
 # ---------------------------------------------------------------------
 # Поля верхнего уровня, которые разбор знает в лицо. Список сверен с живой
@@ -313,6 +361,9 @@ KNOWN_TOP_LEVEL = {
     "specialty", "tradingLink", "villageMortgageAllowed", "workTimeInfo",
     "workplaceCount",
     # имена, которых в выдаче нет, но которые встречаются на других путях
+    "goodPrice", "homeownerProofs", "identicalOffers",
+    "searchDuplicatesRotationPromo", "contextToken", "isEarlyAccessEnabled",
+    "isInCpd", "isOnlineRentalAgreementEnabled", "mortgagePayment",
     "editDate", "petsAllowed", "childrenAllowed", "repairType",
     "separateWcsCount", "combinedWcsCount", "hasKitchenFurniture", "hasWasher",
     "hasFridge", "hasDishwasher", "hasConditioner", "hasTv", "hasInternet",
@@ -440,6 +491,10 @@ def parse_offer(payload: dict, snapshot_date, source: str = "cian") -> dict | No
         # для схлопывания дублей — своя реализация шинглов не понадобится.
         "description_minhash": payload.get("descriptionMinhash"),
         "is_duplicated_description": payload.get("isDuplicatedDescription"),
+        "owner_verified": bool(payload.get("homeownerProofs")) or None,
+        "platform_duplicate_ids": parse_platform_duplicates(
+            payload.get("identicalOffers")),
+        **parse_price_estimate(payload.get("goodPrice")),
         "unmapped_keys": sorted(set(payload) - KNOWN_TOP_LEVEL) or None,
     }
 

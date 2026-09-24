@@ -18,6 +18,7 @@ help:
 	@echo "make wayback — исторические объявления из веб-архива"
 	@echo "make parks   — расстояние до парков по OpenStreetMap"
 	@echo "make dedup   — схлопнуть дубли объявлений"
+	@echo "make rebuild — пересобрать панель из сырых снимков"
 	@echo "make marts   — пересобрать материализованные витрины"
 	@echo "make checks  — проверки качества собранных данных"
 	@echo "make flats   — показать лучшие варианты в моём сегменте"
@@ -95,6 +96,14 @@ dedup:
 
 dedup-report:
 	$(PY) -m src.dedup --report
+
+# Сверка с дедупликацией самой площадки: блок «У других арендодателей».
+dedup-validate:
+	$(PY) -m src.dedup --validate
+
+# Пересборка панели из сырых снимков — без обращения к площадке.
+rebuild:
+	$(PY) -m etl.rebuild_core
 
 parks:
 	$(PY) -m etl.parks

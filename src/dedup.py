@@ -62,8 +62,27 @@ log = logging.getLogger("dedup")
 # координатах у разных агентств; больше — и в один блок попадут соседние дома.
 COORD_PRECISION = 4
 
-# Допуск по площади. Агентства округляют по-разному: 54.3 против 54.
-AREA_TOLERANCE = 1.0
+# Допуск по площади: не меньше метра, но и не меньше 5% от размера.
+#
+# Плоский допуск в метр был слишком жёстким и терял настоящие дубли:
+# у пар, которые площадка сама объявила одной квартирой, медианное
+# расхождение площади составило 4 м². Агентства указывают площадь
+# по-разному — кто-то с лоджией, кто-то без, — и расхождение растёт
+# вместе с размером квартиры, поэтому допуск относительный.
+#
+# Значения подобраны по эталону, а не назначены. Доля найденных из тех,
+# что площадка объявила дублями сама:
+#
+#     ±1 м²           52.0%   схлопывает  967 пар
+#     ±1 м² или 3%    54.7%               1059
+#     ±1 м² или 5%    61.1%               1173   <- взято
+#     ±5 м²           62.8%               1295
+#
+# Последняя строка даёт почти ту же полноту, но схлопывает на 122 пары
+# больше: плоский допуск в пять метров склеивает маленькие квартиры,
+# которые различаются по-настоящему.
+AREA_TOLERANCE_ABS = 1.0
+AREA_TOLERANCE_REL = 0.05
 
 # Порог похожести описаний. Взят по распределению: оно двугорбое, основная
 # масса пар лежит ниже 0.3, а совпадающие тексты — выше 0.8. Промежуток
@@ -97,7 +116,9 @@ def attributes_match(a: dict, b: dict) -> bool:
         return False
     if a["total_area"] is None or b["total_area"] is None:
         return False
-    return abs(float(a["total_area"]) - float(b["total_area"])) <= AREA_TOLERANCE
+    x, y = float(a["total_area"]), float(b["total_area"])
+    allowed = max(AREA_TOLERANCE_ABS, AREA_TOLERANCE_REL * max(x, y))
+    return abs(x - y) <= allowed
 
 
 def decide(a: dict, b: dict) -> tuple[str, str, float]:
@@ -163,18 +184,30 @@ class UnionFind:
 
 # ---------------------------------------------------------------------
 def load(conn, snapshot_date=None) -> list[dict]:
-    where = "and ob.snapshot_date = %s" if snapshot_date else """
-        and ob.snapshot_date = (select max(snapshot_date) from raw.collection_run
-                                where source='cian' and status='ok')"""
-    params = (snapshot_date,) if snapshot_date else ()
+    """Объявления для сверки: по последнему наблюдению каждого.
+
+    Не по одному снимку, и это принципиально. Дубль — свойство квартиры,
+    а не дня: объявление, которое висело 22-го и пропало 23-го, остаётся
+    дублем того, что висит до сих пор. Ограничение одним снимком теряло
+    такие пары — на эталоне площадки полнота падала с 61% до 21%, просто
+    потому что одна сторона пары в этот день не наблюдалась.
+
+    snapshot_date оставлен для воспроизведения расчёта на конкретную дату.
+    """
+    if snapshot_date:
+        where, params = "and ob.snapshot_date = %s", (snapshot_date,)
+    else:
+        where, params = "", ()
     with conn.cursor() as cur:
         cur.execute(f"""
-            select o.offer_id, o.lat, o.lon, o.rooms_count, o.total_area, o.floor,
+            select distinct on (o.offer_id)
+                   o.offer_id, o.lat, o.lon, o.rooms_count, o.total_area, o.floor,
                    o.district, ob.description_minhash, ob.price, ob.seller_name,
                    o.first_seen_date
             from core.offer o
             join core.offer_observation ob using (source, offer_id)
             where o.source = 'cian' and o.lat is not null {where}
+            order by o.offer_id, ob.snapshot_date desc
         """, params)
         cols = [d[0] for d in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
@@ -242,10 +275,51 @@ def save(conn, uf: UnionFind, suspects: list[tuple], reasons: dict) -> int:
     return len(groups)
 
 
+def validate_against_platform(conn) -> None:
+    """Сверить нашу дедупликацию с той, что делает сама площадка.
+
+    У ЦИАНа есть собственное определение дублей — блок «У других
+    арендодателей» в карточке. Это не полная истина: там только те пары,
+    которые нашла площадка, и наши находки сверх этого списка вполне могут
+    быть настоящими. Поэтому меряется ПОЛНОТА — какую долю площадочных пар
+    находим мы, — а доля «лишних» как ошибка не трактуется.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""select distinct ob.offer_id, d
+                       from core.offer_observation ob,
+                            lateral jsonb_array_elements_text(ob.platform_duplicate_ids) d
+                       where ob.source='cian' and ob.platform_duplicate_ids is not null""")
+        platform = {tuple(sorted(r)) for r in cur.fetchall() if r[0] != r[1]}
+        cur.execute("select offer_id from core.offer where source='cian'")
+        known = {r[0] for r in cur.fetchall()}
+        cur.execute("select canonical_id, offer_id from core.offer_duplicate where source='cian'")
+        groups: dict[str, set] = {}
+        for canon, oid in cur.fetchall():
+            groups.setdefault(canon, set()).add(oid)
+
+    ours = set()
+    for members in groups.values():
+        ours |= {tuple(sorted(p)) for p in itertools.combinations(sorted(members), 2)}
+    truth = {p for p in platform if p[0] in known and p[1] in known}
+    if not truth:
+        print("\n  Эталонных пар от площадки нет — сверять не с чем.")
+        return
+
+    hit = len(ours & truth)
+    print(f"\n  Сверка с дедупликацией самой площадки:")
+    print(f"    пар объявлено площадкой:           {len(platform):>6}")
+    print(f"    из них обе стороны есть у нас:     {len(truth):>6}")
+    print(f"    нашли и мы:                        {hit:>6}  ({100*hit/len(truth):.1f}%)")
+    print(f"    нашли мы, площадка молчит:         {len(ours - truth):>6}")
+    print(f"    пропустили:                        {len(truth - ours):>6}")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Схлопывание дублей объявлений")
     parser.add_argument("--report", action="store_true",
                         help="только показать результат, ничего не записывать")
+    parser.add_argument("--validate", action="store_true",
+                        help="сверить с дедупликацией самой площадки")
     parser.add_argument("--snapshot-date", default=None)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -273,6 +347,8 @@ def main(argv=None) -> int:
         if not args.report:
             n = save(conn, uf, suspects, reasons)
             log.info("Записано групп: %d", n)
+            if args.validate:
+                validate_against_platform(conn)
     return 0
 
 
