@@ -1,0 +1,46 @@
+# Хранилище проекта: один PostgreSQL 16. Metabase здесь не нужен —
+# отчёты собираются скриптами в figures/ и notebooks/.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rent_pg
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rent}
+      POSTGRES_USER: ${POSTGRES_USER:-rent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rent}
+      LANG: ru_RU.UTF-8
+    ports:
+      # 5433 снаружи: порт 5432 занят базой предыдущего проекта.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - rent_pgdata:/var/lib/postgresql/data
+      # Postgres выполняет эти файлы по алфавиту ОДИН раз, при инициализации
+      # пустого тома. Весь DDL написан идемпотентно, поэтому его же можно
+      # прогнать повторно через `make schema`, не пересоздавая том.
+      - ./sql/schema:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rent} -d ${POSTGRES_DB:-rent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # Раздача GeoJSON с границами районов.
+  #
+  # Нужна потому, что Metabase крутится в контейнере соседнего проекта и
+  # до файла на диске не дотянется — свои карты он забирает только по URL.
+  # Отсюда же файл берёт и любой, кто склонирует репозиторий: карта
+  # воспроизводится, а не существует только у автора.
+  geojson:
+    image: nginx:alpine
+    container_name: rent_geojson
+    ports:
+      - "${GEOJSON_PORT:-8081}:80"
+    volumes:
+      - ./sql/geo:/usr/share/nginx/html:ro
+      - ./docker/nginx/geojson.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+volumes:
+  rent_pgdata:

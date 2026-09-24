@@ -1,0 +1,2518 @@
+[
+ {
+  "id": 151006043,
+  "kp": null,
+  "geo": {
+   "jk": null,
+   "address": [
+    {
+     "id": 1,
+     "qs": "currency=2&deal_type=rent&engine_version=2&minprice=240000&offer_type=flat&region=1&room3=1&type=4&with_neighbors=0",
+     "name": "Москва",
+     "type": "location",
+     "title": "Москва",
+     "geoType": "location",
+     "fullName": "Москва",
+     "shortName": "Москва",
+     "locationTypeId": 1,
+     "isFormingAddress": true
+    },
+    {
+     "id": 4,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=4&engine_version=2&minprice=240000&offer_type=flat&room3=1&type=4&with_neighbors=0",
+     "name": "ЦАО",
+     "type": "okrug",
+     "title": "ЦАО",
+     "geoType": "district",
+     "fullName": "ЦАО",
+     "shortName": "ЦАО",
+     "locationTypeId": null,
+     "isFormingAddress": null
+    },
+    {
+     "id": 20,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=20&engine_version=2&minprice=240000&offer_type=flat&room3=1&type=4&with_neighbors=0",
+     "name": "Тверской",
+     "type": "raion",
+     "title": "р-н Тверской",
+     "geoType": "district",
+     "fullName": "р-н Тверской",
+     "shortName": "р-н Тверской",
+     "locationTypeId": null,
+     "isFormingAddress": null
+    },
+    {
+     "id": 84,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=84&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Охотный ряд",
+     "type": "metro",
+     "title": "м. Охотный ряд",
+     "geoType": "underground",
+     "fullName": "м. Охотный ряд",
+     "shortName": "м. Охотный ряд",
+     "locationTypeId": null,
+     "isFormingAddress": null
+    },
+    {
+     "id": 2237,
+     "qs": "currency=2&deal_type=rent&engine_version=2&minprice=240000&offer_type=flat&room3=1&street%5B0%5D=2237&type=4&with_neighbors=0",
+     "name": "Тверская",
+     "type": "street",
+     "title": "Тверская улица",
+     "geoType": "street",
+     "fullName": "Тверская улица",
+     "shortName": "Тверская ул.",
+     "locationTypeId": null,
+     "isFormingAddress": true
+    },
+    {
+     "id": 1734597,
+     "qs": "currency=2&deal_type=rent&engine_version=2&house%5B0%5D=1734597&minprice=240000&offer_type=flat&room3=1&type=4&with_neighbors=0",
+     "name": "9",
+     "type": "house",
+     "title": "9",
+     "geoType": "house",
+     "fullName": "9",
+     "shortName": "9",
+     "locationTypeId": null,
+     "isFormingAddress": true
+    }
+   ],
+   "highways": [],
+   "railways": [
+    {
+     "id": 694,
+     "qs": "currency=2&deal_type=rent&engine_version=2&minprice=240000&offer_type=flat&railway%5B0%5D=694&room3=1&type=4&with_neighbors=0",
+     "name": "Москва (Белорусский вокзал)",
+     "time": 5,
+     "geoType": "railway",
+     "distance": 3,
+     "travelType": "byCar",
+     "directionIds": [
+      11
+     ]
+    },
+    {
+     "id": 688,
+     "qs": "currency=2&deal_type=rent&engine_version=2&minprice=240000&offer_type=flat&railway%5B0%5D=688&room3=1&type=4&with_neighbors=0",
+     "name": "Москва-Каланчёвская",
+     "time": 9,
+     "geoType": "railway",
+     "distance": 5,
+     "travelType": "byCar",
+     "directionIds": [
+      12
+     ]
+    },
+    {
+     "id": 687,
+     "qs": "currency=2&deal_type=rent&engine_version=2&minprice=240000&offer_type=flat&railway%5B0%5D=687&room3=1&type=4&with_neighbors=0",
+     "name": "Москва (Курский вокзал)",
+     "time": 9,
+     "geoType": "railway",
+     "distance": 6,
+     "travelType": "byCar",
+     "directionIds": [
+      12,
+      15
+     ]
+    }
+   ],
+   "countryId": 138,
+   "districts": [
+    {
+     "id": 20,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=20&engine_version=2&minprice=240000&offer_type=flat&room3=1&type=4&with_neighbors=0",
+     "name": "Тверской",
+     "type": "raion",
+     "title": "р-н Тверской",
+     "geoType": "district",
+     "fullName": "р-н Тверской",
+     "parentId": 4,
+     "locationId": 1
+    },
+    {
+     "id": 4,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=4&engine_version=2&minprice=240000&offer_type=flat&room3=1&type=4&with_neighbors=0",
+     "name": "ЦАО",
+     "type": "okrug",
+     "title": "ЦАО",
+     "geoType": "district",
+     "fullName": "ЦАО",
+     "parentId": null,
+     "locationId": 1
+    }
+   ],
+   "userInput": "Россия, Москва, Тверская улица, 9",
+   "coordinates": {
+    "lat": 55.759856,
+    "lng": 37.610548
+   },
+   "sortedGeoIds": [
+    {
+     "id": 84,
+     "type": "underground"
+    },
+    {
+     "id": 124,
+     "type": "underground"
+    },
+    {
+     "id": 105,
+     "type": "underground"
+    },
+    {
+     "id": 125,
+     "type": "underground"
+    },
+    {
+     "id": 148,
+     "type": "underground"
+    },
+    {
+     "id": 58,
+     "type": "underground"
+    },
+    {
+     "id": 18,
+     "type": "underground"
+    },
+    {
+     "id": 96,
+     "type": "underground"
+    },
+    {
+     "id": 64,
+     "type": "underground"
+    },
+    {
+     "id": 4,
+     "type": "underground"
+    },
+    {
+     "id": 20,
+     "type": "underground"
+    },
+    {
+     "id": 68,
+     "type": "underground"
+    },
+    {
+     "id": 130,
+     "type": "underground"
+    },
+    {
+     "id": 8,
+     "type": "underground"
+    },
+    {
+     "id": 47,
+     "type": "underground"
+    },
+    {
+     "id": 694,
+     "type": "railway"
+    },
+    {
+     "id": 688,
+     "type": "railway"
+    },
+    {
+     "id": 687,
+     "type": "railway"
+    },
+    {
+     "id": 20,
+     "type": "district"
+    },
+    {
+     "id": 4,
+     "type": "district"
+    }
+   ],
+   "undergrounds": [
+    {
+     "id": 84,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=84&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Охотный ряд",
+     "time": 5,
+     "cianId": null,
+     "lineId": 10,
+     "lineType": null,
+     "isDefault": true,
+     "lineColor": "CF0000",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 124,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=124&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Тверская",
+     "time": 7,
+     "cianId": null,
+     "lineId": 3,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "00701A",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 105,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=105&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Пушкинская",
+     "time": 7,
+     "cianId": null,
+     "lineId": 11,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "94007C",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 125,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=125&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Театральная",
+     "time": 9,
+     "cianId": null,
+     "lineId": 3,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "00701A",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 148,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=148&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Чеховская",
+     "time": 9,
+     "cianId": null,
+     "lineId": 9,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "A2A5B5",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 58,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=58&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Кузнецкий мост",
+     "time": 12,
+     "cianId": null,
+     "lineId": 11,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "94007C",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 18,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=18&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Библиотека им. Ленина",
+     "time": 12,
+     "cianId": null,
+     "lineId": 10,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "CF0000",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 96,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=96&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Площадь Революции",
+     "time": 14,
+     "cianId": null,
+     "lineId": 1,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "03238B",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 64,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=64&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Лубянка",
+     "time": 14,
+     "cianId": null,
+     "lineId": 10,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "CF0000",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 4,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=4&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Александровский сад",
+     "time": 15,
+     "cianId": null,
+     "lineId": 12,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "009BD5",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 20,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=20&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Боровицкая",
+     "time": 16,
+     "cianId": null,
+     "lineId": 9,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "A2A5B5",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 68,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=68&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Маяковская",
+     "time": 16,
+     "cianId": null,
+     "lineId": 3,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "00701A",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 130,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=130&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Трубная",
+     "time": 16,
+     "cianId": null,
+     "lineId": 8,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "8AD02A",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 8,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=8&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Арбатская",
+     "time": 16,
+     "cianId": null,
+     "lineId": 1,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "03238B",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 47,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&metro%5B0%5D=47&minprice=240000&offer_type=flat&only_foot=2&room3=1&type=4&with_neighbors=0",
+     "name": "Китай-город",
+     "time": 19,
+     "cianId": null,
+     "lineId": 5,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "FF7F00",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    }
+   ],
+   "buildingAddress": null
+  },
+  "chat": {
+   "chatId": null,
+   "canSendMessage": true
+  },
+  "land": null,
+  "user": {
+   "userId": "81bd81cce2a4bb25",
+   "isAgent": true,
+   "isHidden": false,
+   "userType": "realtor_based",
+   "isBuilder": false,
+   "agentLists": [],
+   "cianUserId": "4432dfad9bd7a1a9",
+   "experience": "2009",
+   "isSubAgent": false,
+   "accountType": "specialist",
+   "canShowOnline": true,
+   "isCianPartner": false,
+   "isCallbackUser": false,
+   "isChatsEnabled": true,
+   "isSelfEmployed": false,
+   "personalRating": null,
+   "userTrustLevel": "involved",
+   "agentAvailability": {
+    "title": null,
+    "userId": "8de7714b3fab59b1",
+    "message": null,
+    "available": true,
+    "vacationTo": null,
+    "availableTo": null,
+    "availableFrom": null
+   },
+   "cianProfileStatus": "approved",
+   "isPassportVerified": true,
+   "agentModerationInfo": {
+    "isUserIdentified": true,
+    "qualityLevelInfo": {
+     "isBlocked": false,
+     "levelName": "Суперагент",
+     "levelOrder": 4,
+     "isSuperHost": false,
+     "isSuperAgent": true,
+     "showSuperHost": false,
+     "showSuperAgent": true,
+     "levelSystemName": "max",
+     "highResponsibility": true,
+     "hasVerifiedDocuments": true,
+     "showHighResponsibility": true
+    },
+    "isUserIdentifiedByDocuments": true,
+    "showUserIdentifiedByDocuments": false
+   }
+  },
+  "added": "вчера, 17:37",
+  "isNew": false,
+  "isPro": true,
+  "jkUrl": null,
+  "notes": {
+   "offer": null,
+   "realtor": null
+  },
+  "chatId": null,
+  "cianId": 151006043,
+  "garage": null,
+  "isTop3": false,
+  "layout": null,
+  "photos": [
+   {
+    "id": 2962739976,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739976-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739976-3.jpg",
+    "isLayout": null,
+    "isDefault": true,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739976-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739976-4.jpg"
+   },
+   {
+    "id": 2962737481,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737481-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737481-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737481-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737481-4.jpg"
+   },
+   {
+    "id": 2962739958,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739958-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739958-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739958-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739958-4.jpg"
+   },
+   {
+    "id": 2962739994,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739994-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739994-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739994-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739994-4.jpg"
+   },
+   {
+    "id": 2962739986,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739986-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739986-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739986-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739986-4.jpg"
+   },
+   {
+    "id": 2962737493,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737493-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737493-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737493-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737493-4.jpg"
+   },
+   {
+    "id": 2962737473,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737473-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737473-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737473-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737473-4.jpg"
+   },
+   {
+    "id": 2962737466,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737466-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737466-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737466-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737466-4.jpg"
+   },
+   {
+    "id": 2962739972,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739972-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739972-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739972-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739972-4.jpg"
+   },
+   {
+    "id": 2962739961,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739961-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739961-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739961-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739961-4.jpg"
+   },
+   {
+    "id": 2962739971,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739971-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739971-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739971-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739971-4.jpg"
+   },
+   {
+    "id": 2962739993,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739993-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739993-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739993-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739993-4.jpg"
+   },
+   {
+    "id": 2962737479,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737479-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737479-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737479-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737479-4.jpg"
+   },
+   {
+    "id": 2962739970,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739970-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739970-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739970-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739970-4.jpg"
+   },
+   {
+    "id": 2962739988,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739988-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739988-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739988-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739988-4.jpg"
+   },
+   {
+    "id": 2962737472,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737472-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737472-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737472-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737472-4.jpg"
+   },
+   {
+    "id": 2962737477,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737477-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737477-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737477-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737477-4.jpg"
+   },
+   {
+    "id": 2962739975,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739975-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739975-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739975-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739975-4.jpg"
+   },
+   {
+    "id": 2962737491,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737491-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737491-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737491-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737491-4.jpg"
+   },
+   {
+    "id": 2962739962,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739962-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739962-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739962-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739962-4.jpg"
+   },
+   {
+    "id": 2962739965,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739965-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739965-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739965-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739965-4.jpg"
+   },
+   {
+    "id": 2962737488,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737488-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737488-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737488-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737488-4.jpg"
+   },
+   {
+    "id": 2962739991,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739991-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739991-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739991-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739991-4.jpg"
+   },
+   {
+    "id": 2962737478,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737478-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737478-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737478-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737478-4.jpg"
+   },
+   {
+    "id": 2962737503,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737503-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737503-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737503-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737503-4.jpg"
+   },
+   {
+    "id": 2962739964,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739964-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739964-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739964-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739964-4.jpg"
+   },
+   {
+    "id": 2962739968,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739968-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739968-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739968-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739968-4.jpg"
+   },
+   {
+    "id": 2962739959,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739959-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739959-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739959-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739959-4.jpg"
+   },
+   {
+    "id": 2962739977,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739977-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739977-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739977-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739977-4.jpg"
+   },
+   {
+    "id": 2962739969,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739969-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739969-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739969-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739969-4.jpg"
+   },
+   {
+    "id": 2962739973,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739973-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739973-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739973-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739973-4.jpg"
+   },
+   {
+    "id": 2962745213,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962745213-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962745213-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962745213-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962745213-4.jpg"
+   },
+   {
+    "id": 2962747505,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962747505-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962747505-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962747505-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962747505-4.jpg"
+   },
+   {
+    "id": 2962745214,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962745214-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962745214-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962745214-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962745214-4.jpg"
+   },
+   {
+    "id": 2962739981,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739981-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739981-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739981-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739981-4.jpg"
+   },
+   {
+    "id": 2962739974,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739974-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739974-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739974-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739974-4.jpg"
+   },
+   {
+    "id": 2962739987,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739987-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739987-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739987-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739987-4.jpg"
+   },
+   {
+    "id": 2962737497,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737497-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737497-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737497-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737497-4.jpg"
+   },
+   {
+    "id": 2962737502,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737502-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737502-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737502-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962737502-4.jpg"
+   },
+   {
+    "id": 2962739949,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739949-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739949-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739949-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739949-4.jpg"
+   },
+   {
+    "id": 2962739963,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739963-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739963-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739963-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739963-4.jpg"
+   },
+   {
+    "id": 2962739978,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739978-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739978-3.jpg",
+    "isLayout": null,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739978-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-tverskaya-ulica-2962739978-4.jpg"
+   }
+  ],
+  "status": "published",
+  "userId": "81bd81cce2a4bb25",
+  "videos": [
+   {
+    "id": "89a5a50f-bf7f-4e1b-9989-9378894c4e67",
+    "url": "https://kinescope.io/hZQJnRWaUs7V2A3FyFb4xV",
+    "type": "kinescope",
+    "duration": 220,
+    "previewUrl": "https://kinescopecdn.net/f9f281e3-5528-474a-b760-2c5cecf2ce98/posters/8c227c2e-ce9b-4dc0-9ac6-ed6deee2014b/md/01a08f1d-1954-72d4-b408-9a2349e3c8d0.jpg",
+    "uploadDate": null
+   }
+  ],
+  "auction": {},
+  "booking": null,
+  "fullUrl": "https://www.cian.ru/rent/flat/151006043/?context=4.cw43pj4zQ_U.A753KrDFiUQY3KDHOxsmWi7GwfSv0AFpXCdl32meGtGuf8xiKPI_Lpbp-Fy_DcY0NYi14miyAuHDQQ&mlSearchSessionGuid=2ccaf3cda3d1c4cb9cae7bdf32e32da8",
+  "gaLabel": "/rent/flat/mo_id=0/obl_id=1/city_id=1/object_type=1/ga_obj_type=3/spec=agent/rent_type=/151006043/from_developer=0/repres=0/owner=0/pod_snos=0/",
+  "isInCpd": null,
+  "minArea": null,
+  "similar": null,
+  "building": {
+   "type": null,
+   "parking": {
+    "type": "ground",
+    "isFree": null,
+    "currency": null,
+    "priceEntry": null,
+    "isAvailable": null,
+    "placesCount": null,
+    "purposeType": null,
+    "locationType": null,
+    "priceMonthly": null
+   },
+   "deadline": null,
+   "buildYear": null,
+   "classType": null,
+   "accessType": null,
+   "floorsCount": 8,
+   "heatingType": null,
+   "materialType": "stalin",
+   "cargoLiftsCount": null,
+   "passengerLiftsCount": 1
+  },
+  "category": "flatRent",
+  "dealType": "rent",
+  "factoids": [
+   {
+    "text": "90.0 м2",
+    "type": "livingArea",
+    "title": "Жилая пл."
+   }
+  ],
+  "flatType": "rooms",
+  "isUnique": true,
+  "roomArea": null,
+  "areaParts": null,
+  "coworking": null,
+  "isAuction": false,
+  "isPremium": false,
+  "offerType": "flat",
+  "promoInfo": null,
+  "specialty": {
+   "types": [],
+   "specialties": [],
+   "additionalTypes": []
+  },
+  "totalArea": "136.0",
+  "accessType": null,
+  "cianUserId": "9d954f8a70df22a4",
+  "decoration": null,
+  "externalId": null,
+  "isFavorite": false,
+  "isImported": false,
+  "isNewLabel": false,
+  "isStandard": false,
+  "livingArea": "90.0",
+  "officeType": null,
+  "roomsCount": 3,
+  "adfoxParams": {
+   "puid1": "deal_type_rent",
+   "puid2": "offer_flat",
+   "puid4": "offer_type_3",
+   "puid5": "obl_id_1",
+   "puid6": "251_500",
+   "puid7": "2323",
+   "puid8": 310000,
+   "puid9": 84,
+   "puid10": "no_agent",
+   "puid16": "false",
+   "puid17": "false",
+   "puid19": "not_video",
+   "puid36": 1
+  },
+  "buildersIds": [],
+  "description": "ЛУЧШАЯ ЦЕНА!!! ЛУЧШЕЕ ПРЕДЛОЖЕНИЕ, БЕЗ КОМИССИИ!!!  Вид на КРЕМЛЬ, ВСЕ ФОТО СВЕЖИЕ! Отличная 3х комнатная квартира, в 3х минутах от метро с дорогим дизайнерским ремонтом, прекрасными  видовыми характеристиками и и огороженной территорией! Все комнаты изолированы, балкон, отдельная кладовая, турецкая баня, подогрев полов, кондиционеры во всех комнатах, камин, качественная итальянская мебель и ремонт в классическом стиле, полностью упакована всей современной бытовой техникой, сигнализация, консьерж, 2 входа в подъезд. Рассмотрят все предложения!",
+  "floorNumber": 7,
+  "isColorized": false,
+  "kitchenArea": "15.0",
+  "newbuilding": null,
+  "offerInDeal": false,
+  "shareAmount": null,
+  "tradingLink": null,
+  "bargainTerms": {
+   "tags": [],
+   "price": 310000,
+   "deposit": 310000,
+   "vatType": null,
+   "agentFee": 0,
+   "currency": "rur",
+   "priceRur": 310000,
+   "saleType": null,
+   "vatPrice": null,
+   "clientFee": 0,
+   "leaseType": null,
+   "priceType": "all",
+   "agentBonus": null,
+   "leaseTermType": "longTerm",
+   "paymentPeriod": "monthly",
+   "bargainAllowed": null,
+   "utilitiesTerms": {
+    "price": 0,
+    "includedInPrice": true,
+    "flowMetersNotIncludedInPrice": true
+   },
+   "mortgageAllowed": null,
+   "priceForWorkplace": null
+  },
+  "contextToken": "4.cw43pj4zQ_U.A753KrDFiUQY3KDHOxsmWi7GwfSv0AFpXCdl32meGtGuf8xiKPI_Lpbp-Fy_DcY0NYi14miyAuHDQQ",
+  "creationDate": "2016-11-08T15:01:12.457",
+  "hasFurniture": true,
+  "isApartments": false,
+  "isRecidivist": false,
+  "loggiasCount": 0,
+  "workTimeInfo": null,
+  "allFromOffrep": null,
+  "bedroomsCount": null,
+  "brandingLevel": null,
+  "categoriesIds": [
+   1000,
+   1100,
+   1110,
+   1111
+  ],
+  "fromDeveloper": null,
+  "isByHomeowner": false,
+  "isCianPartner": false,
+  "isRentByParts": false,
+  "monthlyIncome": null,
+  "addedTimestamp": 1790001426,
+  "balconiesCount": 1,
+  "isInHiddenBase": false,
+  "moderationInfo": {
+   "photoStub": null,
+   "warningMessage": null,
+   "showContactWarningMessage": false
+  },
+  "rosreestrCheck": null,
+  "workplaceCount": null,
+  "basicProfiScore": 1,
+  "cadastralNumber": null,
+  "dealRentVersion": null,
+  "mortgagePayment": null,
+  "publishedUserId": "81bd81cce2a4bb25",
+  "comparisonStatus": null,
+  "isLayoutApproved": null,
+  "permittedUseType": null,
+  "formattedFullInfo": "3-комн.кв.  ·  136 м²  ·  7/8 этаж",
+  "photoFeatureIcons": [
+   {
+    "link": "https://www.cian.ru/rent/flat/151006043/?context=4.cw43pj4zQ_U.A753KrDFiUQY3KDHOxsmWi7GwfSv0AFpXCdl32meGtGuf8xiKPI_Lpbp-Fy_DcY0NYi14miyAuHDQQ",
+    "text": "Объявление с видео",
+    "type": "hasVideo"
+   }
+  ],
+  "readyBusinessType": null,
+  "roomsForSaleCount": null,
+  "savedSearchLabels": [],
+  "coworkingOfferType": null,
+  "descriptionMinhash": [
+   129181842,
+   8359824,
+   13184479,
+   12262020,
+   31485736,
+   19556323,
+   48719686,
+   30591463,
+   57588588,
+   37900519,
+   16548353,
+   11014068,
+   79344254,
+   46948722,
+   257323254,
+   184516062,
+   75220521,
+   65447684,
+   75816273,
+   70225641,
+   57713339,
+   37688998,
+   98707839,
+   17467992,
+   76512283,
+   83233153,
+   89954193,
+   17875559,
+   12229878,
+   119555550,
+   10130047,
+   44412681
+  ],
+  "formattedFullPrice": "310 000 ₽/мес.",
+  "formattedShortInfo": "3-комн.кв.  ·  7/8 этаж",
+  "humanizedTimedelta": "вчера",
+  "isRosreestrChecked": false,
+  "offerFeatureLabels": [],
+  "showWarningMessage": false,
+  "commercialOwnership": null,
+  "formattedShortPrice": "310 000 ₽/мес.",
+  "isByCommercialOwner": null,
+  "newbuildingCplLayer": null,
+  "isEarlyAccessEnabled": false,
+  "isExcludedFromAction": false,
+  "isSubsidisedMortgage": null,
+  "offerFeatureLabelsV2": null,
+  "isBookedFromDeveloper": false,
+  "isCalltrackingEnabled": true,
+  "showGalleryThumbnails": false,
+  "businessShoppingCenter": null,
+  "isNeedHideExactAddress": false,
+  "rentByPartsDescription": null,
+  "villageMortgageAllowed": null,
+  "buildingCadastralNumber": null,
+  "formattedAdditionalInfo": "Залог 310 000 ₽, без комиссии, предоплата 1 месяц, на длительный срок",
+  "isDuplicatedDescription": false,
+  "isExternalTourAvailable": false,
+  "newbuildingVasPromotion": null,
+  "demolishedInMoscowProgramm": false,
+  "isNewbuildingTourAvailable": false,
+  "bestPlaceAnalyticsAvailable": null,
+  "descriptionWordsHighlighted": [],
+  "isCommercialOwnershipVerified": null,
+  "isDealRequestSubstitutionPhone": false,
+  "isOnlineRentalAgreementEnabled": null,
+  "newbuildingDynamicCalltracking": {
+   "siteBlockId": null,
+   "newbuildingId": null
+  },
+  "newbuildingWithExtendedFeatures": null
+ },
+ {
+  "id": 151608415,
+  "kp": null,
+  "geo": {
+   "jk": null,
+   "address": [
+    {
+     "id": 1,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=45588&minprice=34640&offer_type=flat&region=1&room1=1&type=4&with_neighbors=0",
+     "name": "Москва",
+     "type": "location",
+     "title": "Москва",
+     "geoType": "location",
+     "fullName": "Москва",
+     "shortName": "Москва",
+     "locationTypeId": 1,
+     "isFormingAddress": true
+    },
+    {
+     "id": 6,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=6&engine_version=2&maxprice=45588&minprice=34640&offer_type=flat&room1=1&type=4&with_neighbors=0",
+     "name": "СВАО",
+     "type": "okrug",
+     "title": "СВАО",
+     "geoType": "district",
+     "fullName": "СВАО",
+     "shortName": "СВАО",
+     "locationTypeId": null,
+     "isFormingAddress": null
+    },
+    {
+     "id": 45,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=45&engine_version=2&maxprice=45588&minprice=34640&offer_type=flat&room1=1&type=4&with_neighbors=0",
+     "name": "Лосиноостровский",
+     "type": "raion",
+     "title": "р-н Лосиноостровский",
+     "geoType": "district",
+     "fullName": "р-н Лосиноостровский",
+     "shortName": "р-н Лосиноостровский",
+     "locationTypeId": null,
+     "isFormingAddress": null
+    },
+    {
+     "id": 69,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&maxprice=45588&metro%5B0%5D=69&minprice=34640&offer_type=flat&only_foot=2&room1=1&type=4&with_neighbors=0",
+     "name": "Медведково",
+     "type": "metro",
+     "title": "м. Медведково",
+     "geoType": "underground",
+     "fullName": "м. Медведково",
+     "shortName": "м. Медведково",
+     "locationTypeId": null,
+     "isFormingAddress": null
+    },
+    {
+     "id": 2887,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=45588&minprice=34640&offer_type=flat&room1=1&street%5B0%5D=2887&type=4&with_neighbors=0",
+     "name": "Стартовая",
+     "type": "street",
+     "title": "Стартовая улица",
+     "geoType": "street",
+     "fullName": "Стартовая улица",
+     "shortName": "Стартовая ул.",
+     "locationTypeId": null,
+     "isFormingAddress": true
+    },
+    {
+     "id": 76674,
+     "qs": "currency=2&deal_type=rent&engine_version=2&house%5B0%5D=76674&maxprice=45588&minprice=34640&offer_type=flat&room1=1&type=4&with_neighbors=0",
+     "name": "9К1",
+     "type": "house",
+     "title": "9К1",
+     "geoType": "house",
+     "fullName": "9К1",
+     "shortName": "9К1",
+     "locationTypeId": null,
+     "isFormingAddress": true
+    }
+   ],
+   "highways": [],
+   "railways": [
+    {
+     "id": 746,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=45588&minprice=34640&offer_type=flat&railway%5B0%5D=746&room1=1&type=4&with_neighbors=0",
+     "name": "Лось",
+     "time": 15,
+     "geoType": "railway",
+     "distance": 1,
+     "travelType": "byFoot",
+     "directionIds": [
+      20
+     ]
+    },
+    {
+     "id": 729,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=45588&minprice=34640&offer_type=flat&railway%5B0%5D=729&room1=1&type=4&with_neighbors=0",
+     "name": "Лосиноостровская",
+     "time": 6,
+     "geoType": "railway",
+     "distance": 3,
+     "travelType": "byCar",
+     "directionIds": [
+      20
+     ]
+    },
+    {
+     "id": 749,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=45588&minprice=34640&offer_type=flat&railway%5B0%5D=749&room1=1&type=4&with_neighbors=0",
+     "name": "Перловская",
+     "time": 12,
+     "geoType": "railway",
+     "distance": 10,
+     "travelType": "byCar",
+     "directionIds": [
+      20
+     ]
+    }
+   ],
+   "countryId": 138,
+   "districts": [
+    {
+     "id": 45,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=45&engine_version=2&maxprice=45588&minprice=34640&offer_type=flat&room1=1&type=4&with_neighbors=0",
+     "name": "Лосиноостровский",
+     "type": "raion",
+     "title": "р-н Лосиноостровский",
+     "geoType": "district",
+     "fullName": "р-н Лосиноостровский",
+     "parentId": 6,
+     "locationId": 1
+    },
+    {
+     "id": 6,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=6&engine_version=2&maxprice=45588&minprice=34640&offer_type=flat&room1=1&type=4&with_neighbors=0",
+     "name": "СВАО",
+     "type": "okrug",
+     "title": "СВАО",
+     "geoType": "district",
+     "fullName": "СВАО",
+     "parentId": null,
+     "locationId": 1
+    }
+   ],
+   "userInput": "Россия, Москва, Стартовая улица, 9к1",
+   "coordinates": {
+    "lat": 55.88667,
+    "lng": 37.702176
+   },
+   "sortedGeoIds": [
+    {
+     "id": 69,
+     "type": "underground"
+    },
+    {
+     "id": 10,
+     "type": "underground"
+    },
+    {
+     "id": 111,
+     "type": "underground"
+    },
+    {
+     "id": 746,
+     "type": "railway"
+    },
+    {
+     "id": 729,
+     "type": "railway"
+    },
+    {
+     "id": 749,
+     "type": "railway"
+    },
+    {
+     "id": 45,
+     "type": "district"
+    },
+    {
+     "id": 6,
+     "type": "district"
+    }
+   ],
+   "undergrounds": [
+    {
+     "id": 69,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&maxprice=45588&metro%5B0%5D=69&minprice=34640&offer_type=flat&only_foot=2&room1=1&type=4&with_neighbors=0",
+     "name": "Медведково",
+     "time": 5,
+     "cianId": null,
+     "lineId": 5,
+     "lineType": null,
+     "isDefault": true,
+     "lineColor": "FF7F00",
+     "releaseYear": null,
+     "transportType": "transport",
+     "underConstruction": false
+    },
+    {
+     "id": 10,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&maxprice=45588&metro%5B0%5D=10&minprice=34640&offer_type=flat&only_foot=2&room1=1&type=4&with_neighbors=0",
+     "name": "Бабушкинская",
+     "time": 6,
+     "cianId": null,
+     "lineId": 5,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "FF7F00",
+     "releaseYear": null,
+     "transportType": "transport",
+     "underConstruction": false
+    },
+    {
+     "id": 111,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&maxprice=45588&metro%5B0%5D=111&minprice=34640&offer_type=flat&only_foot=2&room1=1&type=4&with_neighbors=0",
+     "name": "Свиблово",
+     "time": 9,
+     "cianId": null,
+     "lineId": 5,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "FF7F00",
+     "releaseYear": null,
+     "transportType": "transport",
+     "underConstruction": false
+    }
+   ],
+   "buildingAddress": null
+  },
+  "chat": {
+   "chatId": null,
+   "canSendMessage": true
+  },
+  "land": null,
+  "user": {
+   "userId": "1b4d7a5b66afa8a5",
+   "isAgent": true,
+   "isHidden": false,
+   "userType": "realtor_based",
+   "isBuilder": false,
+   "agentLists": [],
+   "cianUserId": "73f08eb788a0c274",
+   "experience": "2006",
+   "isSubAgent": false,
+   "accountType": "specialist",
+   "canShowOnline": true,
+   "isCianPartner": false,
+   "isCallbackUser": false,
+   "isChatsEnabled": true,
+   "isSelfEmployed": false,
+   "personalRating": null,
+   "userTrustLevel": "involved",
+   "agentAvailability": {
+    "title": null,
+    "userId": "276cf0472b93693b",
+    "message": null,
+    "available": true,
+    "vacationTo": null,
+    "availableTo": null,
+    "availableFrom": null
+   },
+   "cianProfileStatus": "approved",
+   "isPassportVerified": true,
+   "agentModerationInfo": {
+    "isUserIdentified": true,
+    "qualityLevelInfo": {
+     "isBlocked": false,
+     "levelName": "Суперагент",
+     "levelOrder": 4,
+     "isSuperHost": false,
+     "isSuperAgent": true,
+     "showSuperHost": false,
+     "showSuperAgent": true,
+     "levelSystemName": "max",
+     "highResponsibility": true,
+     "hasVerifiedDocuments": true,
+     "showHighResponsibility": true
+    },
+    "isUserIdentifiedByDocuments": true,
+    "showUserIdentifiedByDocuments": false
+   }
+  },
+  "added": "26 авг, 23:03",
+  "isNew": false,
+  "isPro": true,
+  "jkUrl": null,
+  "notes": {
+   "offer": null,
+   "realtor": null
+  },
+  "chatId": null,
+  "cianId": 151608415,
+  "garage": null,
+  "isTop3": false,
+  "layout": null,
+  "photos": [
+   {
+    "id": 284756338,
+    "fullUrl": "https://images.cdn-cian.ru/images/3/657/482/kvartira-moskva-startovaya-ulica-284756338-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/3/657/482/kvartira-moskva-startovaya-ulica-284756338-3.jpg",
+    "isLayout": false,
+    "isDefault": true,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/3/657/482/kvartira-moskva-startovaya-ulica-284756338-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/3/657/482/kvartira-moskva-startovaya-ulica-284756338-4.jpg"
+   },
+   {
+    "id": 1463739892,
+    "fullUrl": "https://images.cdn-cian.ru/images/89/373/641/1463739892-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/89/373/641/1463739892-3.jpg",
+    "isLayout": true,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/89/373/641/1463739892-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/89/373/641/1463739892-4.jpg"
+   },
+   {
+    "id": 284756357,
+    "fullUrl": "https://images.cdn-cian.ru/images/3/657/482/kvartira-moskva-startovaya-ulica-284756357-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/3/657/482/kvartira-moskva-startovaya-ulica-284756357-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/3/657/482/kvartira-moskva-startovaya-ulica-284756357-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/3/657/482/kvartira-moskva-startovaya-ulica-284756357-4.jpg"
+   },
+   {
+    "id": 284756449,
+    "fullUrl": "https://images.cdn-cian.ru/images/4/657/482/kvartira-moskva-startovaya-ulica-284756449-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/4/657/482/kvartira-moskva-startovaya-ulica-284756449-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/4/657/482/kvartira-moskva-startovaya-ulica-284756449-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/4/657/482/kvartira-moskva-startovaya-ulica-284756449-4.jpg"
+   },
+   {
+    "id": 1625335425,
+    "fullUrl": "https://images.cdn-cian.ru/images/45/335/261/kvartira-moskva-startovaya-ulica-1625335425-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/45/335/261/kvartira-moskva-startovaya-ulica-1625335425-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/45/335/261/kvartira-moskva-startovaya-ulica-1625335425-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/45/335/261/kvartira-moskva-startovaya-ulica-1625335425-4.jpg"
+   },
+   {
+    "id": 1613192457,
+    "fullUrl": "https://images.cdn-cian.ru/images/42/913/161/kvartira-moskva-startovaya-ulica-1613192457-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/42/913/161/kvartira-moskva-startovaya-ulica-1613192457-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/42/913/161/kvartira-moskva-startovaya-ulica-1613192457-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/42/913/161/kvartira-moskva-startovaya-ulica-1613192457-4.jpg"
+   },
+   {
+    "id": 1612842573,
+    "fullUrl": "https://images.cdn-cian.ru/images/52/482/161/kvartira-moskva-startovaya-ulica-1612842573-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/52/482/161/kvartira-moskva-startovaya-ulica-1612842573-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/52/482/161/kvartira-moskva-startovaya-ulica-1612842573-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/52/482/161/kvartira-moskva-startovaya-ulica-1612842573-4.jpg"
+   }
+  ],
+  "status": "published",
+  "userId": "1b4d7a5b66afa8a5",
+  "videos": [],
+  "auction": {},
+  "booking": null,
+  "fullUrl": "https://www.cian.ru/rent/flat/151608415/?context=4.5LvkG2q1xqU.JQ_G6085FSLP1u3IxHNdXrI2DF0K31yMA25OgzQQ4y0hKrfNsB6jdxo1FSscCCf9Pl52HxLESEE1xQ&mlSearchSessionGuid=16dd60a679e19a9edff93dab5bbeaeda",
+  "gaLabel": "/rent/flat/mo_id=0/obl_id=1/city_id=1/object_type=1/ga_obj_type=1/spec=agent/rent_type=/151608415/from_developer=0/repres=0/owner=0/pod_snos=0/",
+  "isInCpd": null,
+  "minArea": null,
+  "similar": null,
+  "building": {
+   "type": null,
+   "parking": {
+    "type": "ground",
+    "isFree": null,
+    "currency": null,
+    "priceEntry": null,
+    "isAvailable": null,
+    "placesCount": null,
+    "purposeType": null,
+    "locationType": null,
+    "priceMonthly": null
+   },
+   "deadline": null,
+   "buildYear": 1987,
+   "classType": null,
+   "accessType": null,
+   "floorsCount": 17,
+   "heatingType": null,
+   "materialType": "panel",
+   "cargoLiftsCount": 1,
+   "passengerLiftsCount": 1
+  },
+  "category": "flatRent",
+  "dealType": "rent",
+  "factoids": [
+   {
+    "text": "19.0 м2",
+    "type": "livingArea",
+    "title": "Жилая пл."
+   }
+  ],
+  "flatType": "rooms",
+  "isUnique": true,
+  "roomArea": null,
+  "areaParts": null,
+  "coworking": null,
+  "isAuction": false,
+  "isPremium": false,
+  "offerType": "flat",
+  "promoInfo": null,
+  "specialty": {
+   "types": [],
+   "specialties": [],
+   "additionalTypes": []
+  },
+  "totalArea": "38.0",
+  "accessType": null,
+  "cianUserId": "081588bbf590f85c",
+  "decoration": null,
+  "externalId": null,
+  "isFavorite": false,
+  "isImported": false,
+  "isNewLabel": false,
+  "isStandard": false,
+  "livingArea": "19.0",
+  "officeType": null,
+  "roomsCount": 1,
+  "adfoxParams": {
+   "puid1": "deal_type_rent",
+   "puid2": "offer_flat",
+   "puid4": "offer_type_1",
+   "puid5": "obl_id_1",
+   "puid6": "1_50",
+   "puid7": "2323",
+   "puid8": 45000,
+   "puid9": 69,
+   "puid10": "no_agent",
+   "puid16": "false",
+   "puid17": "false",
+   "puid19": "not_video",
+   "puid36": 1
+  },
+  "buildersIds": [],
+  "description": "Звоните!!! Не пишите, на сообщения оперативно не отвечаю!\nСдается уютная квартира на СВАО г. Москвы. Состояние квартиры хорошее, все есть для проживания. Балкон не застеклен. Рассмотрим приличную семью до 4-х чел. макс.. Инфраструктура развитая, рядом сады, школы, парк. Показ по договоренности, ключи на руках. Звоните!!!\n-----\nПримечание: у собственника могут быть дополнительные пожелания к жильцам - обсудите их в чате или по телефону",
+  "floorNumber": 10,
+  "isColorized": false,
+  "kitchenArea": "8.0",
+  "newbuilding": null,
+  "offerInDeal": false,
+  "shareAmount": null,
+  "tradingLink": null,
+  "bargainTerms": {
+   "tags": [],
+   "price": 45000,
+   "deposit": 45000,
+   "vatType": null,
+   "agentFee": 50,
+   "currency": "rur",
+   "priceRur": 45000,
+   "saleType": null,
+   "vatPrice": null,
+   "clientFee": 50,
+   "leaseType": null,
+   "priceType": "all",
+   "agentBonus": null,
+   "leaseTermType": "longTerm",
+   "paymentPeriod": "monthly",
+   "bargainAllowed": null,
+   "utilitiesTerms": {
+    "price": 0,
+    "includedInPrice": true,
+    "flowMetersNotIncludedInPrice": true
+   },
+   "mortgageAllowed": null,
+   "priceForWorkplace": null
+  },
+  "contextToken": "4.5LvkG2q1xqU.JQ_G6085FSLP1u3IxHNdXrI2DF0K31yMA25OgzQQ4y0hKrfNsB6jdxo1FSscCCf9Pl52HxLESEE1xQ",
+  "creationDate": "2016-11-28T14:33:23.36",
+  "hasFurniture": true,
+  "isApartments": true,
+  "isRecidivist": false,
+  "loggiasCount": 0,
+  "workTimeInfo": null,
+  "allFromOffrep": null,
+  "bedroomsCount": null,
+  "brandingLevel": null,
+  "categoriesIds": [
+   1000,
+   1100,
+   1110,
+   1111
+  ],
+  "fromDeveloper": null,
+  "isByHomeowner": false,
+  "isCianPartner": false,
+  "isRentByParts": false,
+  "monthlyIncome": null,
+  "addedTimestamp": 1787774634,
+  "balconiesCount": 1,
+  "isInHiddenBase": false,
+  "moderationInfo": {
+   "photoStub": null,
+   "warningMessage": null,
+   "showContactWarningMessage": false
+  },
+  "rosreestrCheck": null,
+  "workplaceCount": null,
+  "basicProfiScore": 1,
+  "cadastralNumber": null,
+  "dealRentVersion": null,
+  "mortgagePayment": null,
+  "publishedUserId": "1b4d7a5b66afa8a5",
+  "comparisonStatus": null,
+  "isLayoutApproved": null,
+  "permittedUseType": null,
+  "formattedFullInfo": "1-комн.кв.  ·  38 м²  ·  10/17 этаж",
+  "photoFeatureIcons": [],
+  "readyBusinessType": null,
+  "roomsForSaleCount": null,
+  "savedSearchLabels": [],
+  "coworkingOfferType": null,
+  "descriptionMinhash": [
+   34178194,
+   55967205,
+   45531783,
+   115530169,
+   2088518,
+   30282380,
+   91089243,
+   146991052,
+   168579509,
+   223646617,
+   32618743,
+   311256266,
+   4178831,
+   19737981,
+   85181873,
+   17165656,
+   59105895,
+   26930287,
+   57699376,
+   6983705,
+   39744589,
+   74251476,
+   5793994,
+   38907129,
+   3150297,
+   54328664,
+   24836331,
+   108178974,
+   188657046,
+   501391,
+   5158207,
+   266297379
+  ],
+  "formattedFullPrice": "45 000 ₽/мес.",
+  "formattedShortInfo": "1-комн.кв.  ·  10/17 этаж",
+  "humanizedTimedelta": "3 недели назад",
+  "isRosreestrChecked": false,
+  "offerFeatureLabels": [],
+  "showWarningMessage": false,
+  "commercialOwnership": null,
+  "formattedShortPrice": "45 000 ₽/мес.",
+  "isByCommercialOwner": null,
+  "newbuildingCplLayer": null,
+  "isEarlyAccessEnabled": false,
+  "isExcludedFromAction": false,
+  "isSubsidisedMortgage": null,
+  "offerFeatureLabelsV2": null,
+  "isBookedFromDeveloper": false,
+  "isCalltrackingEnabled": true,
+  "showGalleryThumbnails": false,
+  "businessShoppingCenter": null,
+  "isNeedHideExactAddress": false,
+  "rentByPartsDescription": null,
+  "villageMortgageAllowed": null,
+  "buildingCadastralNumber": null,
+  "formattedAdditionalInfo": "Залог 45 000 ₽, комиссия 50%(agent_fee), предоплата 1 месяц, на длительный срок",
+  "isDuplicatedDescription": false,
+  "isExternalTourAvailable": false,
+  "newbuildingVasPromotion": null,
+  "demolishedInMoscowProgramm": false,
+  "isNewbuildingTourAvailable": false,
+  "bestPlaceAnalyticsAvailable": null,
+  "descriptionWordsHighlighted": [],
+  "isCommercialOwnershipVerified": null,
+  "isDealRequestSubstitutionPhone": false,
+  "isOnlineRentalAgreementEnabled": null,
+  "newbuildingDynamicCalltracking": {
+   "siteBlockId": null,
+   "newbuildingId": null
+  },
+  "newbuildingWithExtendedFeatures": null
+ },
+ {
+  "id": 152055047,
+  "kp": null,
+  "geo": {
+   "jk": null,
+   "address": [
+    {
+     "id": 1,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=142703&minprice=120000&offer_type=flat&region=1&room2=1&type=4&with_neighbors=0",
+     "name": "Москва",
+     "type": "location",
+     "title": "Москва",
+     "geoType": "location",
+     "fullName": "Москва",
+     "shortName": "Москва",
+     "locationTypeId": 1,
+     "isFormingAddress": true
+    },
+    {
+     "id": 4,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=4&engine_version=2&maxprice=142703&minprice=120000&offer_type=flat&room2=1&type=4&with_neighbors=0",
+     "name": "ЦАО",
+     "type": "okrug",
+     "title": "ЦАО",
+     "geoType": "district",
+     "fullName": "ЦАО",
+     "shortName": "ЦАО",
+     "locationTypeId": null,
+     "isFormingAddress": null
+    },
+    {
+     "id": 18,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=18&engine_version=2&maxprice=142703&minprice=120000&offer_type=flat&room2=1&type=4&with_neighbors=0",
+     "name": "Пресненский",
+     "type": "raion",
+     "title": "р-н Пресненский",
+     "geoType": "district",
+     "fullName": "р-н Пресненский",
+     "shortName": "р-н Пресненский",
+     "locationTypeId": null,
+     "isFormingAddress": null
+    },
+    {
+     "id": 134,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&maxprice=142703&metro%5B0%5D=134&minprice=120000&offer_type=flat&only_foot=2&room2=1&type=4&with_neighbors=0",
+     "name": "Улица 1905 года",
+     "type": "metro",
+     "title": "м. Улица 1905 года",
+     "geoType": "underground",
+     "fullName": "м. Улица 1905 года",
+     "shortName": "м. Улица 1905 года",
+     "locationTypeId": null,
+     "isFormingAddress": null
+    },
+    {
+     "id": 563,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=142703&minprice=120000&offer_type=flat&room2=1&street%5B0%5D=563&type=4&with_neighbors=0",
+     "name": "1905 года",
+     "type": "street",
+     "title": "улица 1905 года",
+     "geoType": "street",
+     "fullName": "улица 1905 года",
+     "shortName": "ул. 1905 года",
+     "locationTypeId": null,
+     "isFormingAddress": true
+    },
+    {
+     "id": 1691341,
+     "qs": "currency=2&deal_type=rent&engine_version=2&house%5B0%5D=1691341&maxprice=142703&minprice=120000&offer_type=flat&room2=1&type=4&with_neighbors=0",
+     "name": "21",
+     "type": "house",
+     "title": "21",
+     "geoType": "house",
+     "fullName": "21",
+     "shortName": "21",
+     "locationTypeId": null,
+     "isFormingAddress": true
+    }
+   ],
+   "highways": [],
+   "railways": [
+    {
+     "id": 699,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=142703&minprice=120000&offer_type=flat&railway%5B0%5D=699&room2=1&type=4&with_neighbors=0",
+     "name": "Беговая",
+     "time": 17,
+     "geoType": "railway",
+     "distance": 1,
+     "travelType": "byFoot",
+     "directionIds": [
+      11
+     ]
+    },
+    {
+     "id": 707,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=142703&minprice=120000&offer_type=flat&railway%5B0%5D=707&room2=1&type=4&with_neighbors=0",
+     "name": "Тестовская",
+     "time": 5,
+     "geoType": "railway",
+     "distance": 3,
+     "travelType": "byCar",
+     "directionIds": [
+      11
+     ]
+    },
+    {
+     "id": 694,
+     "qs": "currency=2&deal_type=rent&engine_version=2&maxprice=142703&minprice=120000&offer_type=flat&railway%5B0%5D=694&room2=1&type=4&with_neighbors=0",
+     "name": "Москва (Белорусский вокзал)",
+     "time": 6,
+     "geoType": "railway",
+     "distance": 3,
+     "travelType": "byCar",
+     "directionIds": [
+      11
+     ]
+    }
+   ],
+   "countryId": 138,
+   "districts": [
+    {
+     "id": 18,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=18&engine_version=2&maxprice=142703&minprice=120000&offer_type=flat&room2=1&type=4&with_neighbors=0",
+     "name": "Пресненский",
+     "type": "raion",
+     "title": "р-н Пресненский",
+     "geoType": "district",
+     "fullName": "р-н Пресненский",
+     "parentId": 4,
+     "locationId": 1
+    },
+    {
+     "id": 4,
+     "qs": "currency=2&deal_type=rent&district%5B0%5D=4&engine_version=2&maxprice=142703&minprice=120000&offer_type=flat&room2=1&type=4&with_neighbors=0",
+     "name": "ЦАО",
+     "type": "okrug",
+     "title": "ЦАО",
+     "geoType": "district",
+     "fullName": "ЦАО",
+     "parentId": null,
+     "locationId": 1
+    }
+   ],
+   "userInput": "Россия, Москва, улица 1905 года, 21",
+   "coordinates": {
+    "lat": 55.767306,
+    "lng": 37.55796
+   },
+   "sortedGeoIds": [
+    {
+     "id": 134,
+     "type": "underground"
+    },
+    {
+     "id": 14,
+     "type": "underground"
+    },
+    {
+     "id": 159,
+     "type": "underground"
+    },
+    {
+     "id": 699,
+     "type": "railway"
+    },
+    {
+     "id": 707,
+     "type": "railway"
+    },
+    {
+     "id": 694,
+     "type": "railway"
+    },
+    {
+     "id": 18,
+     "type": "district"
+    },
+    {
+     "id": 4,
+     "type": "district"
+    }
+   ],
+   "undergrounds": [
+    {
+     "id": 134,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&maxprice=142703&metro%5B0%5D=134&minprice=120000&offer_type=flat&only_foot=2&room2=1&type=4&with_neighbors=0",
+     "name": "Улица 1905 года",
+     "time": 3,
+     "cianId": null,
+     "lineId": 11,
+     "lineType": null,
+     "isDefault": true,
+     "lineColor": "94007C",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 14,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&maxprice=142703&metro%5B0%5D=14&minprice=120000&offer_type=flat&only_foot=2&room2=1&type=4&with_neighbors=0",
+     "name": "Беговая",
+     "time": 15,
+     "cianId": null,
+     "lineId": 11,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "94007C",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    },
+    {
+     "id": 159,
+     "qs": "currency=2&deal_type=rent&engine_version=2&foot_min=25&maxprice=142703&metro%5B0%5D=159&minprice=120000&offer_type=flat&only_foot=2&room2=1&type=4&with_neighbors=0",
+     "name": "Краснопресненская",
+     "time": 20,
+     "cianId": null,
+     "lineId": 7,
+     "lineType": null,
+     "isDefault": false,
+     "lineColor": "800000",
+     "releaseYear": null,
+     "transportType": "walk",
+     "underConstruction": false
+    }
+   ],
+   "buildingAddress": null
+  },
+  "chat": {
+   "chatId": null,
+   "canSendMessage": true
+  },
+  "land": null,
+  "user": {
+   "userId": "e0de06506f24d1a0",
+   "isAgent": false,
+   "isHidden": true,
+   "userType": "realtor_not_commerce",
+   "isBuilder": false,
+   "agentLists": [],
+   "cianUserId": "d5af4d2e288ae171",
+   "isSubAgent": false,
+   "canShowOnline": false,
+   "isCianPartner": false,
+   "isCallbackUser": false,
+   "isChatsEnabled": true,
+   "isSelfEmployed": false,
+   "personalRating": null,
+   "userTrustLevel": "notInvolved",
+   "agentAvailability": {
+    "title": null,
+    "userId": "e881e5130fef1c3c",
+    "message": null,
+    "available": true,
+    "vacationTo": null,
+    "availableTo": null,
+    "availableFrom": null
+   },
+   "isPassportVerified": true,
+   "agentModerationInfo": {
+    "isUserIdentified": true,
+    "qualityLevelInfo": {
+     "isBlocked": false,
+     "levelName": "Высокий уровень",
+     "levelOrder": 3,
+     "isSuperHost": false,
+     "isSuperAgent": false,
+     "showSuperHost": false,
+     "showSuperAgent": false,
+     "levelSystemName": "high",
+     "highResponsibility": true,
+     "hasVerifiedDocuments": true,
+     "showHighResponsibility": true
+    },
+    "isUserIdentifiedByDocuments": true,
+    "showUserIdentifiedByDocuments": true
+   }
+  },
+  "added": "8 сен, 19:26",
+  "isNew": false,
+  "isPro": false,
+  "jkUrl": null,
+  "notes": {
+   "offer": null,
+   "realtor": null
+  },
+  "chatId": null,
+  "cianId": 152055047,
+  "garage": null,
+  "isTop3": false,
+  "layout": null,
+  "photos": [
+   {
+    "id": 2730086944,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086944-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086944-3.jpg",
+    "isLayout": false,
+    "isDefault": true,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086944-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086944-4.jpg"
+   },
+   {
+    "id": 2730065146,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065146-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065146-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065146-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065146-4.jpg"
+   },
+   {
+    "id": 2730065182,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065182-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065182-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065182-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065182-4.jpg"
+   },
+   {
+    "id": 2730065150,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065150-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065150-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065150-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065150-4.jpg"
+   },
+   {
+    "id": 2730065208,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065208-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065208-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065208-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065208-4.jpg"
+   },
+   {
+    "id": 2730065147,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065147-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065147-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065147-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065147-4.jpg"
+   },
+   {
+    "id": 2730065185,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065185-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065185-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065185-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065185-4.jpg"
+   },
+   {
+    "id": 2730065226,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065226-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065226-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065226-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065226-4.jpg"
+   },
+   {
+    "id": 2730065204,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065204-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065204-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065204-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065204-4.jpg"
+   },
+   {
+    "id": 2730086943,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086943-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086943-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086943-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086943-4.jpg"
+   },
+   {
+    "id": 2730086941,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086941-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086941-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086941-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730086941-4.jpg"
+   },
+   {
+    "id": 2730065213,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065213-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065213-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065213-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065213-4.jpg"
+   },
+   {
+    "id": 2730065229,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065229-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065229-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065229-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065229-4.jpg"
+   },
+   {
+    "id": 2730065233,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065233-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065233-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065233-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065233-4.jpg"
+   },
+   {
+    "id": 2730065272,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065272-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065272-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065272-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065272-4.jpg"
+   },
+   {
+    "id": 2730065264,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065264-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065264-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065264-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065264-4.jpg"
+   },
+   {
+    "id": 2730065237,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065237-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065237-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065237-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065237-4.jpg"
+   },
+   {
+    "id": 2730065249,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065249-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065249-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065249-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065249-4.jpg"
+   },
+   {
+    "id": 2730065257,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065257-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065257-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065257-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065257-4.jpg"
+   },
+   {
+    "id": 2730065268,
+    "fullUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065268-1.jpg",
+    "miniUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065268-3.jpg",
+    "isLayout": false,
+    "isDefault": false,
+    "rotateDegree": null,
+    "thumbnailUrl": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065268-2.jpg",
+    "thumbnail2Url": "https://images.cdn-cian.ru/images/kvartira-moskva-ulica-1905-goda-2730065268-4.jpg"
+   }
+  ],
+  "status": "published",
+  "userId": "e0de06506f24d1a0",
+  "videos": [],
+  "auction": {},
+  "booking": null,
+  "fullUrl": "https://www.cian.ru/rent/flat/152055047/?context=4.AVbDhIe6pdI.hp7uWq-nSHhahmdsDIRkc5c8eouH4uSZ_j4eNvj8s3LH-umb9T8-2LqxOXuHKE5HKS42yTlNaHkJPA&mlSearchSessionGuid=c0563dc02c43c5fb004c33a4184108c0",
+  "gaLabel": "/rent/flat/mo_id=0/obl_id=1/city_id=1/object_type=1/ga_obj_type=2/spec=none/rent_type=/152055047/from_developer=0/repres=0/owner=0/pod_snos=0/",
+  "isInCpd": null,
+  "minArea": null,
+  "similar": null,
+  "building": {
+   "type": null,
+   "parking": {
+    "type": "ground",
+    "isFree": null,
+    "currency": null,
+    "priceEntry": null,
+    "isAvailable": null,
+    "placesCount": null,
+    "purposeType": null,
+    "locationType": null,
+    "priceMonthly": null
+   },
+   "deadline": null,
+   "buildYear": 2004,
+   "classType": null,
+   "accessType": null,
+   "floorsCount": 18,
+   "heatingType": null,
+   "materialType": "monolith",
+   "cargoLiftsCount": 1,
+   "passengerLiftsCount": 1
+  },
+  "category": "flatRent",
+  "dealType": "rent",
+  "factoids": [
+   {
+    "text": "44.0 м2",
+    "type": "livingArea",
+    "title": "Жилая пл."
+   }
+  ],
+  "flatType": "rooms",
+  "isUnique": false,
+  "roomArea": null,
+  "areaParts": null,
+  "coworking": null,
+  "goodPrice": {
+   "priceLabel": "Хорошая цена",
+   "estimationRange": "112 000—137 000 ₽/мес"
+  },
+  "isAuction": false,
+  "isPremium": false,
+  "offerType": "flat",
+  "promoInfo": null,
+  "specialty": {
+   "types": [],
+   "specialties": [],
+   "additionalTypes": []
+  },
+  "totalArea": "70.0",
+  "accessType": null,
+  "cianUserId": "e0de06506f24d1a0",
+  "decoration": null,
+  "externalId": null,
+  "isFavorite": false,
+  "isImported": false,
+  "isNewLabel": false,
+  "isStandard": false,
+  "livingArea": "44.0",
+  "officeType": null,
+  "roomsCount": 2,
+  "adfoxParams": {
+   "puid1": "deal_type_rent",
+   "puid2": "offer_flat",
+   "puid4": "offer_type_2",
+   "puid5": "obl_id_1",
+   "puid6": "101_250",
+   "puid7": "2323",
+   "puid8": 120000,
+   "puid9": 134,
+   "puid10": "no_agent",
+   "puid16": "false",
+   "puid17": "false",
+   "puid19": "not_video",
+   "puid36": 1
+  },
+  "buildersIds": [],
+  "description": "Двушка с гардеробной комнатой ( 5 м кв.) и утеплённой лоджией, кухня 15 м кв с эркером, кух мебель -Berloni, вся техника ( вкл. стиральную с сушкой и посудомоечную \"Bosh\", два TV); квартира полностью мебелирована, паркет; прихожая, с/у, кухня- плитка с подогревом, с/у совмещённый, ванная и душкабина; консьерж , шлагбаум ,парковка стихийная.От собственника",
+  "floorNumber": 5,
+  "isColorized": false,
+  "kitchenArea": "15.0",
+  "newbuilding": null,
+  "offerInDeal": false,
+  "shareAmount": null,
+  "tradingLink": null,
+  "bargainTerms": {
+   "tags": [],
+   "price": 120000,
+   "deposit": 120000,
+   "vatType": null,
+   "agentFee": 50,
+   "currency": "rur",
+   "priceRur": 120000,
+   "saleType": null,
+   "vatPrice": null,
+   "clientFee": 0,
+   "leaseType": null,
+   "priceType": "all",
+   "agentBonus": null,
+   "leaseTermType": "longTerm",
+   "paymentPeriod": "monthly",
+   "bargainAllowed": null,
+   "utilitiesTerms": {
+    "price": 0,
+    "includedInPrice": true,
+    "flowMetersNotIncludedInPrice": true
+   },
+   "mortgageAllowed": null,
+   "priceForWorkplace": null
+  },
+  "contextToken": "4.AVbDhIe6pdI.hp7uWq-nSHhahmdsDIRkc5c8eouH4uSZ_j4eNvj8s3LH-umb9T8-2LqxOXuHKE5HKS42yTlNaHkJPA",
+  "creationDate": "2016-12-12T10:02:14.483",
+  "hasFurniture": true,
+  "isApartments": false,
+  "isRecidivist": false,
+  "loggiasCount": 1,
+  "workTimeInfo": null,
+  "allFromOffrep": null,
+  "bedroomsCount": null,
+  "brandingLevel": null,
+  "categoriesIds": [
+   1000,
+   1100,
+   1110,
+   1111
+  ],
+  "fromDeveloper": null,
+  "isByHomeowner": false,
+  "isCianPartner": false,
+  "isRentByParts": false,
+  "monthlyIncome": null,
+  "addedTimestamp": 1788884771,
+  "balconiesCount": 0,
+  "isInHiddenBase": false,
+  "moderationInfo": {
+   "photoStub": null,
+   "warningMessage": null,
+   "showContactWarningMessage": false
+  },
+  "rosreestrCheck": null,
+  "workplaceCount": null,
+  "basicProfiScore": 0,
+  "cadastralNumber": null,
+  "dealRentVersion": null,
+  "mortgagePayment": null,
+  "publishedUserId": "e0de06506f24d1a0",
+  "comparisonStatus": null,
+  "isLayoutApproved": null,
+  "permittedUseType": null,
+  "formattedFullInfo": "2-комн.кв.  ·  70 м²  ·  5/18 этаж",
+  "photoFeatureIcons": [],
+  "readyBusinessType": null,
+  "roomsForSaleCount": null,
+  "savedSearchLabels": [],
+  "coworkingOfferType": null,
+  "descriptionMinhash": [
+   10110801,
+   109572828,
+   123147180,
+   286549394,
+   93421251,
+   186881385,
+   17303840,
+   199657721,
+   246690997,
+   37900519,
+   36399820,
+   3053187,
+   97895906,
+   133472842,
+   197408376,
+   10694646,
+   31173301,
+   43966960,
+   22218893,
+   17996297,
+   79543630,
+   142599862,
+   116940330,
+   2029186,
+   30499972,
+   16225312,
+   27025535,
+   17875559,
+   98192669,
+   137905589,
+   132521922,
+   18816112
+  ],
+  "formattedFullPrice": "120 000 ₽/мес.",
+  "formattedShortInfo": "2-комн.кв.  ·  5/18 этаж",
+  "humanizedTimedelta": "2 недели назад",
+  "isRosreestrChecked": false,
+  "offerFeatureLabels": [],
+  "showWarningMessage": false,
+  "commercialOwnership": null,
+  "formattedShortPrice": "120 000 ₽/мес.",
+  "isByCommercialOwner": null,
+  "newbuildingCplLayer": null,
+  "isEarlyAccessEnabled": false,
+  "isExcludedFromAction": false,
+  "isSubsidisedMortgage": null,
+  "offerFeatureLabelsV2": null,
+  "isBookedFromDeveloper": false,
+  "isCalltrackingEnabled": true,
+  "showGalleryThumbnails": false,
+  "businessShoppingCenter": null,
+  "isNeedHideExactAddress": false,
+  "rentByPartsDescription": null,
+  "villageMortgageAllowed": null,
+  "buildingCadastralNumber": null,
+  "formattedAdditionalInfo": "Залог 120 000 ₽, без комиссии(agent_fee), предоплата 1 месяц, на длительный срок",
+  "isDuplicatedDescription": false,
+  "isExternalTourAvailable": false,
+  "newbuildingVasPromotion": null,
+  "demolishedInMoscowProgramm": false,
+  "isNewbuildingTourAvailable": false,
+  "bestPlaceAnalyticsAvailable": null,
+  "descriptionWordsHighlighted": [],
+  "isCommercialOwnershipVerified": null,
+  "isDealRequestSubstitutionPhone": false,
+  "isOnlineRentalAgreementEnabled": null,
+  "newbuildingDynamicCalltracking": {
+   "siteBlockId": null,
+   "newbuildingId": null
+  },
+  "newbuildingWithExtendedFeatures": null
+ }
+]

@@ -1,0 +1,127 @@
+{
+ "id": 312845671,
+ "cianId": 312845671,
+ "fullUrl": "https://www.cian.ru/rent/flat/312845671/",
+ "addedTimestamp": 1758470400,
+ "creationDate": "2024-03-17T12:11:03.037",
+ "editDate": "2026-09-20T11:42:00+03:00",
+ "category": "flatRent",
+ "dealType": "rent",
+ "roomsCount": 2,
+ "flatType": "rooms",
+ "isApartments": false,
+ "totalArea": "54,3",
+ "livingArea": "31.0",
+ "kitchenArea": "9,5",
+ "floorNumber": 7,
+ "repairType": "euro",
+ "hasFurniture": true,
+ "petsAllowed": null,
+ "childrenAllowed": true,
+ "balconiesCount": 1,
+ "loggiasCount": 0,
+ "separateWcsCount": 1,
+ "combinedWcsCount": 0,
+ "isByHomeowner": false,
+ "description": "Сдаётся светлая двухкомнатная квартира рядом с парком. Залог 1 месяц, комиссия агента 50%. С животными по договорённости, обсуждается индивидуально. Курить в квартире нельзя.",
+ "building": {
+  "floorsCount": 17,
+  "materialType": "monolith",
+  "buildYear": 2006,
+  "passengerLiftsCount": 2
+ },
+ "bargainTerms": {
+  "price": 95000.0,
+  "currency": "rur",
+  "paymentPeriod": "month",
+  "deposit": 95000,
+  "clientFee": 50,
+  "agentFee": 0,
+  "prepayMonths": 1,
+  "leaseTermType": "longTerm",
+  "utilitiesTerms": {
+   "includedInPrice": false,
+   "price": 5500,
+   "flowMetersNotIncludedInPrice": true
+  }
+ },
+ "geo": {
+  "userInput": "Москва, ул. Новоалексеевская, 16к1",
+  "coordinates": {
+   "lat": 55.8123,
+   "lng": 37.6402
+  },
+  "address": [
+   {
+    "type": "location",
+    "id": 1,
+    "name": "Москва"
+   },
+   {
+    "type": "street",
+    "id": 40123,
+    "name": "Новоалексеевская улица"
+   },
+   {
+    "type": "okrug",
+    "id": 4,
+    "name": "СВАО"
+   },
+   {
+    "type": "raion",
+    "id": 21,
+    "name": "Алексеевский"
+   },
+   {
+    "type": "house",
+    "id": 900123,
+    "name": "16к1"
+   }
+  ],
+  "undergrounds": [
+   {
+    "id": 77,
+    "name": "Алексеевская",
+    "time": 8,
+    "transportType": "walk",
+    "lineId": 6
+   },
+   {
+    "id": 78,
+    "name": "ВДНХ",
+    "time": 6,
+    "transportType": "transport",
+    "lineId": 6
+   },
+   {
+    "id": 79,
+    "name": "Рижская",
+    "time": 15,
+    "transportType": "walk",
+    "lineId": 6
+   }
+  ]
+ },
+ "user": {
+  "cianUserId": "8459f0c290c01f79",
+  "userType": "realtor_not_commercial",
+  "experience": "2019"
+ },
+ "photos": [
+  {
+   "id": 1,
+   "fullUrl": "https://images.cdn-cian.ru/1.jpg"
+  },
+  {
+   "id": 2,
+   "fullUrl": "https://images.cdn-cian.ru/2.jpg"
+  },
+  {
+   "id": 3,
+   "fullUrl": "https://images.cdn-cian.ru/3.jpg"
+  }
+ ],
+ "newFieldFromPlatform": {
+  "whatever": 1
+ }
+}
