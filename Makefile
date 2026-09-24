@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -18,6 +18,7 @@ help:
 	@echo "make wayback — исторические объявления из веб-архива"
 	@echo "make parks   — расстояние до парков по OpenStreetMap"
 	@echo "make dedup   — схлопнуть дубли объявлений"
+	@echo "make districts-ref — пересобрать справочник районов из собранных страниц"
 	@echo "make rebuild — пересобрать панель из сырых снимков"
 	@echo "make marts   — пересобрать материализованные витрины"
 	@echo "make checks  — проверки качества собранных данных"
@@ -61,9 +62,11 @@ dryrun:
 
 narrow:
 	$(PY) -m etl.collect --mode narrow --transport browser
+	$(PY) -m etl.districts
 
 full:
 	$(PY) -m etl.collect --mode full --transport browser
+	$(PY) -m etl.districts
 
 # Ручная выгрузка с кнопки «Сохранить файл Excel» на странице выдачи.
 # Отдаёт не больше 200 объявлений и верхушку промо-ранжирования, поэтому
@@ -122,6 +125,12 @@ drops:
 
 districts:
 	@$(PG) < sql/queries/03_districts.sql
+
+# Справочник районов для нарезки полного обхода. Собирается из уже
+# скачанных страниц, к площадке не обращается. Служебный эндпоинт, которым
+# он брался раньше, отвечает 404.
+districts-ref:
+	$(PY) -m etl.districts
 
 report: districts flats drops
 
