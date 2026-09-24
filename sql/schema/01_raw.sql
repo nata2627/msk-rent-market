@@ -16,7 +16,7 @@ create table if not exists raw.collection_run (
     run_id              bigserial primary key,
     source              text        not null default 'cian',
     -- 'full'   — еженедельный полный обход всей Москвы,
-    -- 'narrow' — ежедневный узкий срез по сегменту заказчицы.
+    -- 'narrow' — ежедневный узкий срез по искомому сегменту.
     mode                text        not null check (mode in ('full', 'narrow')),
     -- Дата снимка. Ключ панели — (объявление, дата снимка), поэтому дата
     -- фиксируется один раз на весь запуск: обход идёт полтора часа и может
