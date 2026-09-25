@@ -248,6 +248,13 @@ def main() -> int:
     print(f"Галочка «можно с животными» стоит у {ticked.sum():.0f} объявлений "
           f"({share:.1f}%).")
 
+    # Состав выборки — не украшение. Ежедневный срез собирает одну и две
+    # комнаты, и оценка относится к ним, а не ко всему рынку.
+    by_rooms: dict[int, int] = {}
+    for r in rows:
+        by_rooms[int(r["rooms_count"])] = by_rooms.get(int(r["rooms_count"]), 0) + 1
+    print("Комнатность: " + ", ".join(f"{k} — {v}" for k, v in sorted(by_rooms.items())))
+
     print("\n" + "=" * 78)
     print("ПРИЗНАК ПЛОЩАДКИ: галочка стоит против «не стоит». Определён у всех.")
     print("=" * 78)
@@ -266,7 +273,12 @@ def main() -> int:
     main_fit = fit(y, X, names, cluster=np.array(districts))
     report("(3) Контроли и район — основная оценка", main_fit, "животные",
            "площадь, комнатность, этаж, возраст дома, метро, материал, "
-           "техника, тип продавца")
+           "мебель, лифт, число фотографий, тип продавца")
+    lost = [d for d in main_fit.dropped if not d.startswith("район:")]
+    if lost:
+        # Контроль без разброса вычёркивается сам собой, и молчать об этом
+        # нельзя: в отчёте он выглядел бы учтённым.
+        print(f"  выброшено за отсутствием разброса: {', '.join(lost)}")
 
     cells = [cell_key(r) for r in rows]
     y, X, names = build(rows, ticked, "животные", use_controls=True,

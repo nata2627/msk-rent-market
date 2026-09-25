@@ -24,8 +24,12 @@ import numpy as np
 
 
 class Fit:
-    def __init__(self, names, beta, vcov, resid, n, k, r2, y_mean):
+    def __init__(self, names, beta, vcov, resid, n, k, r2, y_mean, dropped=()):
         self.names = names
+        # Столбцы, выброшенные из-за линейной зависимости или отсутствия
+        # разброса. Молчать о них нельзя: пропавший контроль выглядит
+        # как учтённый.
+        self.dropped = list(dropped)
         self.beta = beta
         self.vcov = vcov
         self.resid = resid
@@ -80,6 +84,7 @@ def _full_rank_columns(X: np.ndarray, tol: float = 1e-9) -> np.ndarray:
 def fit(y: np.ndarray, X: np.ndarray, names: list[str],
         cluster: np.ndarray | None = None) -> Fit:
     keep = _full_rank_columns(X)
+    dropped = [n for n, k in zip(names, keep) if not k]
     X = X[:, keep]
     names = [n for n, k in zip(names, keep) if k]
 
@@ -104,4 +109,4 @@ def fit(y: np.ndarray, X: np.ndarray, names: list[str],
     vcov = xtx_inv @ meat @ xtx_inv * scale
     tss = float(((y - y.mean()) ** 2).sum())
     r2 = 1.0 - float((resid ** 2).sum()) / tss if tss > 0 else float("nan")
-    return Fit(names, beta, vcov, resid, n, k, r2, float(y.mean()))
+    return Fit(names, beta, vcov, resid, n, k, r2, float(y.mean()), dropped)

@@ -144,7 +144,19 @@ MINUTE ?= 0
 LABEL := com.nata2627.rent-msk.daily
 PLIST := $(HOME)/Library/LaunchAgents/$(LABEL).plist
 
+# macOS не пускает фоновые задачи в «Рабочий стол», «Документы» и
+# «Загрузки». Установить расписание оттуда можно, но работать оно не
+# будет — задача падает с Operation not permitted ещё до первой строки
+# скрипта, и узнать об этом получится только через сутки по пустому
+# журналу. Поэтому проверка здесь, а не в комментарии.
 schedule:
+	@case "$(CURDIR)" in \
+	  $(HOME)/Desktop/*|$(HOME)/Documents/*|$(HOME)/Downloads/*) \
+	    echo "Проект лежит в $(CURDIR)."; \
+	    echo "macOS не пускает туда фоновые задачи — расписание не заработает."; \
+	    echo "Перенесите папку за пределы Desktop/Documents/Downloads."; \
+	    exit 1;; \
+	esac
 	@mkdir -p $(HOME)/Library/LaunchAgents
 	@sed -e 's|__REPO__|$(CURDIR)|g' \
 	     -e 's|__LABEL__|$(LABEL)|g' \
