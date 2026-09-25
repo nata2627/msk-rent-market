@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -19,6 +19,9 @@ help:
 	@echo "make parks   — расстояние до парков по OpenStreetMap"
 	@echo "make dedup   — схлопнуть дубли объявлений"
 	@echo "make districts-ref — пересобрать справочник районов из собранных страниц"
+	@echo "make daily    — весь ежедневный прогон разом (сбор + пересчёт)"
+	@echo "make schedule HOUR=10 — ставить прогон на расписание, ежедневно"
+	@echo "make schedule-status — идёт ли расписание и чем кончились прогоны"
 	@echo "make rebuild — пересобрать панель из сырых снимков"
 	@echo "make marts   — пересобрать материализованные витрины"
 	@echo "make checks  — проверки качества собранных данных"
@@ -129,6 +132,43 @@ districts:
 # Справочник районов для нарезки полного обхода. Собирается из уже
 # скачанных страниц, к площадке не обращается. Служебный эндпоинт, которым
 # он брался раньше, отвечает 404.
+# --- расписание ---------------------------------------------------------
+# Ежедневный прогон через launchd. Не cron: сбору нужен видимый Chrome,
+# то есть живой графический сеанс, а пропущенный из-за сна запуск launchd
+# выполняет при пробуждении.
+#
+# Час задаётся здесь: make schedule HOUR=10 MINUTE=30
+HOUR ?= 10
+MINUTE ?= 0
+LABEL := com.nata2627.rent-msk.daily
+PLIST := $(HOME)/Library/LaunchAgents/$(LABEL).plist
+
+schedule:
+	@mkdir -p $(HOME)/Library/LaunchAgents
+	@sed -e 's|__REPO__|$(CURDIR)|g' \
+	     -e 's|__LABEL__|$(LABEL)|g' \
+	     -e 's|__HOUR__|$(HOUR)|g' \
+	     -e 's|__MINUTE__|$(MINUTE)|g' \
+	     scripts/daily.plist.template > $(PLIST)
+	@launchctl bootout gui/$$(id -u)/$(LABEL) 2>/dev/null || true
+	@launchctl bootstrap gui/$$(id -u) $(PLIST)
+	@echo "Прогон поставлен на $(HOUR):$(shell printf %02d $(MINUTE)) ежедневно."
+	@echo "Проверить: make schedule-status"
+
+unschedule:
+	@launchctl bootout gui/$$(id -u)/$(LABEL) 2>/dev/null || true
+	@rm -f $(PLIST)
+	@echo "Расписание снято."
+
+schedule-status:
+	@launchctl print gui/$$(id -u)/$(LABEL) 2>/dev/null \
+	  | grep -E 'state|last exit code|program|runs' || echo "Не установлено."
+	@echo "--- последние прогоны ---"
+	@tail -6 data/logs/daily_summary.log 2>/dev/null || echo "прогонов ещё не было"
+
+daily:
+	@./scripts/daily.sh; tail -3 data/logs/daily_summary.log
+
 districts-ref:
 	$(PY) -m etl.districts
 
