@@ -257,6 +257,54 @@ def upsert_photos(conn, parsed: list[dict]) -> None:
     conn.commit()
 
 
+def record_pets_hits(conn, run_id: int, bucket_id, snapshot_date,
+                     offer_ids, source: str = "cian") -> int:
+    """Запомнить в raw, какие объявления площадка отдала под фильтром.
+
+    Без этой записи слой raw неполон: пересборка core из него теряет
+    разметку животных, и теряет молча. Строк немного — несколько тысяч в
+    день против семнадцати тысяч снимков с полными карточками.
+    """
+    if not offer_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.executemany(
+            """insert into raw.pets_hit
+                   (run_id, bucket_id, source, offer_id, snapshot_date)
+               values (%s, %s, %s, %s, %s)
+               on conflict do nothing""",
+            [(run_id, bucket_id, source, oid, snapshot_date) for oid in offer_ids],
+        )
+        written = cur.rowcount
+    conn.commit()
+    return written
+
+
+def set_pets_pass_complete(conn, run_id: int, complete: bool) -> None:
+    with conn.cursor() as cur:
+        cur.execute("update raw.collection_run set pets_pass_complete = %s "
+                    "where run_id = %s", (complete, run_id))
+    conn.commit()
+
+
+def pets_hits_for_date(conn, snapshot_date, source: str = "cian") -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute("select distinct offer_id from raw.pets_hit "
+                    "where source = %s and snapshot_date = %s",
+                    (source, snapshot_date))
+        return [r[0] for r in cur.fetchall()]
+
+
+def pets_pass_was_complete(conn, snapshot_date, source: str = "cian") -> bool:
+    """Был ли хоть один прогон за этот день с полным проходом по животным."""
+    with conn.cursor() as cur:
+        cur.execute("select bool_or(coalesce(pets_pass_complete, false)) "
+                    "from raw.collection_run where snapshot_date = %s",
+                    (snapshot_date,))
+        row = cur.fetchone()
+        return bool(row and row[0])
+
+
 def mark_pets_allowed(conn, offer_ids: list[str], snapshot_date,
                       source: str = "cian", mark_rest_false: bool = True) -> int:
     """Проставить твёрдую метку «можно с животными» по результату прохода

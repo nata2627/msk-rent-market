@@ -19,6 +19,7 @@ from pathlib import Path
 
 from etl import db
 from etl.parse import parse_offer
+from etl.rebuild_core import restore_pets
 from etl.partition import Bucket, build_query
 
 SOURCE = "selftest"
@@ -46,6 +47,7 @@ def cleanup(conn) -> None:
         cur.execute("delete from core.offer where source = %s", (SOURCE,))
         cur.execute("delete from raw.offer_snapshot where source = %s", (SOURCE,))
         cur.execute("delete from core.offer_observation where source = %s", (SOURCE,))
+        cur.execute("delete from raw.pets_hit where source = %s", (SOURCE,))
         cur.execute("delete from raw.collection_run where source = %s", (SOURCE,))
     conn.commit()
 
@@ -159,6 +161,39 @@ def main() -> int:
                          (SOURCE,)) == D1,
                   "first_seen_date не сдвинулся — иначе срок жизни в анализе "
                   "выживаемости посчитался бы короче реального")
+
+            print("7. Разметка животных переживает пересборку core из raw")
+            # Проверка появилась после того, как пересборка молча стёрла
+            # метку площадки у всех снимков: она жила только в core, а raw
+            # считался самодостаточным. Теперь членство пишется в
+            # raw.pets_hit, и это утверждение следит, чтобы так и осталось.
+            last_run = scalar(conn, "select max(run_id) from raw.collection_run "
+                                    "where source=%s", (SOURCE,))
+            db.record_pets_hits(conn, last_run, None, D3 + timedelta(days=1),
+                                [offer_id], source=SOURCE)
+            db.set_pets_pass_complete(conn, last_run, True)
+            db.mark_pets_allowed(conn, [offer_id], D3 + timedelta(days=1),
+                                 source=SOURCE, mark_rest_false=True)
+            check(scalar(conn, "select pets_platform_allowed from core.offer_observation "
+                               "where source=%s and snapshot_date=%s",
+                         (SOURCE, D3 + timedelta(days=1))) is True,
+                  "метка площадки проставлена")
+
+            with conn.cursor() as cur:
+                cur.execute("update core.offer_observation "
+                            "set pets_platform_allowed = null, "
+                            "    pets_state = 'unknown', pets_source = 'none' "
+                            "where source = %s", (SOURCE,))
+            conn.commit()
+            restore_pets(conn, SOURCE)
+            check(scalar(conn, "select pets_platform_allowed from core.offer_observation "
+                               "where source=%s and snapshot_date=%s",
+                         (SOURCE, D3 + timedelta(days=1))) is True,
+                  "и вернулась после пересборки — из raw.pets_hit, без запросов")
+            check(scalar(conn, "select pets_state from core.offer_observation "
+                               "where source=%s and snapshot_date=%s",
+                         (SOURCE, D3 + timedelta(days=1))) == "allowed",
+                  "состояние животных восстановлено вместе с ней")
 
             print(f"\nСквозная проверка пройдена: {checks_passed} утверждений. "
                   f"Объявление {offer_id} удалено из базы.")

@@ -210,3 +210,26 @@ alter table core.offer_observation
     -- Дубли, найденные самой площадкой («У других арендодателей»).
     -- Это эталон, по которому проверяется наша дедупликация.
     add column if not exists platform_duplicate_ids jsonb;
+
+-- Какие объявления площадка отдала под фильтром «можно с животными».
+--
+-- Зачем отдельная таблица. Проход с фильтром намеренно не сохраняет
+-- payload повторно: он байт в байт тот же, что уже лежит после основного
+-- прохода. Но вместе с payload терялся и сам факт попадания под фильтр —
+-- он жил только в core. Стоило пересобрать core из raw, и метка
+-- исчезала, причём молча: слой raw объявлен самодостаточным, а по факту
+-- таковым не был. Здесь хранится ровно то, чего не хватало, — членство.
+create table if not exists raw.pets_hit (
+    run_id        bigint not null references raw.collection_run(run_id) on delete cascade,
+    bucket_id     bigint references raw.bucket(bucket_id),
+    source        text   not null default 'cian',
+    offer_id      text   not null,
+    snapshot_date date   not null,
+    primary key (source, offer_id, snapshot_date, run_id)
+);
+
+create index if not exists pets_hit_date_idx on raw.pets_hit (source, snapshot_date);
+
+-- Полнота прохода по дню: если хоть по одной корзине фильтр не сработал,
+-- помечать остальные объявления как «не разрешено» нельзя.
+alter table raw.collection_run add column if not exists pets_pass_complete boolean;

@@ -31,6 +31,39 @@ log = logging.getLogger("rebuild")
 BATCH = 2000
 
 
+
+def restore_pets(conn, source: str) -> None:
+    """Вернуть разметку животных по журналу прохода с фильтром.
+
+    Разбор текста восстанавливается из payload сам, а вот факт попадания
+    под фильтр площадки в payload не лежит — он записан отдельно, в
+    raw.pets_hit. Без этого шага пересборка core молча стирает самую
+    надёжную из четырёх меток, и заметно это становится только когда
+    регрессия показывает ноль объявлений с галочкой.
+
+    Дни, собранные до появления raw.pets_hit, восстановить нечем:
+    членство тогда нигде не сохранялось. Такие дни остаются с разметкой
+    из текста, и это видно в журнале.
+    """
+    with conn.cursor() as cur:
+        cur.execute("select distinct snapshot_date from raw.pets_hit "
+                    "where source = %s order by 1", (source,))
+        dates = [r[0] for r in cur.fetchall()]
+
+    if not dates:
+        log.warning("Журнал прохода с фильтром пуст: разметка животных "
+                    "осталась только из текста.")
+        return
+
+    for snapshot_date in dates:
+        ids = db.pets_hits_for_date(conn, snapshot_date, source=source)
+        complete = db.pets_pass_was_complete(conn, snapshot_date, source=source)
+        marked = db.mark_pets_allowed(conn, sorted(ids), snapshot_date,
+                                      source=source, mark_rest_false=complete)
+        log.info("  животные за %s: помечено %d%s", snapshot_date, marked,
+                 "" if complete else " (проход неполный, остальные не помечены)")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Пересобрать core из raw")
     parser.add_argument("--dry-run", action="store_true")
@@ -83,6 +116,8 @@ def main(argv=None) -> int:
             done += len(rows)
             offset += BATCH
             log.info("  пересобрано наблюдений: %d", done)
+
+        restore_pets(conn, args.source)
 
         log.info("Готово. Обогащение (парки, МКАД, дубли) считается отдельно: "
                  "make parks && make dedup")

@@ -291,3 +291,34 @@ def test_snapshot_date_lands_in_observation(parsed):
 
 def test_empty_payload_does_not_crash():
     assert parse_offer({"id": 1}, TODAY)["observation"]["price"] is None
+
+
+def test_district_falls_back_to_settlement():
+    """Новая Москва: административная единица называется поселением.
+
+    Без этого 1566 объявлений из 16 519 остались бы без территории — и не
+    случайных, а систематически более дешёвых.
+    """
+    from etl.parse import parse_geo
+    geo = {
+        "districts": [
+            {"id": 332, "name": "Московский", "type": "poselenie"},
+            {"id": 325, "name": "НАО (Новомосковский)", "type": "okrug"},
+        ],
+        "address": [{"type": "okrug", "name": "НАО (Новомосковский)"}],
+        "coordinates": {"lat": 55.6, "lng": 37.35},
+    }
+    assert parse_geo({"geo": geo})["district"] == "Московский"
+
+
+def test_district_prefers_raion_over_mikroraion():
+    """Микрорайон вложен в район: подменять им район нельзя."""
+    from etl.parse import parse_geo
+    geo = {
+        "districts": [
+            {"id": 900, "name": "Марьинский парк", "type": "mikroraion"},
+            {"id": 77, "name": "Марьино", "type": "raion"},
+        ],
+        "coordinates": {"lat": 55.65, "lng": 37.75},
+    }
+    assert parse_geo({"geo": geo})["district"] == "Марьино"

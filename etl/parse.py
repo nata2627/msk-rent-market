@@ -208,10 +208,18 @@ def parse_geo(payload: dict) -> dict:
     # выдаче districts заполнен у 28 объявлений из 28, а часть адреса с
     # типом raion — у 27. Разница небольшая, но район это ось всей
     # аналитики, и терять его на ровном месте незачем.
+    # Поселение здесь наравне с районом: в Новой Москве административная
+    # единица называется именно так, и без неё 1566 объявлений из 16 519
+    # остаются без территории — а это не случайная пропажа, Новая Москва
+    # заметно дешевле, и её отсутствие сдвинуло бы любую оценку.
+    # Микрорайон не берём: он вложен в район, и подменять им район значило
+    # бы получить два разных уровня в одном поле.
     districts = geo.get("districts") or []
     district_from_list = next(
         (d.get("name") for d in districts
-         if isinstance(d, dict) and d.get("type") in ("raion", "district") and d.get("name")),
+         if isinstance(d, dict)
+         and d.get("type") in ("raion", "district", "poselenie")
+         and d.get("name")),
         None,
     )
 
@@ -226,7 +234,8 @@ def parse_geo(payload: dict) -> dict:
         "lon": _num(coords.get("lng") if "lng" in coords else coords.get("lon")),
         "okrug": named.get("okrug"),
         # 'raion' — именно так площадка называет тип части адреса для района.
-        "district": district_from_list or named.get("raion") or named.get("district"),
+        "district": (district_from_list or named.get("raion")
+                     or named.get("poselenie") or named.get("district")),
         "street": named.get("street"),
         "house": named.get("house"),
     }

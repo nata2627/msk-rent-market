@@ -233,6 +233,7 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
             log.exception("Непредвиденная ошибка, обход остановлен")
 
         if not dry_run and pets_pass and status == "ok":
+            db.set_pets_pass_complete(conn, run_id, pets_complete)
             marked = db.mark_pets_allowed(conn, sorted(pets_ids), snapshot_date,
                                           mark_rest_false=pets_complete)
             # Порядок важен: сначала метки сегодняшнего прохода, потом
@@ -320,6 +321,9 @@ def _pets_pass(conn, client, run_id, bucket, snapshot_date, claimed_total,
     if not dry_run:
         db.close_bucket(conn, bucket_id, claimed=claimed, collected=len(ids),
                         pages=pages_needed)
+        # Членство в выдаче под фильтром — единственное, что этот проход
+        # добавляет к raw. Без него пересборка core теряет разметку.
+        db.record_pets_hits(conn, run_id, bucket_id, snapshot_date, sorted(ids))
     log.info("    с животными: %d из %d", len(ids), claimed_total)
     return True, ids
 
