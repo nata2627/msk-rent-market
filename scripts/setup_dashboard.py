@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import urllib.request
 import uuid
 from pathlib import Path
@@ -61,40 +62,49 @@ def districts() -> list[str]:
 # ---------------------------------------------------------------------
 # Фильтры вкладки «Подбор»
 # ---------------------------------------------------------------------
+# Шестое поле — колонка витрины для «фильтра по полю» Metabase.
+#
+# Обычная переменная в нативном запросе принимает РОВНО одно значение:
+# выбрать «1 и 2 комнаты» ею нельзя в принципе. Множественный выбор умеют
+# только фильтры по полю — те, что привязаны к настоящей колонке таблицы.
+# Поэтому комнатность, животные и парк переведены на них, а остальные
+# фильтры остались переменными: для «цена до» и «площадь от» несколько
+# значений и не нужны.
 FILTERS = [
-    ("max_price", "Цена до, руб/мес", "number", "number/<=", None),
-    ("min_area", "Площадь от, м²", "number", "number/>=", None),
+    ("max_price", "Цена до, руб/мес", "number", "number/<=", None, None),
+    ("min_area", "Площадь от, м²", "number", "number/>=", None, None),
     ("rooms", "Комнат", "number", "number/=",
-     [[1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"]]),
+     [[1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"]], "rooms_count"),
     ("max_metro", "До метро пешком", "number", "number/<=",
-     [[5, "до 5 минут"], [10, "до 10 минут"], [15, "до 15 минут"], [20, "до 20 минут"]]),
-    # Метры сами по себе ничего не говорят: 800 — это близко или далеко?
-    ("max_park", "Парк рядом", "number", "number/<=",
-     [[500, "пешком, до 500 м"], [1000, "до 1 км"], [2000, "до 2 км"], [5000, "до 5 км"]]),
+     [[5, "до 5 минут"], [10, "до 10 минут"], [15, "до 15 минут"], [20, "до 20 минут"]],
+     None),
+    # Полосы не вложены друг в друга — иначе множественный выбор не имел
+    # бы смысла: «до 1 км» и так включало бы «до 500 м».
+    ("park", "Парк рядом", "text", "string/=",
+     [["до 500 м, пешком"], ["500 м – 1 км"], ["1–2 км"], ["2–5 км"],
+      ["дальше 5 км"], ["не известно"]], "park_band"),
     ("pets", "Животные", "text", "string/=",
      [["allowed", "можно"], ["negotiable", "по договорённости"],
-      ["forbidden", "нельзя"], ["unknown", "не указано"]]),
+      ["forbidden", "нельзя"], ["unknown", "не указано"]], "pets_state"),
     # На этапе отсева вопрос двоичный: платить посреднику или нет.
     ("fee", "Комиссия", "text", "string/=",
-     [["no", "без комиссии"], ["yes", "с комиссией"]]),
+     [["no", "без комиссии"], ["yes", "с комиссией"]], None),
     ("freshness", "Опубликовано", "number", "number/<=",
-     [[0, "сегодня"], [3, "за 3 дня"], [7, "за неделю"], [30, "за месяц"]]),
-    ("max_entry", "Нужно денег сразу, до", "number", "number/<=", None),
-    # Внутри МКАД или за ним. Считается по настоящей геометрии кольца,
-    # а не по списку районов: Выхино-Жулебино лежит по обе стороны,
-    # и никакой список этого не разделит.
-    ("mkad", "Где", "text", "string/=",
-     [["in", "внутри МКАД"], ["out", "за МКАД"]]),
-    ("district", "Район", "text", "string/=", "DISTRICTS"),
+     [[0, "сегодня"], [3, "за 3 дня"], [7, "за неделю"], [30, "за месяц"]], None),
+    ("max_entry", "Нужно денег сразу, до", "number", "number/<=", None, None),
+    # Считается по настоящей геометрии кольца, а не по списку районов:
+    # Выхино-Жулебино лежит по обе стороны, и никакой список этого не
+    # разделит. Заголовок «Где» ничего не объяснял: в соседнем фильтре
+    # «Район» тоже про «где», и какой из двух что задаёт, было непонятно.
+    ("mkad", "Внутри МКАД", "text", "string/=",
+     [["in", "да"], ["out", "нет, за МКАД"]], None),
+    ("district", "Район", "text", "string/=", "DISTRICTS", None),
 ]
 
-# Сколько денег нужно отдать единовременно при заселении: первый месяц
-# плюс залог плюс комиссия агенту. Именно эта сумма определяет, потянешь
-# ли вариант прямо сейчас, — а вовсе не месячная плата. На проверенных
-# данных четыре квартиры с одинаковой ценой 60 000 требовали на входе
-# от 60 000 до 710 000 рублей, то есть разброс в двенадцать раз.
-ENTRY = ("(price + coalesce(deposit_rub, 0) "
-         "+ price * coalesce(client_fee_pct, 0) / 100.0)")
+# Сумма на входе переехала в витрину: она нужна и таблице, и фильтру, и
+# оценке, а считаться должна один раз и одинаково. Заодно там же лежит
+# признак deposit_assumed — залог не был указан и взят по умолчанию.
+ENTRY = "entry_cost"
 
 WHERE = f"""
   -- Дубли из подбора убираются: одна квартира не должна занимать три
@@ -106,10 +116,12 @@ WHERE = f"""
   and price is not null
   [[and price <= {{{{max_price}}}}]]
   [[and total_area >= {{{{min_area}}}}]]
-  [[and rooms_count = {{{{rooms}}}}]]
+  -- Фильтры по полю подставляют условие целиком, вместе с именем
+  -- колонки и оператором: отсюда голое {{{{rooms}}}} без «=».
+  [[and {{{{rooms}}}}]]
   [[and metro_walk_min <= {{{{max_metro}}}}]]
-  [[and large_park_distance_m <= {{{{max_park}}}}]]
-  [[and pets_state = {{{{pets}}}}]]
+  [[and {{{{park}}}}]]
+  [[and {{{{pets}}}}]]
   [[and district = {{{{district}}}}]]
   [[and {ENTRY} <= {{{{max_entry}}}}]]
   [[and ((({{{{fee}}}}) = 'no'  and coalesce(client_fee_pct, 0) = 0)
@@ -120,15 +132,60 @@ WHERE = f"""
 """
 
 
-def tags():
-    return {slug: {"id": str(uuid.uuid4()), "name": slug,
-                   "display-name": label, "type": kind, "required": False}
-            for slug, label, kind, _, _ in FILTERS}
+def segment_fields() -> dict[str, int]:
+    """Идентификаторы колонок marts.offer_scored в Metabase.
+
+    Ищутся по имени, а не зашиты числами: идентификаторы свои у каждой
+    установки Metabase, и зашитые превратили бы скрипт в работающий
+    ровно на одной машине. Свежедобавленные колонки Metabase видит только
+    после синхронизации схемы, поэтому она запрашивается заранее.
+    """
+    api(f"/api/database/{DB_ID}/sync_schema", "POST")
+    for _ in range(30):
+        for t in api(f"/api/database/{DB_ID}/metadata").get("tables", []):
+            if t["schema"] == "marts" and t["name"] == "offer_scored":
+                found = {f["name"]: f["id"] for f in t["fields"]}
+                if "park_band" in found:
+                    return found
+        time.sleep(2)
+    raise RuntimeError("Metabase не увидел marts.offer_scored с колонкой park_band")
+
+
+_FIELDS: dict[str, int] | None = None
+
+
+def fields() -> dict[str, int]:
+    """Идентификаторы колонок, запрошенные один раз за запуск."""
+    global _FIELDS
+    if _FIELDS is None:
+        _FIELDS = segment_fields()
+    return _FIELDS
+
+
+def tags(fields: dict[str, int]):
+    out = {}
+    for slug, label, kind, ptype, _, column in FILTERS:
+        tag = {"id": str(uuid.uuid4()), "name": slug,
+               "display-name": label, "required": False}
+        if column:
+            # Фильтр по полю: только он умеет несколько значений сразу.
+            tag |= {"type": "dimension",
+                    "dimension": ["field", fields[column], None],
+                    "widget-type": ptype}
+        else:
+            tag["type"] = kind
+        out[slug] = tag
+    return out
 
 
 def search_card(name, select, display="table", viz=None, order="order by price",
-                wrap=None):
-    sql = f"select {select}\nfrom marts.offer_segment\nwhere source = 'cian'\n{WHERE}\n{order}"
+                wrap=None, cte=None):
+    sql = f"select {select}\nfrom marts.offer_scored\nwhere source = 'cian'\n{WHERE}\n{order}"
+    if cte:
+        # Отобранное становится общим выражением, а поверх него считается
+        # что угодно — например, границы шкалы гистограммы, которые без
+        # второго прохода по той же выборке не получить.
+        sql = f"with t as (\n{sql}\n)\n{cte}"
     if wrap:
         # Двухступенчатая сортировка: сначала отбор, потом показ.
         #
@@ -138,7 +195,7 @@ def search_card(name, select, display="table", viz=None, order="order by price",
         sql = f"select * from (\n{sql}\n) t\n{wrap}"
     return {"name": name, "display": display, "filtered": True,
             "dataset_query": {"type": "native", "database": DB_ID,
-                              "native": {"query": sql, "template-tags": tags()}},
+                              "native": {"query": sql, "template-tags": tags(fields())}},
             "visualization_settings": viz or {}}
 
 
@@ -168,55 +225,104 @@ SEARCH = [
     # было, домотав до правого края. Metabase умеет показывать столбец
     # как ссылку с произвольной подписью — в данных остаётся адрес,
     # в таблице видно слово «открыть».
+    # Оценка первым столбцом и сортировка по ней.
+    #
+    # Смысл таблицы поменялся: раньше это был список «всё, что подошло по
+    # фильтрам», и читать его приходилось подряд, открывая ссылки одну за
+    # другой. Теперь сверху лежит то, что больше похоже на искомое, и
+    # хватает первых двух десятков строк. Состав оценки — в комментарии
+    # к marts.offer_scored, там же веса.
     search_card("Найденные квартиры", f"""
+           score as "Оценка",
+           split_part(url, '?', 1) as "Ссылка",
            -- Пустой район подписывается явно. В сортировке по алфавиту
            -- null уходит в самый конец, и десяток безымянных строк внизу
            -- выглядит как обрыв таблицы, а не как «площадка не указала».
            coalesce(district, '— район не указан') as "Район",
-           split_part(url, '?', 1) as "Ссылка",
            coalesce(rooms_count::text, 'студия') as "Комн",
            total_area::int as "м²",
            price::int as "Цена", (price / total_area)::int as "За м²",
+           -- Цена относительно похожих квартир — то же, что стоит за
+           -- главным весом оценки, но в понятном виде: «на 12% дешевле».
+           case when med_price is null then null
+                else round(100 * (price / med_price - 1))::int end as "К похожим, %",
            {ENTRY}::int as "Нужно сразу",
+           -- Залог виден отдельно, потому что у трети объявлений он
+           -- не указан вовсе и в сумме стоит допущение, а не факт.
+           case when deposit_assumed then '≈ месяц (не указан)'
+                else to_char(deposit_rub, 'FM999 999 999') end as "Залог",
            case when coalesce(client_fee_pct, 0) > 0
                 then client_fee_pct::int || '%' else 'нет' end as "Комиссия",
-           case when large_park_distance_m <= 500 then 'пешком'
-                when large_park_distance_m <= 1000 then 'до 1 км'
-                when large_park_distance_m <= 2000 then 'до 2 км'
-                else 'далеко' end as "Парк",
+           park_band as "Парк",
            metro_walk_min as "Метро, мин",
-           floor || '/' || floors_total as "Этаж", repair_type as "Ремонт",
+           floor || '/' || floors_total as "Этаж",
            case pets_state when 'allowed' then 'можно'
                            when 'negotiable' then 'по договорённости'
                            when 'forbidden' then 'нельзя'
                            else 'не указано' end as "Животные",
            -- Долго висящее объявление — повод торговаться.
            (current_date - published_at::date) as "Висит, дней\"""",
-                wrap='order by "Район", "Цена"',
+                wrap='order by "Оценка" desc, "Цена"',
                 viz={"column_settings": {
                         '["name","Ссылка"]': {
                             "view_as": "link",
                             "link_url": "{{Ссылка}}",
                             "link_text": "открыть",
                         }},
-                     "table.cell_column": "Цена"},
-                order="order by price limit 300"),
+                     "table.cell_column": "Оценка"},
+                order="order by score desc, price limit 300"),
 
+    # Шкала подстраивается под выборку, а не фиксирована.
+    #
+    # Раньше ширина корзины была жёстко 5000 рублей на всём диапазоне до
+    # самого дорогого объявления. Без фильтров это давало больше семидесяти
+    # столбцов, растянутых хвостом до 350 тысяч, с подписью на каждом —
+    # читать такое нельзя: сорок столбцов правее медианы содержат по
+    # одному-два объявления, а весь рынок сжат в левую пятую часть.
+    #
+    # Теперь границы берутся по 5-му и 95-му перцентилям самой выборки,
+    # хвосты с обеих сторон сводятся в крайние столбцы («меньше N»,
+    # «больше N») и не растягивают шкалу, а ширина корзины считается так,
+    # чтобы столбцов было около двух десятков при любых фильтрах.
+    #
     # floor, а не ::int: приведение к целому в Postgres ОКРУГЛЯЕТ, и
     # корзины получались центрированными вместо выровненных по границе —
     # 32 000 попадало в «30», а 33 000 уже в «35». Для гистограммы это
     # означает, что подписи не соответствуют содержимому столбца.
-    search_card("Как распределены цены по этому запросу", """
-           (floor(price / 5000) * 5)::int || '–' ||
-           (floor(price / 5000) * 5 + 5)::int as "Цена, тыс. руб",
-           count(*) as "Объявлений\"""",
+    search_card("Как распределены цены по этому запросу", "price",
                 "bar",
                 {"graph.dimensions": ["Цена, тыс. руб"], "graph.metrics": ["Объявлений"],
-                 "graph.show_values": True,
-                 "graph.label_value_frequency": "all",
+                 # Подписи на столбцах сняты: при двух десятках корзин они
+                 # наезжают друг на друга, а высоту и так видно по оси.
+                 "graph.show_values": False,
                  "graph.x_axis.title_text": "Цена, тысяч рублей в месяц",
                  "graph.y_axis.title_text": "Сколько объявлений"},
-                order="group by floor(price / 5000) order by floor(price / 5000)"),
+                order="",
+                cte="""
+, lim as (
+    select percentile_cont(0.05) within group (order by price) as lo,
+           percentile_cont(0.95) within group (order by price) as hi
+    from t),
+  w as (
+    -- Не уже тысячи рублей: корзина в 200 рублей дробит один и тот же
+    -- ценник на несколько столбцов и рисует гребёнку на ровном месте.
+    select lo, hi, greatest(1000, round((hi - lo) / 20.0 / 1000) * 1000) as width
+    from lim),
+  binned as (
+    select case when t.price <  w.lo then -1
+                when t.price >= w.hi then 9999
+                else floor((t.price - w.lo) / w.width)::int end as bin,
+           w.lo, w.hi, w.width
+    from t, w)
+select case when bin = -1   then 'меньше ' || round(lo / 1000)::int
+            when bin = 9999 then 'больше ' || round(hi / 1000)::int
+            else round((lo + bin * width) / 1000)::int || '–' ||
+                 round((lo + (bin + 1) * width) / 1000)::int
+       end as "Цена, тыс. руб",
+       count(*) as "Объявлений"
+from binned
+group by bin, lo, hi, width
+order by bin"""),
 
     # Число в название не выносится.
     #
@@ -326,8 +432,8 @@ YEARS = [[y, str(y)] for y in range(2015, 2027)]
 # Фильтры вкладки «История» — свои, отдельные от подбора: там квартиры,
 # здесь годы, и общего у них ничего нет.
 HISTORY_FILTERS = [
-    ("year_from", "Год с", "number", "number/>=", YEARS),
-    ("year_to", "Год по", "number", "number/<=", YEARS),
+    ("year_from", "Год с", "number", "number/>=", YEARS, None),
+    ("year_to", "Год по", "number", "number/<=", YEARS, None),
 ]
 
 PERIOD_WHERE = """
@@ -339,7 +445,7 @@ PERIOD_WHERE = """
 def history_tags():
     return {slug: {"id": str(uuid.uuid4()), "name": slug,
                    "display-name": label, "type": kind, "required": False}
-            for slug, label, kind, _, _ in HISTORY_FILTERS}
+            for slug, label, kind, _, _, _ in HISTORY_FILTERS}
 
 
 def history_card(name, sql, display="table", viz=None):
@@ -562,9 +668,14 @@ def _mappings(spec, card_id, slug_to_id):
     сравнение «мой сегмент против рынка» поплывёт вместе с фильтром.
     """
     which = {True: FILTERS, "history": HISTORY_FILTERS}.get(spec["filtered"], [])
+    # У фильтра по полю цель другого рода: «dimension», а не «variable».
+    # С неверным типом Metabase молча создаёт связь, которая ни на что не
+    # влияет — карточка отвечает, но фильтр её не трогает, и понять это
+    # по виду дашборда невозможно.
     return [{"parameter_id": slug_to_id[slug], "card_id": card_id,
-             "target": ["variable", ["template-tag", slug]]}
-            for slug, _, _, _, _ in which]
+             "target": [("dimension" if column else "variable"),
+                        ["template-tag", slug]]}
+            for slug, _, _, _, _, column in which]
 
 
 def size_for(spec):
@@ -590,7 +701,7 @@ def main() -> None:
 
     params, slug_to_id = [], {}
     dlist = districts()
-    for slug, label, _, ptype, values in FILTERS + HISTORY_FILTERS:
+    for slug, label, _, ptype, values, _ in FILTERS + HISTORY_FILTERS:
         pid = uuid.uuid4().hex[:8]
         slug_to_id[slug] = pid
         p = {"id": pid, "name": label, "slug": slug,

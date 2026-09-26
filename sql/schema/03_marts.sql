@@ -83,9 +83,156 @@ select l.*
      -- 10 га — у 17%, и критерий начинает различать.
      , (l.large_park_distance_m is not null and l.large_park_distance_m <= 1000)
          as is_near_park
+     -- Полосы НЕ вложены друг в друга: «до 1 км» не включает «до 500 м».
+     -- Это нужно, чтобы фильтр допускал выбор нескольких значений сразу:
+     -- при вложенных порогах выбор «до 500 м» и «до 1 км» означал бы
+     -- ровно то же, что один «до 1 км», и множественный выбор был бы
+     -- бессмысленной тратой кликов.
+     , case when l.large_park_distance_m is null      then 'не известно'
+            when l.large_park_distance_m <= 500       then 'до 500 м, пешком'
+            when l.large_park_distance_m <= 1000      then '500 м – 1 км'
+            when l.large_park_distance_m <= 2000      then '1–2 км'
+            when l.large_park_distance_m <= 5000      then '2–5 км'
+            else 'дальше 5 км' end as park_band
+     -- Сколько денег нужно отдать единовременно при заселении.
+     --
+     -- Именно эта сумма определяет, потянешь ли вариант, а вовсе не
+     -- месячная плата: четыре квартиры с одинаковой ценой 60 000 требуют
+     -- на входе от 60 000 до 710 000 рублей.
+     --
+     -- Состав: месяц аренды вперёд + залог + комиссия.
+     --
+     -- Неуказанный залог считается равным месяцу, а не нулю. Раньше было
+     -- ноль, и 1215 объявлений без заполненного поля выглядели на входе
+     -- вдвое дешевле, чем стоят на самом деле. Залог в один месяц —
+     -- московская норма, нулевой залог — редкость; из двух допущений
+     -- второе ошибается чаще и всегда в опасную сторону, в меньшую.
+     --
+     -- Предоплата из текста (prepay_months) в сумму СОЗНАТЕЛЬНО не
+     -- входит, хотя и разобрана. «Первый и последний месяц» — это
+     -- обычно и есть залог, названный иначе: у 141 объявления из 222,
+     -- где текст говорит про последний месяц, залог в анкете равен
+     -- ровно месячной плате. Складывать оба означало бы посчитать одни
+     -- и те же деньги дважды — ошибка того же рода, что и прежняя, но
+     -- в другую сторону. Поле остаётся в таблице отдельной колонкой:
+     -- пусть его видно, но не в итоговой сумме.
+     -- Залог больше шести месячных плат в поле не помещается по смыслу:
+     -- это опечатка автора. Живой пример — 65 000 000 залога при цене
+     -- 65 000, то есть в поле аренды заехала цена продажи. Такие значения
+     -- заменяются на месяц, иначе одно объявление уносит верх списка
+     -- «дороже всего на входе» и ломает любую шкалу.
+     , ( l.price
+       + case when l.deposit_rub is not null and l.deposit_rub <= l.price * 6
+                   then l.deposit_rub
+              when l.deposit_months is not null
+                   then l.price * l.deposit_months
+              else l.price end
+       + case when coalesce(l.client_fee_pct, 0) > 0
+              then l.price * l.client_fee_pct / 100.0
+              else coalesce(l.commission_rub, 0) end
+       )::numeric(12,0) as entry_cost
+     -- Залог не указан (или указан неправдоподобно) и взят по умолчанию.
+     -- Тогда entry_cost — оценка, а не факт, и выдавать её за точную
+     -- сумму нельзя.
+     , (   (l.deposit_rub is null and l.deposit_months is null)
+        or (l.deposit_rub is not null and l.deposit_rub > l.price * 6)
+       ) as deposit_assumed
 from marts.offer_latest l
 left join core.offer_duplicate d
        on d.source = l.source and d.offer_id = l.offer_id;
+
+-- ---------------------------------------------------------------------
+-- Сопоставимые квартиры: медиана по району и комнатности.
+--
+-- База для оценки «дешевле или дороже похожих». Считается по ВСЕМУ
+-- рынку, а не по отфильтрованной выборке: иначе «ниже среднего» означало
+-- бы «ниже среднего среди того, что я уже отобрала», и сужение фильтров
+-- само по себе меняло бы оценку каждой квартиры.
+--
+-- Порог в пять объявлений на ячейку — чтобы медиана вообще что-то
+-- значила. Где вариантов меньше, сравнивать не с чем, и оценка по цене
+-- честно остаётся неизвестной.
+-- ---------------------------------------------------------------------
+drop view if exists marts.comparable_median cascade;
+create view marts.comparable_median as
+select district
+     , rooms_count
+     , count(*)                                                          as comparable_offers
+     , percentile_cont(0.5) within group (order by price)                as med_price
+     , percentile_cont(0.5) within group (order by total_area)           as med_area
+from marts.offer_segment
+where source = 'cian'
+  and price is not null and total_area > 0
+  and district is not null and rooms_count is not null
+  and not coalesce(is_duplicate, false)
+  and not coalesce(is_price_outlier, false)
+  and not coalesce(is_daily, false)
+group by 1, 2
+having count(*) >= 5;
+
+-- ---------------------------------------------------------------------
+-- Оценка варианта: одно число вместо чтения тридцати объявлений подряд.
+--
+-- Это НЕ модель и не предсказание — это взвешенная сумма предпочтений,
+-- записанная явно, чтобы её можно было оспорить и поменять. Никакой
+-- оценки «хорошая квартира» здесь нет и быть не может: есть оценка
+-- «похоже на то, что я ищу».
+--
+-- Каждая составляющая приведена к шкале 0-100, итог — взвешенная сумма.
+-- Веса стоят рядом с формулой, а не в коде дашборда: считаться должно
+-- один раз и одинаково везде.
+--
+-- Цена и площадь меряются ОТНОСИТЕЛЬНО похожих квартир, а не в рублях и
+-- метрах. Сорок метров в Капотне и в Хамовниках — это разные сорок
+-- метров, и абсолютная шкала сравнивала бы районы, а не квартиры.
+-- Шаг шкалы: отклонение на 20% от медианы даёт крайние 0 или 100.
+--
+-- Чего в оценке нет и почему: РЕМОНТА. Поле repair_type в выдаче поиска
+-- пусто у всех 28 020 объявлений до единого — площадка его отдаёт только
+-- на странице самого объявления. Добавлять вес за то, чего в данных нет,
+-- значило бы выдумывать; когда появится обогащение по карточкам,
+-- составляющая встанет сюда.
+-- ---------------------------------------------------------------------
+drop view if exists marts.offer_scored cascade;
+create view marts.offer_scored as
+with scored as (
+select s.*
+     , c.comparable_offers
+     , c.med_price
+     , c.med_area
+     -- Дешевле похожих — выше балл. Неизвестно (мало сопоставимых) — 50,
+     -- то есть «не в плюс и не в минус», а не ноль: отсутствие сравнения
+     -- не повод штрафовать квартиру.
+     , coalesce(greatest(0, least(100,
+         50 + (1 - s.price / nullif(c.med_price, 0)) * 250)), 50) as score_price
+     , coalesce(greatest(0, least(100,
+         50 + (s.total_area / nullif(c.med_area, 0) - 1) * 250)), 50) as score_area
+     , case when s.metro_walk_min is null then 40
+            when s.metro_walk_min <= 5  then 100
+            when s.metro_walk_min <= 10 then 80
+            when s.metro_walk_min <= 15 then 55
+            when s.metro_walk_min <= 20 then 30
+            else 10 end as score_metro
+     , case when s.large_park_distance_m is null  then 25
+            when s.large_park_distance_m <= 500   then 100
+            when s.large_park_distance_m <= 1000  then 75
+            when s.large_park_distance_m <= 2000  then 50
+            when s.large_park_distance_m <= 5000  then 25
+            else 0 end as score_park
+     , case when s.has_furniture is true then 100
+            when s.has_furniture is false then 30
+            else 50 end as score_furniture
+from marts.offer_segment s
+left join marts.comparable_median c
+       on c.district = s.district and c.rooms_count = s.rooms_count
+)
+select scored.*
+     , round( 0.40 * score_price
+            + 0.20 * score_area
+            + 0.15 * score_metro
+            + 0.15 * score_park
+            + 0.10 * score_furniture )::int as score
+from scored;
 
 -- ---------------------------------------------------------------------
 -- Медианы по району и комнатности в динамике.
