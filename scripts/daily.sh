@@ -39,6 +39,19 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 say "Начало, дата снимка $(date +%F)"
 
+# Сам демон Docker. Без него `docker compose up -d` не поднимет ничего:
+# именно так потерялся день 26.09.2026 — launchd отработал в срок, но
+# Docker Desktop не был запущен, и прогон час ждал базу впустую.
+# Запускается через open: Docker Desktop — приложение, а не служба.
+if ! docker info >/dev/null 2>&1; then
+  say "Демон Docker не отвечает, запускаю Docker Desktop"
+  open -a Docker 2>/dev/null || say "не удалось запустить Docker Desktop"
+  for i in $(seq 1 60); do
+    docker info >/dev/null 2>&1 && { say "Демон Docker готов"; break; }
+    sleep 5
+  done
+fi
+
 # Docker с автозапуском поднимается не мгновенно. Ждём базу, а не падаем.
 for i in $(seq 1 30); do
   if docker compose exec -T postgres pg_isready -q 2>/dev/null; then break; fi
