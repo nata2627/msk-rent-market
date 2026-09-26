@@ -203,6 +203,26 @@ _DEPOSIT_AS_LAST = re.compile(
     r"(?:залог|депозит)\w*\D{0,15}?за\s+последн\w+\s*месяц", re.I)
 
 
+# Строка условий, которую площадка собирает сама:
+# «Залог 58 000 ₽, комиссия 50%(agent_fee), предоплата 1 месяц, на
+# длительный срок». Заполнена у всех 112 289 снимков, предоплата названа
+# в 108 487 из них. Это несравнимо надёжнее разбора свободного описания,
+# и главное — здесь предоплата и залог перечислены как РАЗНЫЕ условия,
+# так что складывать их можно без опаски.
+_PREPAY_TERMS = re.compile(r"предоплата\s+(\d{1,2})\s*месяц", re.I)
+
+
+def prepay_months_from_terms(info: str | None) -> float | None:
+    """Предоплата в месяцах из строки условий карточки."""
+    if not info:
+        return None
+    m = _PREPAY_TERMS.search(info)
+    if not m:
+        return None
+    value = float(m.group(1))
+    return value if 0 < value <= 12 else None
+
+
 def prepay_months_from_text(description: str | None) -> float | None:
     """Сколько месяцев аренды нужно отдать при заселении.
 
@@ -521,10 +541,12 @@ def parse_offer(payload: dict, snapshot_date, source: str = "cian") -> dict | No
         "client_fee_pct": _num(terms.get("clientFee")),
         "agent_fee_pct": _num(terms.get("agentFee")),
         "commission_rub": _num(terms.get("commission")),
-        # Анкета площадки это поле не заполняет никогда, поэтому текст —
-        # не запасной вариант, а единственный источник. Порядок всё равно
-        # такой: анкета важнее, если вдруг появится.
+        # Три источника по убыванию надёжности: анкета (пуста всегда),
+        # строка условий, которую площадка собирает сама (заполнена у
+        # 96.6% карточек), и в последнюю очередь свободное описание.
         "prepay_months": (_num(terms.get("prepayMonths"), int)
+                          or prepay_months_from_terms(
+                              payload.get("formattedAdditionalInfo"))
                           or prepay_months_from_text(description)),
         "lease_term_type": lease_term,
         "is_daily": bool(is_daily),

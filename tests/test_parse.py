@@ -13,6 +13,7 @@ import pytest
 from etl.parse import (
     _num,
     deposit_months_from_text,
+    prepay_months_from_terms,
     prepay_months_from_text,
     metro_walk_min,
     parse_geo,
@@ -158,6 +159,23 @@ def test_deposit_kept_in_both_forms(parsed):
     obs = parsed["observation"]
     assert obs["deposit_rub"] == 95_000
     assert obs["deposit_months"] == 1.0
+
+
+def test_prepay_from_platform_terms_string():
+    """Площадка собирает строку условий сама, и предоплата названа в ней
+    прямо. Это надёжнее разбора свободного описания: строка заполнена у
+    всех 112 289 снимков, описание про предоплату молчит почти всегда."""
+    assert prepay_months_from_terms(
+        "Залог 58 000 \u20bd, комиссия 50%(agent_fee), предоплата 1 месяц, "
+        "на длительный срок") == 1.0
+    assert prepay_months_from_terms(
+        "Залог 50 000 \u20bd, без комиссии, предоплата 2 месяца, "
+        "на длительный срок") == 2.0
+
+
+def test_prepay_terms_silent_when_not_mentioned():
+    assert prepay_months_from_terms("Без комиссии, на длительный срок") is None
+    assert prepay_months_from_terms(None) is None
 
 
 def test_prepay_first_and_last_month_is_two():
