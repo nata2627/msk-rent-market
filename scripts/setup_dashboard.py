@@ -46,6 +46,31 @@ def api(path, method="GET", payload=None):
     return json.loads(body) if body else None
 
 
+GEOJSON = Path(__file__).resolve().parents[1] / "sql" / "geo" / "moscow_districts.geojson"
+
+
+def check_geojson(names: list[str]) -> None:
+    """Сойдутся ли названия районов с контурами на карте.
+
+    Молчаливый разъезд написаний однажды уже стоил карте трети Москвы:
+    в данных «Хорошевский», в контурах «Хорошёвский» — и район просто не
+    красился, ничем себя не выдавая. Двенадцать таких пар прятали
+    3359 объявлений, включая Черёмушки, Тропарёво-Никулино и Филёвский
+    парк. Поэтому сверка делается при каждой пересборке дашборда и
+    печатается, а не подразумевается.
+    """
+    if not GEOJSON.exists():
+        print("  ! файла с контурами нет, сверку районов пропускаю")
+        return
+    geo = {f["properties"]["name"]
+           for f in json.loads(GEOJSON.read_text(encoding="utf-8"))["features"]}
+    missing = sorted(set(names) - geo)
+    if missing:
+        print(f"  ! на карте не покажутся {len(missing)} районов: "
+              + ", ".join(missing[:6]) + ("…" if len(missing) > 6 else ""))
+    print(f"  районов сошлось с контурами: {len(set(names) & geo)} из {len(geo)}")
+
+
 def districts() -> list[str]:
     """Список районов — из самих данных, а не зашитый в код.
 
@@ -265,23 +290,20 @@ def market_card(name, sql, display="table", viz=None):
 SEARCH = [
     search_card("Найдено", 'count(*) as "Найдено"', "scalar", order=""),
 
-    # Медиана отдаётся в тысячах, ОКРУГЛЁННАЯ ДО ПЯТИ ТЫСЯЧ.
+    # Медиана отдаётся в тысячах и БЕЗ ОКРУГЛЕНИЯ.
     #
-    # Легенду карты Metabase рисует сам и подписывает каждую полосу
-    # фактическими крайними значениями в ней, а не границами. На редких
-    # данных это выглядит поломкой: «46 - 56 | 58 - 65 | 66 - 72» —
-    # и непонятно, куда делись 57 и 73. Никуда: района с такой медианой
-    # просто нет. Настройки формата легенда игнорирует — проверено и на
-    # «не сокращать числа», и на суффикс.
+    # Округление до пяти тысяч тут было, и от него пришлось отказаться.
+    # Ставилось оно ради легенды: Metabase подписывает каждую полосу
+    # фактическими крайними значениями в ней, а не границами, и на редких
+    # данных выходило «46 - 56 | 58 - 65» — непонятно, куда делись 57.
+    # Округление смыкало полосы, но ломало подсказку: над Крылатским
+    # показывалось 85 при настоящей медиане 86, над Гольяново 60 при 62.
     #
-    # Округление до пяти тысяч делает совпадений достаточно, чтобы полосы
-    # смыкались: на срезе из 143 районов разрывов не остаётся вовсе.
-    # Цена — потеря точности не больше 2,5 тысяч, для карты несущественно.
-    # До десяти тысяч округлять нельзя: значений становится шесть, и одна
-    # из полос вырождается в «60 - 60».
+    # Подсказка важнее ровной легенды. Разрывы в легенде — правда: района
+    # с медианой 57 тысяч в выборке действительно нет.
     search_card("Карта: где искать — медиана, тыс. руб./мес", """
            district as "Район", count(*) as "Вариантов",
-           (round(percentile_cont(0.5) within group (order by price) / 5000.0) * 5)::int
+           (percentile_cont(0.5) within group (order by price) / 1000)::int
              as "Медиана\"""",
                 "map",
                 {"map.type": "region", "map.region": "moscow_districts",
@@ -483,7 +505,7 @@ LATEST = ("(select max(snapshot_date) from raw.collection_run "
 MARKET = [
     market_card("Карта рынка: медиана аренды по районам, тыс. руб./мес", f"""
         select o.district as "Район", count(*) as "Объявлений",
-               (round(percentile_cont(0.5) within group (order by ob.price) / 5000.0) * 5)::int
+               (percentile_cont(0.5) within group (order by ob.price) / 1000)::int
                  as "Медиана"
         from core.offer_observation ob join core.offer o using (source, offer_id)
         where ob.source='cian' and ob.snapshot_date = {LATEST}
@@ -820,6 +842,7 @@ def main() -> None:
 
     params, slug_to_id = [], {}
     dlist = districts()
+    check_geojson(dlist)
     for slug, label, _, ptype, values, _ in FILTERS + HISTORY_FILTERS:
         pid = uuid.uuid4().hex[:8]
         slug_to_id[slug] = pid
