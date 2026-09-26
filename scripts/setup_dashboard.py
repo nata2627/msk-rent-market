@@ -265,11 +265,30 @@ def market_card(name, sql, display="table", viz=None):
 SEARCH = [
     search_card("Найдено", 'count(*) as "Найдено"', "scalar", order=""),
 
-    search_card("Карта: где искать", """
+    # Медиана отдаётся в тысячах, ОКРУГЛЁННАЯ ДО ПЯТИ ТЫСЯЧ.
+    #
+    # Легенду карты Metabase рисует сам и подписывает каждую полосу
+    # фактическими крайними значениями в ней, а не границами. На редких
+    # данных это выглядит поломкой: «46 - 56 | 58 - 65 | 66 - 72» —
+    # и непонятно, куда делись 57 и 73. Никуда: района с такой медианой
+    # просто нет. Настройки формата легенда игнорирует — проверено и на
+    # «не сокращать числа», и на суффикс.
+    #
+    # Округление до пяти тысяч делает совпадений достаточно, чтобы полосы
+    # смыкались: на срезе из 143 районов разрывов не остаётся вовсе.
+    # Цена — потеря точности не больше 2,5 тысяч, для карты несущественно.
+    # До десяти тысяч округлять нельзя: значений становится шесть, и одна
+    # из полос вырождается в «60 - 60».
+    search_card("Карта: где искать — медиана, тыс. руб./мес", """
            district as "Район", count(*) as "Вариантов",
-           percentile_cont(0.5) within group (order by price)::int as "Медиана\"""",
+           (round(percentile_cont(0.5) within group (order by price) / 5000.0) * 5)::int
+             as "Медиана\"""",
                 "map",
                 {"map.type": "region", "map.region": "moscow_districts",
+                 # Единицы живут ТОЛЬКО в заголовке карточки. В самой
+                 # карте их нет намеренно: легенда чужая и суффикс к
+                 # значениям игнорирует, а дублировать «тыс.» в подсказке
+                 # над каждым районом — лишний шум.
                  "map.dimension": "Район", "map.metric": "Медиана"},
                 order="and district is not null group by 1 having count(*) >= 1"),
 
@@ -394,7 +413,16 @@ SEARCH = [
     -- Граница первой корзины опускается до кратной ширине. Иначе корзины
     -- начинаются от 5-го перцентиля — скажем, от 47 300, — и круглые
     -- ценники снова раскладываются по столбцам через один.
-    select floor(lo / width) * width as lo, hi, width from w),
+    --
+    -- Верхняя граница поднимается до кратной ТОЙ ЖЕ ширине. Без этого
+    -- хвост отсекался по перцентилю, а корзины шли по сетке, и подписи
+    -- налезали друг на друга: рядом стояли «320–340» и «больше 330»,
+    -- то есть 325 тысяч попадали в обе.
+    select floor(lo / width) * width as lo,
+           floor(lo / width) * width
+             + ceil((hi - floor(lo / width) * width) / width) * width as hi,
+           width
+    from w),
   binned as (
     select case when t.price <  a.lo then -1
                 when t.price >= a.hi then 9999
@@ -453,9 +481,10 @@ LATEST = ("(select max(snapshot_date) from raw.collection_run "
           "where source='cian' and status='ok')")
 
 MARKET = [
-    market_card("Карта рынка: медиана аренды по районам", f"""
+    market_card("Карта рынка: медиана аренды по районам, тыс. руб./мес", f"""
         select o.district as "Район", count(*) as "Объявлений",
-               percentile_cont(0.5) within group (order by ob.price)::int as "Медиана"
+               (round(percentile_cont(0.5) within group (order by ob.price) / 5000.0) * 5)::int
+                 as "Медиана"
         from core.offer_observation ob join core.offer o using (source, offer_id)
         where ob.source='cian' and ob.snapshot_date = {LATEST}
           and ob.price is not null and o.district is not null and not ob.is_daily
