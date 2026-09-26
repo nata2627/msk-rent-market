@@ -118,7 +118,7 @@ OFFER_COLS = [
     "source", "offer_id", "url", "published_at", "rooms_count", "flat_type",
     "is_apartments", "total_area", "living_area", "kitchen_area", "floor",
     "floors_total", "building_material", "build_year", "has_lift",
-    "metro_walk_min", "address", "lat", "lon", "okrug", "district",
+    "metro_walk_min", "metro_real_walk_min", "address", "lat", "lon", "okrug", "district",
     "street", "house",
 ]
 
@@ -220,7 +220,7 @@ def upsert_observations(conn, parsed: list[dict], run_id: int) -> None:
 def upsert_metro(conn, parsed: list[dict]) -> None:
     rows = [
         (p["offer"]["source"], p["offer"]["offer_id"], s["station_name"],
-         s["time_min"], s["transport_type"], s["line_name"])
+         s["time_min"], s["transport_type"], s["line_name"], s.get("line_type"))
         for p in parsed for s in p["metro"]
     ]
     if not rows:
@@ -228,12 +228,13 @@ def upsert_metro(conn, parsed: list[dict]) -> None:
     with conn.cursor() as cur:
         cur.executemany(
             """insert into core.offer_metro
-                   (source, offer_id, station_name, time_min, transport_type, line_name)
-               values (%s, %s, %s, %s, %s, %s)
+                   (source, offer_id, station_name, time_min, transport_type, line_name, line_type)
+               values (%s, %s, %s, %s, %s, %s, %s)
                on conflict (source, offer_id, station_name) do update set
                    time_min = excluded.time_min,
                    transport_type = excluded.transport_type,
-                   line_name = excluded.line_name""",
+                   line_name = excluded.line_name,
+                   line_type = excluded.line_type""",
             rows,
         )
     conn.commit()

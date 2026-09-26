@@ -59,27 +59,27 @@ RU = {
     "building_material": "тип дома (материал)", "build_year": "год постройки",
     "has_lift": "лифт", "address": "адрес", "lat": "широта", "lon": "долгота",
     "okrug": "округ", "district": "район", "street": "улица", "house": "дом",
-    "metro_walk_min": "до метро пешком, мин", "park_distance_m": "до любого парка, м",
+    "metro_walk_min": "до любой станции пешком, мин",
+    "metro_real_walk_min": "до МЕТРО пешком, мин (без МЦД и МЦК)", "park_distance_m": "до любого парка, м",
     "large_park_distance_m": "до парка от 10 га, м", "inside_mkad": "внутри МКАД",
 }
 
 # Веса держатся в marts.offer_scored; здесь только подпись для отчёта.
 SCORE = {
-    "price": "вес 25 (относительно похожих)",
-    "total_area": "вес 20 (относительно похожих)",
-    "build_year": "вес 15 (вместо ремонта)",
+    "price": "вес 14 (сигнал качества, относительно похожих)",
+    "total_area": "вес 12 (относительно похожих)",
+    "build_year": "вес 18 вместе с материалом",
     "metro_walk_min": "вес 15",
-    "large_park_distance_m": "вес 15 (через park_band)",
-    "has_furniture": "вес 10",
+    "large_park_distance_m": "вес 10 (через park_band)",
 }
 
 FILTER = {
     "price": "фильтр «цена до»", "total_area": "фильтр «площадь от»",
     "rooms_count": "фильтр, мультивыбор", "metro_walk_min": "фильтр «до метро»",
     "large_park_distance_m": "фильтр «парк», мультивыбор",
-    "pets_state": "фильтр, мультивыбор", "client_fee_pct": "фильтр «комиссия»",
+    "client_fee_pct": "фильтр «комиссия»",
     "published_at": "фильтр «опубликовано»", "inside_mkad": "фильтр «внутри МКАД»",
-    "district": "фильтр «район»", "is_apartments": "ИСКЛЮЧАЮТСЯ из подбора",
+    "district": "вес 15 (уровень района); фильтр «район»", "is_apartments": "ИСКЛЮЧАЮТСЯ из подбора",
     "is_daily": "исключаются", "lease_term_type": "исключается не длительная",
     "deposit_rub": "в сумме «нужно сразу»", "deposit_months": "в сумме «нужно сразу»",
 }

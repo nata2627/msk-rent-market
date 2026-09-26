@@ -30,7 +30,8 @@ select distinct on (ob.source, ob.offer_id)
        o.is_apartments, o.total_area, o.living_area, o.kitchen_area,
        o.floor, o.floors_total, o.building_material, o.build_year, o.has_lift,
        o.address, o.lat, o.lon, o.okrug, o.district, o.street, o.house,
-       o.metro_walk_min, o.park_distance_m, o.large_park_distance_m,
+       o.metro_walk_min, o.metro_real_walk_min,
+       o.park_distance_m, o.large_park_distance_m,
        o.inside_mkad
 from core.offer o
 join core.offer_observation ob
@@ -157,6 +158,46 @@ left join core.offer_duplicate d
        on d.source = l.source and d.offer_id = l.offer_id;
 
 -- ---------------------------------------------------------------------
+-- Уровень района: насколько он дороже или дешевле города.
+--
+-- Нужен потому, что цена и площадь в оценке меряются ВНУТРИ района, и
+-- без этой поправки оценка не отличала хороший район от плохого:
+-- дешёвая квартира в Ново-Переделкино получала ровно столько же очков,
+-- сколько дешёвая в Хамовниках. Связь итоговой оценки с уровнем цен
+-- района была −0.175 — то есть слабо отрицательной, оценка ещё и
+-- подтягивала наверх дешёвые окраины.
+--
+-- Меряется медианой цены за метр, а не общей ценой: иначе районы с
+-- большими квартирами выглядели бы дороже при той же ставке за метр.
+-- Разброс по 138 районам от 0.58 (Новофёдоровское) до 1.93
+-- (Пресненский), четверти на 0.89 и 1.21.
+--
+-- Оговорка, которую надо держать в голове: это ПРЕСТИЖ, а не
+-- «спокойствие». Хамовники дорогие и тихие, Тверская дорогая и шумная,
+-- и по цене их не различить. Для тишины нужен отдельный признак —
+-- расстояние до крупных дорог и промзон по OpenStreetMap.
+-- ---------------------------------------------------------------------
+drop materialized view if exists marts.district_level cascade;
+create materialized view marts.district_level as
+with d as (
+  select district
+       , count(*)                                                    as offers
+       , percentile_cont(0.5) within group (order by price / total_area) as ppm
+  from marts.offer_segment
+  where source = 'cian' and price is not null and total_area > 0
+    and district is not null and rooms_count in (1, 2)
+    and not coalesce(is_duplicate, false)
+    and not coalesce(is_price_outlier, false)
+  group by 1 having count(*) >= 10),
+city as (select percentile_cont(0.5) within group (order by ppm) as ppm from d)
+select d.district, d.offers, d.ppm::numeric(12,0) as district_ppm,
+       (d.ppm / city.ppm)::numeric(6,3) as ppm_vs_city
+from d, city;
+
+create unique index if not exists district_level_key
+    on marts.district_level (district);
+
+-- ---------------------------------------------------------------------
 -- Сопоставимые квартиры: медиана по району и комнатности.
 --
 -- База для оценки «дешевле или дороже похожих». Считается по ВСЕМУ
@@ -235,89 +276,119 @@ select s.*
      , c.comparable_offers
      , c.med_price
      , c.med_area
-     -- Дешевле похожих — лучше, но только до предела.
+     , dl.ppm_vs_city
+     -- ЦЕНА КАК СИГНАЛ КАЧЕСТВА, а не как выгода. Знак перевёрнут.
      --
-     -- Сначала балл рос монотонно: чем дешевле, тем выше. Первое же место
-     -- в списке показало, чего это стоит — 60 000 при медиане 85 000 по
-     -- району оказались не квартирой, а двумя комнатами в трёхкомнатной,
-     -- где третья заперта с вещами хозяина.
+     -- Сначала балл рос, когда квартира дешевле похожих, — и наверх
+     -- лезло всё дешёвое и убитое. Измерено на панели: связь отклонения
+     -- цены от медианы района с годом постройки дома +0.30, с упоминанием
+     -- «требует ремонта» в описании −0.13. То есть цена — это оценка
+     -- качества, которую рынок уже сделал за нас, и дешевизна означает
+     -- не удачу, а то, чего мы не видим: состояние, вид, шум, этаж.
      --
-     -- Проверка на всей панели подтвердила: глубокая скидка — признак
-     -- беды, а не выгоды. У объявлений дешевле похожих на 30% и более
-     -- средний год постройки дома 1975 против 2005 у тех, что идут по
-     -- рынку, а «требует ремонта», «без ремонта», «бабушкин» встречается
-     -- в описании в 18.9% против 4.6%.
+     -- Цена за метр проверена как замена и оказалась не лучше: связь с
+     -- годом дома 0.276 против 0.300, с плохим ремонтом −0.143 против
+     -- −0.134. Разница в третьем знаке, поэтому оставлена цена целиком —
+     -- площадь уже учтена отдельной составляющей.
      --
-     -- Поэтому балл максимален при умеренной скидке около 10% и падает в
-     -- обе стороны: и когда дорого, и когда подозрительно дёшево.
-     -- Неизвестно (мало сопоставимых) — 50, то есть «не в плюс и не в
-     -- минус», а не ноль: отсутствие сравнения не повод штрафовать.
+     -- Насыщение на +20%: выше это уже не качество, а оптимизм
+     -- арендодателя. Бюджет задаётся фильтром «цена до», а не здесь.
+     --
+     -- ОГОВОРКА: составляющая отчасти тавтологична — «дорогое значит
+     -- хорошее». Это заплатка на время, пока нет типа ремонта; он есть
+     -- только на странице объявления.
      , coalesce(greatest(0, least(100,
-         100 - abs(s.price / nullif(c.med_price, 0) - 1 + 0.10) * 250)), 50)
-         as score_price
-     -- Возраст дома — замена отсутствующему типу ремонта.
-     --
-     -- Честно говоря, замена так себе: панель 1988 года может быть с
-     -- хорошим ремонтом, а новостройка — с голыми стенами. Но repair_type
-     -- в выдаче пуст у всех объявлений до единого, а год постройки есть у
-     -- 77%, и связь со «страшным ремонтом» в описаниях по панели видна.
-     -- Когда появится обогащение по карточкам, эта составляющая уступит
-     -- место настоящему ремонту.
-     , case when s.build_year is null   then 50
-            when s.build_year >= 2010   then 100
-            when s.build_year >= 2000   then 80
-            when s.build_year >= 1991   then 60
-            when s.build_year >= 1971   then 40
-            else 25 end as score_building
+         50 + (s.price / nullif(c.med_price, 0) - 1) * 250)), 50) as score_price
      , coalesce(greatest(0, least(100,
          50 + (s.total_area / nullif(c.med_area, 0) - 1) * 250)), 50) as score_area
-     , case when s.metro_walk_min is null then 40
-            when s.metro_walk_min <= 5  then 100
-            when s.metro_walk_min <= 10 then 80
-            when s.metro_walk_min <= 15 then 55
-            when s.metro_walk_min <= 20 then 30
-            else 10 end as score_metro
+     -- УРОВЕНЬ РАЙОНА. Без него оценка сравнивала квартиру только с
+     -- соседями по двору и не отличала Хамовники от Ново-Переделкино.
+     , coalesce(greatest(0, least(100,
+         50 + (dl.ppm_vs_city - 1) * 120)), 50) as score_district
+     -- ДОМ: эпоха и материал вместе, а не один год постройки.
+     --
+     -- Прежняя шкала «новее — лучше» противоречит вкусу владелицы
+     -- (старый фонд) и данным: рынок платит за метр в домах до 1918 года
+     -- 2444 рубля, в сталинках 2120, а в панели 1961-1990 — 1579.
+     -- Материал добавляет то, чего год не знает: кирпич 1967 года и
+     -- панель 1970-го — разные дома, и разница в цене за метр 350 рублей.
+     --
+     -- Самая дешёвая эпоха вовсе не панель, а 1991-2009 (1451 за метр) —
+     -- поздняя панель и блок без обаяния старого фонда и без качества
+     -- новостроек.
+     , case when s.building_material in ('old', 'stalin')            then 100
+            when s.build_year is not null and s.build_year < 1918    then 100
+            when s.build_year between 1918 and 1960                  then  90
+            when s.building_material = 'monolithBrick'               then  85
+            when s.building_material = 'monolith'                    then  78
+            when s.building_material = 'brick'                       then  75
+            when s.building_material in ('panel', 'block')           then  30
+            when s.build_year >= 2010                                then  75
+            when s.build_year between 1991 and 2009                  then  45
+            when s.build_year between 1961 and 1990                  then  35
+            else 50 end as score_building
+     -- МЕТРО — только метрополитен, без МЦК и диаметров.
+     --
+     -- Диаметр ходит по расписанию с интервалом в 10-15 минут, метро —
+     -- каждые две, и «семь минут до станции» означает совершенно разное
+     -- время в пути. Из 8958 объявлений с пешей доступностью до 10 минут
+     -- 889 держались на диаметре, а у 914 пешего метро нет вовсе.
+     , case when s.metro_real_walk_min is null      then  15
+            when s.metro_real_walk_min <= 10        then 100
+            when s.metro_real_walk_min <= 15        then  90
+            when s.metro_real_walk_min <= 20        then  80
+            when s.metro_real_walk_min <= 25        then  55
+            when s.metro_real_walk_min <= 30        then  35
+            else 20 end as score_metro
      , case when s.large_park_distance_m is null  then 25
             when s.large_park_distance_m <= 500   then 100
             when s.large_park_distance_m <= 1000  then 75
             when s.large_park_distance_m <= 2000  then 50
             when s.large_park_distance_m <= 5000  then 25
             else 0 end as score_park
-     , case when s.has_furniture is true then 100
-            when s.has_furniture is false then 30
-            else 50 end as score_furniture
+     -- ЖИВОТНЫЕ. Явное разрешение и «по договорённости» почти равны:
+     -- разница в пять очков, как и просила владелица. «Не указано» —
+     -- середина, это 57% рынка и повод спросить, а не повод вычеркнуть.
+     , case when s.pets_state = 'allowed'    then 100
+            when s.pets_state = 'negotiable' then  95
+            when s.pets_state = 'forbidden'  then   0
+            else 50 end as score_pets
      -- Апартаменты — минимум очков, но НЕ исключение из подбора.
-     --
-     -- Раньше они отсеивались условием запроса, то есть просто не
-     -- показывались. Это неверно по двум причинам: собирать и
-     -- показывать — разные вещи, а апартаменты иногда стоят того, если
-     -- всё остальное хорошо. Плата за них реальная: жилыми помещениями
-     -- они не считаются, и коммунальные платежи там заметно выше.
-     -- Их 9.3% выборки. Незаполненное поле (8.3%) — середина, потому
-     -- что «не указано» не повод ни штрафовать, ни поощрять.
+     -- Жилыми помещениями они не считаются, коммунальные платежи выше.
      , case when s.is_apartments is true then 0
             when s.is_apartments is false then 100
             else 50 end as score_apartments
+     -- ЭТАЖ. Рынок оценивает это сам: первый этаж стоит 1571 рубль за
+     -- метр против 1786 на средних, последний — 1700.
+     , case when s.floor is null or s.floors_total is null then 70
+            when s.floor = 1                               then 40
+            when s.floor = s.floors_total                  then 70
+            else 100 end as score_floor
 from marts.offer_segment s
 left join marts.comparable_median c
        on c.district = s.district and c.rooms_count = s.rooms_count
+left join marts.district_level dl
+       on dl.district = s.district
 )
--- Веса. Цена весила 40 и тянула наверх всё дешёвое подряд; теперь 25, и
--- освободившееся отдано возрасту дома — единственному доступному намёку
--- на состояние квартиры. Под апартаменты взято по пять пунктов у парка
--- и у мебели.
+-- Веса. Сумма ровно 100, чтобы итог читался как проценты.
+--
+-- Оценка за мебель убрана: смысла в ней владелица не увидела, а 97%
+-- объявлений имели одно и то же значение, так что она почти ничего не
+-- различала.
 --
 -- Веса спорны по построению, и спорить с ними нужно: опись полей с
 -- пустой колонкой под свои веса собирается командой
 -- `python -m etl.field_report > docs/fields.md`.
 select scored.*
-     , round( 0.25 * score_price
-            + 0.20 * score_area
-            + 0.15 * score_building
+     , round( 0.18 * score_building
             + 0.15 * score_metro
+            + 0.15 * score_district
+            + 0.14 * score_price
+            + 0.12 * score_area
             + 0.10 * score_park
-            + 0.05 * score_furniture
-            + 0.10 * score_apartments )::int as score
+            + 0.08 * score_pets
+            + 0.05 * score_apartments
+            + 0.03 * score_floor )::int as score
 from scored;
 
 -- Для REFRESH ... CONCURRENTLY: без уникального индекса обновление
@@ -381,6 +452,7 @@ create or replace function marts.refresh_all() returns void as $$
 begin
     refresh materialized view concurrently marts.median_price_by_district;
     refresh materialized view concurrently marts.comparable_median;
+    refresh materialized view concurrently marts.district_level;
     -- Порядок важен: оценка считается из сопоставимых, поэтому она
     -- обновляется после них, а не до.
     refresh materialized view concurrently marts.offer_scored;
@@ -388,6 +460,7 @@ exception when others then
     -- CONCURRENTLY падает, если представление ещё ни разу не наполнялось.
     refresh materialized view marts.median_price_by_district;
     refresh materialized view marts.comparable_median;
+    refresh materialized view marts.district_level;
     refresh materialized view marts.offer_scored;
 end;
 $$ language plpgsql;

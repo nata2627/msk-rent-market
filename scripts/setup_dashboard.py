@@ -124,7 +124,10 @@ WHERE = f"""
   -- Фильтры по полю подставляют условие целиком, вместе с именем
   -- колонки и оператором: отсюда голое {{{{rooms}}}} без «=».
   [[and {{{{rooms}}}}]]
-  [[and metro_walk_min <= {{{{max_metro}}}}]]
+  -- Метрополитен, без МЦК и диаметров: диаметр ходит по расписанию
+  -- с интервалом в 10-15 минут, и «семь минут до станции» означает
+  -- совсем другое время в пути.
+  [[and metro_real_walk_min <= {{{{max_metro}}}}]]
   [[and {{{{park}}}}]]
   [[and {{{{pets}}}}]]
   [[and district = {{{{district}}}}]]
@@ -266,11 +269,21 @@ SEARCH = [
            case when coalesce(client_fee_pct, 0) > 0
                 then client_fee_pct::int || '%' else 'нет' end as "Комиссия",
            park_band as "Парк",
-           metro_walk_min as "Метро, мин",
+           metro_real_walk_min as "Метро, мин",
            floor || '/' || floors_total as "Этаж",
-           -- Год дома заменяет отсутствующий тип ремонта: панель 1975-го
-           -- и дом 2018-го — разный риск «бабушкиного ремонта».
-           build_year as "Дом, год",
+           -- Эпоха и материал вместе: кирпич 1967 года и панель 1970-го —
+           -- разные дома, и рынок платит за метр в них по-разному.
+           coalesce(build_year::text, '?') || ' ' ||
+           case building_material when 'stalin' then 'сталинка'
+                                  when 'old' then 'старый фонд'
+                                  when 'brick' then 'кирпич'
+                                  when 'monolith' then 'монолит'
+                                  when 'monolithBrick' then 'монолит-кирпич'
+                                  when 'panel' then 'панель'
+                                  when 'block' then 'блок'
+                                  else '' end as "Дом",
+           -- Уровень района относительно города по цене за метр.
+           round(ppm_vs_city, 2) as "Район к городу",
            case pets_state when 'allowed' then 'можно'
                            when 'negotiable' then 'по договорённости'
                            when 'forbidden' then 'нельзя'
