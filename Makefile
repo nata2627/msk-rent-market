@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill terms-backfill schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill terms-backfill fields districts-geo scrub schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -20,6 +20,8 @@ help:
 	@echo "make dedup   — схлопнуть дубли объявлений"
 	@echo "make hedonic — гедоническая регрессия: цена разрешения на животных"
 	@echo "make terms-backfill — пересчитать предоплату и залог из описаний"
+	@echo "make fields   — пересобрать опись полей в docs/fields.md"
+	@echo "make districts-geo — добрать контуры районов для карты из OSM"
 	@echo "make districts-ref — пересобрать справочник районов из собранных страниц"
 	@echo "make daily    — весь ежедневный прогон разом (сбор + пересчёт)"
 	@echo "make schedule HOUR=10 — ставить прогон на расписание, ежедневно"
@@ -204,6 +206,23 @@ pets-backfill:
 # разбора, чтобы старые дни догнали новое правило.
 terms-backfill:
 	$(PY) -m etl.terms_backfill
+
+# Опись собираемых полей с заполненностью. Пересобирается командой, а не
+# пишется руками: список полей меняется вместе со схемой, а смотрят на
+# него, решая, что брать в оценку варианта.
+fields:
+	$(PY) -m etl.field_report > docs/fields.md
+	@echo "docs/fields.md пересобран"
+
+# Контуры районов для карты. К площадке не обращается, ходит в
+# OpenStreetMap. --list только покажет, чего не хватает.
+districts-geo:
+	$(PY) -m etl.district_geo
+
+# Разовая чистка персональных данных в уже собранном. Новые данные
+# чистятся при записи, см. etl/privacy.py.
+scrub:
+	$(PY) -m etl.scrub_existing --dry-run
 
 report: districts flats drops
 
