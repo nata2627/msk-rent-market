@@ -73,32 +73,96 @@ class ArchiveUnavailable(RuntimeError):
 
 
 # ---------------------------------------------------------------------
-def find_snapshots(year_from: int = 2022, year_to: int = 2026,
-                   limit: int = 4000) -> list[dict]:
-    """Снимки страниц выдачи длительной аренды квартир в Москве.
+CDX_PAGE_LIMIT = 20_000
+
+
+def _cdx_window(frm: str, to: str) -> list[list[str]]:
+    """Снимки выдачи за окно дат. Пустой список, если архив не осилил.
 
     Отбор делается на нашей стороне, а не фильтрами CDX: несколько
     регулярных выражений подряд архив не тянет и отвечает 503.
     """
-    resp = requests.get(CDX_URL, params={
+    params = {
         "url": "cian.ru/cat.php*",
         "output": "json",
-        "from": year_from,
-        "to": year_to,
+        "from": frm,
+        "to": to,
         "filter": ["statuscode:200", "mimetype:text/html"],
-        "limit": limit,
+        "limit": CDX_PAGE_LIMIT,
         "fl": "timestamp,original,length",
-    }, timeout=120)
-    resp.raise_for_status()
-    try:
-        rows = resp.json()
-    except json.JSONDecodeError as err:
-        raise RuntimeError(
-            "CDX архива вернул не JSON — обычно это их страница "
-            "«Temporarily Offline». Повторить позже."
-        ) from err
+    }
+    # Индекс архива отвечает не всегда и не целиком: густые окна он
+    # считает дольше таймаута, а иногда обрывает выдачу на середине JSON.
+    # Повторы с отступлением — иначе обход падает на случайном месяце,
+    # уже скачав половину.
+    for attempt in range(RETRIES):
+        try:
+            resp = requests.get(CDX_URL, params=params, timeout=180)
+            resp.raise_for_status()
+            rows = resp.json()
+            data = rows[1:] if rows and rows[0][0] == "timestamp" else rows
+            return data
+        except (requests.RequestException, json.JSONDecodeError) as err:
+            log.warning("%s..%s: индекс архива не ответил (%s), попытка %d из %d",
+                        frm, to, type(err).__name__, attempt + 1, RETRIES)
+            time.sleep(BACKOFF_BASE * (2 ** attempt))
+    return []
 
-    data = rows[1:] if rows and rows[0][0] == "timestamp" else rows
+
+def _cdx_month(year: int, month: int) -> list[list[str]]:
+    """Снимки за календарный месяц, при нужде — по декадам.
+
+    Густой месяц архив отдаёт с обрывом или не отдаёт вовсе, поэтому при
+    неудаче окно дробится на трети. Дробление, а не отказ: ноябрь 2025 —
+    самый насыщенный месяц панели, и терять его молча нельзя.
+    """
+    data = _cdx_window(f"{year}{month:02d}01", f"{year}{month:02d}31")
+    if data and len(data) < CDX_PAGE_LIMIT:
+        return data
+
+    if not data:
+        log.warning("%04d-%02d целиком не дался, беру по декадам", year, month)
+    else:
+        # Молча обрезанный ответ — худший исход: выглядит как полный.
+        log.warning("%04d-%02d упёрся в предел в %d записей, беру по декадам",
+                    year, month, CDX_PAGE_LIMIT)
+
+    out: list[list[str]] = []
+    for first, last in (("01", "10"), ("11", "20"), ("21", "31")):
+        part = _cdx_window(f"{year}{month:02d}{first}", f"{year}{month:02d}{last}")
+        if not part:
+            log.warning("%04d-%02d, дни %s-%s: пусто или не отдалось — "
+                        "снимки этого окна в счёт не вошли", year, month, first, last)
+        out.extend(part)
+        time.sleep(random.uniform(0.5, 1.2))
+    return out
+
+
+def find_snapshots(year_from: int = 2022, year_to: int = 2026,
+                   limit: int = 4000) -> list[dict]:
+    """Снимки страниц выдачи длительной аренды квартир в Москве.
+
+    Индекс архива запрашивается ПОМЕСЯЧНО, а не одним запросом на все
+    годы. Причина дорогая: CDX отдаёт не больше запрошенного предела и
+    молча обрезает остальное, никак об этом не сообщая. Одним запросом
+    за 2025-2026 возвращалось ровно столько строк, сколько указано в
+    limit, — и сколько бы ни поставить, ответ упирался в предел.
+    Выглядело это как полная картина: команда --list уверенно печатала
+    «снимков длительной аренды по Москве: 210», тогда как за один только
+    ноябрь 2025 их 379. Помесячные окна в предел не упираются, и счёт
+    становится настоящим.
+    """
+    out = []
+    for year in range(year_from, year_to + 1):
+        for month in range(1, 13):
+            out.extend(_keep_moscow_long_term(_cdx_month(year, month)))
+            # Пауза между окнами: запросов стало двенадцать на год вместо
+            # одного, и архив — общественный ресурс.
+            time.sleep(random.uniform(0.5, 1.2))
+    return out
+
+
+def _keep_moscow_long_term(data) -> list[dict]:
     out = []
     for timestamp, url, length in data:
         params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
