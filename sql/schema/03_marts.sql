@@ -68,6 +68,16 @@ select l.*
         or l.price > 5000000
         or (l.total_area > 0 and l.price / l.total_area not between 400 and 15000)
        ) as is_price_outlier
+     -- Сдаётся не квартира, а комната или часть квартиры.
+     --
+     -- Площадка такие объявления не отделяет: flat_type у них 'rooms',
+     -- как и у обычных квартир, а площадь указана всей квартиры. В
+     -- сравнении с похожими это выглядит как неправдоподобно дешёвая
+     -- большая квартира — так одно такое объявление и возглавило список
+     -- подбора. Их немного (шесть на 28 тысяч), но каждое всплывает
+     -- наверх именно потому, что дёшево.
+     , (l.description ~* '(комнат[аыу]?|комнаты)\s+в\s+(двух|трех|трёх|четырех|четырёх|\d)[- ]?комнатн'
+        or l.description ~* 'сда[ёе]тся комната|в коммунальн') as is_room_share
      , coalesce(d.canonical_id, l.offer_id) <> l.offer_id as is_duplicate
      , d.matched_on as duplicate_reason
      , (    l.rooms_count in (1, 2)
@@ -153,8 +163,14 @@ left join core.offer_duplicate d
 -- значила. Где вариантов меньше, сравнивать не с чем, и оценка по цене
 -- честно остаётся неизвестной.
 -- ---------------------------------------------------------------------
+-- Материализованное, а не обычное: offer_segment считается из панели в
+-- 89 тысяч наблюдений через distinct on, и обычное представление
+-- заставляло планировщик проходить её дважды — один раз ради самих
+-- объявлений, второй ради медиан. Верхние восемь строк подбора
+-- выбирались три с половиной минуты. Обновляется в marts.refresh_all().
+drop materialized view if exists marts.comparable_median cascade;
 drop view if exists marts.comparable_median cascade;
-create view marts.comparable_median as
+create materialized view marts.comparable_median as
 select district
      , rooms_count
      , count(*)                                                          as comparable_offers
@@ -169,6 +185,11 @@ where source = 'cian'
   and not coalesce(is_daily, false)
 group by 1, 2
 having count(*) >= 5;
+
+-- Уникальный индекс нужен для REFRESH ... CONCURRENTLY: без него
+-- обновление блокирует чтение, и дашборд на время пересчёта пустеет.
+create unique index if not exists comparable_median_key
+    on marts.comparable_median (district, rooms_count);
 
 -- ---------------------------------------------------------------------
 -- Оценка варианта: одно число вместо чтения тридцати объявлений подряд.
@@ -193,18 +214,56 @@ having count(*) >= 5;
 -- значило бы выдумывать; когда появится обогащение по карточкам,
 -- составляющая встанет сюда.
 -- ---------------------------------------------------------------------
+-- Материализованное. Витрина строится из панели в 89 тысяч наблюдений
+-- через distinct on, поверх неё считается регулярное выражение по
+-- описаниям и присоединяются медианы сопоставимых. Обычным
+-- представлением каждая карточка дашборда платила за весь этот путь
+-- заново: гистограмма под фильтрами рисовалась 11 секунд.
+--
+-- Данные меняются раз в сутки, поэтому ничего не теряется. Обновляется
+-- в marts.refresh_all(), то есть шагом «Витрины» ежедневного прогона.
+drop materialized view if exists marts.offer_scored cascade;
 drop view if exists marts.offer_scored cascade;
-create view marts.offer_scored as
+create materialized view marts.offer_scored as
 with scored as (
 select s.*
      , c.comparable_offers
      , c.med_price
      , c.med_area
-     -- Дешевле похожих — выше балл. Неизвестно (мало сопоставимых) — 50,
-     -- то есть «не в плюс и не в минус», а не ноль: отсутствие сравнения
-     -- не повод штрафовать квартиру.
+     -- Дешевле похожих — лучше, но только до предела.
+     --
+     -- Сначала балл рос монотонно: чем дешевле, тем выше. Первое же место
+     -- в списке показало, чего это стоит — 60 000 при медиане 85 000 по
+     -- району оказались не квартирой, а двумя комнатами в трёхкомнатной,
+     -- где третья заперта с вещами хозяина.
+     --
+     -- Проверка на всей панели подтвердила: глубокая скидка — признак
+     -- беды, а не выгоды. У объявлений дешевле похожих на 30% и более
+     -- средний год постройки дома 1975 против 2005 у тех, что идут по
+     -- рынку, а «требует ремонта», «без ремонта», «бабушкин» встречается
+     -- в описании в 18.9% против 4.6%.
+     --
+     -- Поэтому балл максимален при умеренной скидке около 10% и падает в
+     -- обе стороны: и когда дорого, и когда подозрительно дёшево.
+     -- Неизвестно (мало сопоставимых) — 50, то есть «не в плюс и не в
+     -- минус», а не ноль: отсутствие сравнения не повод штрафовать.
      , coalesce(greatest(0, least(100,
-         50 + (1 - s.price / nullif(c.med_price, 0)) * 250)), 50) as score_price
+         100 - abs(s.price / nullif(c.med_price, 0) - 1 + 0.10) * 250)), 50)
+         as score_price
+     -- Возраст дома — замена отсутствующему типу ремонта.
+     --
+     -- Честно говоря, замена так себе: панель 1988 года может быть с
+     -- хорошим ремонтом, а новостройка — с голыми стенами. Но repair_type
+     -- в выдаче пуст у всех объявлений до единого, а год постройки есть у
+     -- 77%, и связь со «страшным ремонтом» в описаниях по панели видна.
+     -- Когда появится обогащение по карточкам, эта составляющая уступит
+     -- место настоящему ремонту.
+     , case when s.build_year is null   then 50
+            when s.build_year >= 2010   then 100
+            when s.build_year >= 2000   then 80
+            when s.build_year >= 1991   then 60
+            when s.build_year >= 1971   then 40
+            else 25 end as score_building
      , coalesce(greatest(0, least(100,
          50 + (s.total_area / nullif(c.med_area, 0) - 1) * 250)), 50) as score_area
      , case when s.metro_walk_min is null then 40
@@ -226,13 +285,24 @@ from marts.offer_segment s
 left join marts.comparable_median c
        on c.district = s.district and c.rooms_count = s.rooms_count
 )
+-- Веса. Цена весила 40 и тянула наверх всё дешёвое подряд; теперь 25, и
+-- освободившееся отдано возрасту дома — единственному доступному намёку
+-- на состояние квартиры.
 select scored.*
-     , round( 0.40 * score_price
+     , round( 0.25 * score_price
             + 0.20 * score_area
+            + 0.15 * score_building
             + 0.15 * score_metro
             + 0.15 * score_park
             + 0.10 * score_furniture )::int as score
 from scored;
+
+-- Для REFRESH ... CONCURRENTLY: без уникального индекса обновление
+-- блокирует чтение, и дашборд на время пересчёта пустеет.
+create unique index if not exists offer_scored_key
+    on marts.offer_scored (source, offer_id);
+create index if not exists offer_scored_score_idx
+    on marts.offer_scored (score desc);
 
 -- ---------------------------------------------------------------------
 -- Медианы по району и комнатности в динамике.
@@ -287,8 +357,14 @@ where pc.direction = 'down';
 create or replace function marts.refresh_all() returns void as $$
 begin
     refresh materialized view concurrently marts.median_price_by_district;
+    refresh materialized view concurrently marts.comparable_median;
+    -- Порядок важен: оценка считается из сопоставимых, поэтому она
+    -- обновляется после них, а не до.
+    refresh materialized view concurrently marts.offer_scored;
 exception when others then
     -- CONCURRENTLY падает, если представление ещё ни разу не наполнялось.
     refresh materialized view marts.median_price_by_district;
+    refresh materialized view marts.comparable_median;
+    refresh materialized view marts.offer_scored;
 end;
 $$ language plpgsql;
