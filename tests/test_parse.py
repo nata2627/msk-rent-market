@@ -13,6 +13,7 @@ import pytest
 from etl.parse import (
     _num,
     deposit_months_from_text,
+    prepay_months_from_text,
     metro_walk_min,
     parse_geo,
     parse_metro,
@@ -133,6 +134,23 @@ def test_absurd_deposit_in_months_is_rejected():
     assert deposit_months_from_text("залог 36 месяцев") is None
 
 
+def test_lease_term_is_not_a_deposit():
+    """Самая частая формулировка срока аренды — «договор 11 месяцев», и
+    стоящее рядом слово «залог» превращало её в залог в одиннадцать
+    месячных плат. На панели таких наблюдений было 202, и у каждого сумма
+    «нужно сразу» завышалась многократно."""
+    assert deposit_months_from_text("Договор 11 месяцев, залог 50 000 руб.") is None
+    assert deposit_months_from_text("Сдаётся на срок 6 месяцев, залог обсуждается") is None
+    assert deposit_months_from_text("Залог. Договор 11 месяцев") is None
+
+
+def test_deposit_in_months_still_read_when_stated_plainly():
+    """Ужесточение правила не должно съесть настоящие формулировки."""
+    assert deposit_months_from_text("2 месяца залог") == 2.0
+    assert deposit_months_from_text("депозит 2 месяца") == 2.0
+    assert deposit_months_from_text("Залог 1,5 месяца") == 1.5
+
+
 def test_deposit_kept_in_both_forms(parsed):
     """Рубли и месяцы хранятся отдельно: депозит в месяцах растёт вместе
     с ценой, а в рублях нет, и приведение одного к другому потеряло бы
@@ -140,6 +158,57 @@ def test_deposit_kept_in_both_forms(parsed):
     obs = parsed["observation"]
     assert obs["deposit_rub"] == 95_000
     assert obs["deposit_months"] == 1.0
+
+
+def test_prepay_first_and_last_month_is_two():
+    """«Первый и последний» — два месяца на входе, а не один. Пока это не
+    разбиралось, сумма «нужно сразу» занижалась ровно на месячную плату."""
+    assert prepay_months_from_text("Оплата первого и последнего месяцев проживания.") == 2.0
+    assert prepay_months_from_text("первый месяц + последний месяц + залог=270к") == 2.0
+    assert prepay_months_from_text("Оплата за первый и последний месяц") == 2.0
+
+
+def test_prepay_explicit_number():
+    assert prepay_months_from_text("Залоговая сумма 107 тысяч, предоплата за 1 месяц") == 1.0
+    assert prepay_months_from_text("1 мес. предоплата + депозит") == 1.0
+    assert prepay_months_from_text("предоплата за 2 месяца") == 2.0
+
+
+def test_prepay_number_plus_last_month_is_two():
+    """«Предоплата за 1 месяц + последний месяц» — это два месяца, а не
+    один: число относится к первому платежу, последний идёт сверх него."""
+    assert prepay_months_from_text(
+        "Предоплата за 1 месяц+последний месяц, вода и электричество по счётчикам") == 2.0
+
+
+def test_deposit_for_last_month_is_not_prepay():
+    """«Депозит за последний месяц» — это залог, он уже посчитан отдельно.
+    Без оговорки один и тот же месяц попал бы в сумму дважды."""
+    assert prepay_months_from_text("Депозит за последний месяц, можем разбить.") is None
+
+
+def test_prepay_does_not_leak_across_lines():
+    """Срок договора — не предоплата. На живых описаниях «Договор 11
+    месяцев» из соседней строки списка превращалось в одиннадцать месяцев
+    предоплаты: пять наблюдений с суммой на входе в миллион рублей."""
+    assert prepay_months_from_text(
+        "Договор 11 месяцев\nПредоплата за 1-й месяц, страховой депозит") is None
+
+
+def test_discount_for_long_prepayment_is_not_a_condition():
+    """«Скидка при оплате за 3 месяца» — предложение, а не требование при
+    заселении. Широкая связка между словом и числом цепляла его."""
+    assert prepay_months_from_text(
+        "600 000 ₽/месяц, с гибкой системой скидок при долгосрочной "
+        "предоплате — при оплате за 3 месяца — 575 000") is None
+
+
+def test_prepay_silent_when_nothing_said():
+    """Молчание — не ноль и не единица. Подставлять значение должен тот,
+    кто считает сумму, а не тот, кто разбирает текст."""
+    assert prepay_months_from_text("Собственник. Без комиссий и предоплаты.") is None
+    assert prepay_months_from_text("Уютная квартира с мебелью.") is None
+    assert prepay_months_from_text(None) is None
 
 
 def test_money_fields(parsed):

@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill terms-backfill schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -19,6 +19,7 @@ help:
 	@echo "make parks   — расстояние до парков по OpenStreetMap"
 	@echo "make dedup   — схлопнуть дубли объявлений"
 	@echo "make hedonic — гедоническая регрессия: цена разрешения на животных"
+	@echo "make terms-backfill — пересчитать предоплату и залог из описаний"
 	@echo "make districts-ref — пересобрать справочник районов из собранных страниц"
 	@echo "make daily    — весь ежедневный прогон разом (сбор + пересчёт)"
 	@echo "make schedule HOUR=10 — ставить прогон на расписание, ежедневно"
@@ -197,6 +198,12 @@ hedonic-full:
 # Нужен, только если разметка потерялась: обычный сбор делает это сам.
 pets-backfill:
 	$(PY) -m etl.pets_backfill --date $(DATE)
+
+# Пересчитать условия платежа (предоплата и залог в месяцах) из уже
+# сохранённых описаний. К площадке не обращается — нужен после правок
+# разбора, чтобы старые дни догнали новое правило.
+terms-backfill:
+	$(PY) -m etl.terms_backfill
 
 report: districts flats drops
 
