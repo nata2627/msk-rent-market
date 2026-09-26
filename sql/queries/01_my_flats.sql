@@ -1,22 +1,39 @@
 \pset border 2
 \echo ''
-\echo '=== ЛУЧШИЕ ВАРИАНТЫ В МОЁМ СЕГМЕНТЕ ==='
-\echo '1-2 комнаты, от 40 кв.м, животные можно, длительно, не апартаменты,'
-\echo 'крупный парк в пределах километра. Сортировка по цене.'
+\echo '=== ЛУЧШИЕ ВАРИАНТЫ ПО ОЦЕНКЕ ==='
+\echo 'Те же данные и та же оценка, что на вкладке «Подбор» в дашборде.'
+\echo 'Своих критериев у этого запроса НЕТ: условия задаются фильтрами'
+\echo 'в дашборде, а здесь показан верх общего списка.'
 \echo ''
-select district as район,
+-- Жёстко зашитых критериев здесь больше нет.
+--
+-- Раньше запрос отбирал по is_my_segment: 1-2 комнаты, от 40 кв.м,
+-- животные разрешены, парк в пределах километра. Дашборд этой разметкой
+-- не пользовался никогда, и два «моих сегмента» тихо разъехались —
+-- однушка 38 кв.м не показывалась здесь ни при каких условиях, а почему,
+-- по дашборду понять было невозможно. Одно определение лучше двух.
+select score as оценка,
+       district as район,
        rooms_count as комн,
        total_area::int as "м2",
        price::int as "цена/мес",
-       coalesce(deposit_rub::int, 0) as залог,
+       entry_cost::int as "нужно сразу",
        coalesce(client_fee_pct::int, 0) as "комис,%",
+       coalesce(build_year::text, '?') as "дом,год",
        large_park_distance_m as "парк,м",
-       metro_walk_min as "метро,мин",
+       metro_real_walk_min as "метро,мин",
        floor || '/' || floors_total as этаж,
-       case pets_state when 'allowed' then 'да' else 'по догов.' end as животные,
+       case pets_state when 'allowed' then 'можно'
+                       when 'negotiable' then 'по догов.'
+                       when 'forbidden' then 'нельзя'
+                       else 'не указано' end as животные,
        split_part(url, '?', 1) as ссылка
-from marts.offer_segment
-where source = 'cian' and is_my_segment and is_near_park
+from marts.offer_scored
+where source = 'cian'
   and price is not null
-order by price
+  and not coalesce(is_duplicate, false)
+  and not coalesce(is_room_share, false)
+  and not coalesce(is_daily, false)
+  and coalesce(lease_term_type, 'longTerm') = 'longTerm'
+order by score desc, price
 limit 25;
