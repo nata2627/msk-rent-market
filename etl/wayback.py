@@ -139,7 +139,7 @@ def _cdx_month(year: int, month: int) -> list[list[str]]:
 
 
 def find_snapshots(year_from: int = 2022, year_to: int = 2026,
-                   limit: int = 4000) -> list[dict]:
+                   limit: int = 4000, months: set[str] | None = None) -> list[dict]:
     """Снимки страниц выдачи длительной аренды квартир в Москве.
 
     Индекс архива запрашивается ПОМЕСЯЧНО, а не одним запросом на все
@@ -151,10 +151,17 @@ def find_snapshots(year_from: int = 2022, year_to: int = 2026,
     «снимков длительной аренды по Москве: 210», тогда как за один только
     ноябрь 2025 их 379. Помесячные окна в предел не упираются, и счёт
     становится настоящим.
+
+    Заданные месяцы отсекаются ДО обращения к архиву, а не после.
+    Отбор после стоил дорого: чтобы взять сентябрь-декабрь, обход честно
+    выгребал ещё и май с июнем — самые густые месяцы года, по пять-семь
+    тысяч снимков, — и выбрасывал их.
     """
     out = []
     for year in range(year_from, year_to + 1):
         for month in range(1, 13):
+            if months and f"{year}{month:02d}" not in months:
+                continue
             out.extend(_keep_moscow_long_term(_cdx_month(year, month)))
             # Пауза между окнами: запросов стало двенадцать на год вместо
             # одного, и архив — общественный ресурс.
@@ -365,7 +372,8 @@ def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         datefmt="%H:%M:%S")
 
-    snapshots = find_snapshots(args.year_from, args.year_to)
+    wanted = {m.strip() for m in args.months.split(",")} if args.months else None
+    snapshots = find_snapshots(args.year_from, args.year_to, months=wanted)
     log.info("Снимков длительной аренды по Москве: %d", len(snapshots))
 
     if args.list:
@@ -375,11 +383,8 @@ def main(argv=None) -> int:
             log.info("  %s-%s: %d", month[:4], month[4:], n)
         return 0
 
-    if args.months:
-        wanted = {m.strip() for m in args.months.split(",")}
-        snapshots = [s for s in snapshots if s["timestamp"][:6] in wanted]
-        log.info("После отбора по месяцам %s осталось: %d",
-                 sorted(wanted), len(snapshots))
+    if wanted:
+        log.info("Месяцы %s, снимков: %d", sorted(wanted), len(snapshots))
 
     # Крупные страницы первыми: на них больше объявлений, а значит больше
     # шансов встретить одно и то же объявление в снимках за разные даты —

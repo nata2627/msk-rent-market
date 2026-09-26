@@ -114,7 +114,9 @@ WHERE = f"""
   -- и в подборе такое объявление выглядит как дешёвая большая.
   and coalesce(is_room_share, false) = false
   and coalesce(is_daily, false) = false
-  and coalesce(is_apartments, false) = false
+  -- Апартаменты НЕ исключаются: они получают минимум очков в оценке и
+  -- уходят вниз списка сами. Собирать и показывать — разные вещи, а
+  -- апартаменты иногда стоят того, если всё остальное хорошо.
   and coalesce(lease_term_type, 'longTerm') = 'longTerm'
   and price is not null
   [[and price <= {{{{max_price}}}}]]
@@ -249,6 +251,7 @@ SEARCH = [
            -- выглядит как обрыв таблицы, а не как «площадка не указала».
            coalesce(district, '— район не указан') as "Район",
            coalesce(rooms_count::text, 'студия') as "Комн",
+           case when is_apartments then 'апартаменты' else '' end as "Тип",
            total_area::int as "м²",
            price::int as "Цена", (price / total_area)::int as "За м²",
            -- Цена относительно похожих квартир — то же, что стоит за

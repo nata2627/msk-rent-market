@@ -1,15 +1,19 @@
-"""Пересчитать условия платежа по уже сохранённым описаниям.
+"""Пересчитать условия платежа по уже сохранённым снимкам.
 
-К площадке не обращается вовсе: текст описания лежит в панели, и оба
-поля пересчитываются из него на месте. Поэтому, в отличие от добора
+К площадке не обращается вовсе: и строка условий, и текст описания уже
+лежат в базе, и оба поля пересчитываются из них на месте. Поэтому, в отличие от добора
 животных, этот проход можно делать задним числом сколько угодно — он не
 спрашивает рынок о том, каким тот был вчера, а перечитывает сохранённое.
 
 Что пересчитывается и зачем:
 
-* `prepay_months` — площадка поле `terms.prepayMonths` не заполняет
-  никогда, а условие в тексте встречается. Разбор добавлен позже сбора,
-  поэтому уже собранные дни надо догнать.
+* `prepay_months` — анкетное поле `terms.prepayMonths` площадка не
+  заполняет никогда, но собирает строку условий
+  `formattedAdditionalInfo` вида «Залог 58 000 ₽, комиссия 50%,
+  предоплата 1 месяц, на длительный срок». Она есть у всех 112 289
+  снимков, предоплата названа в 108 487. Разбор добавлен позже сбора,
+  поэтому уже собранные дни надо догнать — и заодно переписать значения,
+  добытые раньше из свободного описания.
 * `deposit_months` — разбор был, но связка в правиле пускала через
   границу предложения, и «Договор 11 месяцев» читалось как залог в
   одиннадцать месячных плат. Правило исправлено, старые значения надо
@@ -27,15 +31,23 @@ import logging
 from collections import Counter
 
 from etl import db
-from etl.parse import deposit_months_from_text, prepay_months_from_text
+from etl.parse import (deposit_months_from_text, prepay_months_from_terms,
+                       prepay_months_from_text)
 
 log = logging.getLogger("terms_backfill")
 
+# Строка условий лежит в сыром снимке, а не в панели, поэтому
+# присоединяем raw. LEFT JOIN: у наблюдений из веб-архива и ручной
+# выгрузки своего снимка в raw нет, и терять их нельзя.
 SELECT_SQL = """
-select source, offer_id, snapshot_date, description, prepay_months, deposit_months
-from core.offer_observation
-where description is not null
-  and (%(date)s::date is null or snapshot_date = %(date)s::date)
+select ob.source, ob.offer_id, ob.snapshot_date, ob.description,
+       ob.prepay_months, ob.deposit_months,
+       s.payload->>'formattedAdditionalInfo' as terms_info
+from core.offer_observation ob
+left join raw.offer_snapshot s
+       on s.source = ob.source and s.offer_id = ob.offer_id
+      and s.snapshot_date = ob.snapshot_date
+where (%(date)s::date is null or ob.snapshot_date = %(date)s::date)
 """
 
 UPDATE_SQL = """
@@ -72,8 +84,10 @@ def main() -> int:
         log.info("Описаний к разбору: %d", len(rows))
 
         updates = []
-        for source, offer_id, snapshot_date, description, prepay_old, dep_old in rows:
-            prepay = prepay_months_from_text(description)
+        for (source, offer_id, snapshot_date, description,
+             prepay_old, dep_old, terms_info) in rows:
+            prepay = (prepay_months_from_terms(terms_info)
+                      or prepay_months_from_text(description))
             deposit = deposit_months_from_text(description)
             if prepay is not None:
                 prepay_hist[prepay] += 1
