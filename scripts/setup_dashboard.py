@@ -110,6 +110,9 @@ WHERE = f"""
   -- Дубли из подбора убираются: одна квартира не должна занимать три
   -- строки списка. В аналитике на вкладке «Рынок» они остаются видны.
   and coalesce(is_duplicate, false) = false
+  -- Комната в квартире — не квартира: площадь указана всей квартиры,
+  -- и в подборе такое объявление выглядит как дешёвая большая.
+  and coalesce(is_room_share, false) = false
   and coalesce(is_daily, false) = false
   and coalesce(is_apartments, false) = false
   and coalesce(lease_term_type, 'longTerm') = 'longTerm'
@@ -185,7 +188,13 @@ def search_card(name, select, display="table", viz=None, order="order by price",
         # Отобранное становится общим выражением, а поверх него считается
         # что угодно — например, границы шкалы гистограммы, которые без
         # второго прохода по той же выборке не получить.
-        sql = f"with t as (\n{sql}\n)\n{cte}"
+        #
+        # MATERIALIZED обязателен. По умолчанию Postgres подставляет тело
+        # выражения в каждое место использования, а здесь их два — расчёт
+        # границ и раскладка по корзинам. Витрина с оценкой пересчитывалась
+        # дважды, и гистограмма под фильтрами рисовалась 11 секунд вместо
+        # полутора.
+        sql = f"with t as materialized (\n{sql}\n)\n{cte}"
     if wrap:
         # Двухступенчатая сортировка: сначала отбор, потом показ.
         #
@@ -256,6 +265,9 @@ SEARCH = [
            park_band as "Парк",
            metro_walk_min as "Метро, мин",
            floor || '/' || floors_total as "Этаж",
+           -- Год дома заменяет отсутствующий тип ремонта: панель 1975-го
+           -- и дом 2018-го — разный риск «бабушкиного ремонта».
+           build_year as "Дом, год",
            case pets_state when 'allowed' then 'можно'
                            when 'negotiable' then 'по договорённости'
                            when 'forbidden' then 'нельзя'
@@ -304,16 +316,27 @@ SEARCH = [
            percentile_cont(0.95) within group (order by price) as hi
     from t),
   w as (
-    -- Не уже тысячи рублей: корзина в 200 рублей дробит один и тот же
-    -- ценник на несколько столбцов и рисует гребёнку на ровном месте.
-    select lo, hi, greatest(1000, round((hi - lo) / 20.0 / 1000) * 1000) as width
+    -- Ширина корзины — всегда кратная пяти тысячам, и не меньше пяти.
+    --
+    -- Узкие корзины дают гребёнку, а не распределение: арендные ставки
+    -- липнут к круглым числам, и при корзине в две тысячи столбцы с
+    -- 50, 55, 60 тысячами оказываются втрое выше соседних, где круглого
+    -- числа просто нет. Видна не форма распределения, а привычка людей
+    -- округлять цену.
+    select lo, hi,
+           greatest(5000, round((hi - lo) / 20.0 / 5000) * 5000) as width
     from lim),
+  aligned as (
+    -- Граница первой корзины опускается до кратной ширине. Иначе корзины
+    -- начинаются от 5-го перцентиля — скажем, от 47 300, — и круглые
+    -- ценники снова раскладываются по столбцам через один.
+    select floor(lo / width) * width as lo, hi, width from w),
   binned as (
-    select case when t.price <  w.lo then -1
-                when t.price >= w.hi then 9999
-                else floor((t.price - w.lo) / w.width)::int end as bin,
-           w.lo, w.hi, w.width
-    from t, w)
+    select case when t.price <  a.lo then -1
+                when t.price >= a.hi then 9999
+                else floor((t.price - a.lo) / a.width)::int end as bin,
+           a.lo, a.hi, a.width
+    from t, aligned a)
 select case when bin = -1   then 'меньше ' || round(lo / 1000)::int
             when bin = 9999 then 'больше ' || round(hi / 1000)::int
             else round((lo + bin * width) / 1000)::int || '–' ||
