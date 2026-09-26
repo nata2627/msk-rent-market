@@ -347,19 +347,34 @@ def parse_metro(payload: dict) -> list[dict]:
             # идентификатор позволит связать станции одной ветки.
             "line_name": (str(u["lineName"]) if u.get("lineName")
                           else (str(u["lineId"]) if u.get("lineId") is not None else None)),
+            # Настоящий метрополитен или наземный диаметр.
+            #
+            # У метро lineType пуст, у остального заполнен: mck — МЦК,
+            # mcd1..mcd4 — диаметры. Различие не косметическое: МЦД ходит
+            # по расписанию с интервалом в 10-15 минут, метро — каждые
+            # две минуты, и «семь минут до станции» означает совершенно
+            # разное время в пути. На последнем снимке у 3117 объявлений
+            # ближайшая станция — МЦД-4, а не метро.
+            "line_type": u.get("lineType"),
         })
     return out
 
 
-def metro_walk_min(stations: list[dict]) -> int | None:
-    """Минимальное время ПЕШКОМ до метро.
+def metro_walk_min(stations: list[dict], real_metro_only: bool = False) -> int | None:
+    """Минимальное время ПЕШКОМ до станции.
 
     Время на транспорте сюда не попадает намеренно: пятнадцать минут пешком
     и пятнадцать минут на автобусе — разные блага, и смешивать их в одной
     переменной регрессии значило бы мерить не то.
+
+    С real_metro_only считается только метрополитен, без МЦК и диаметров.
+    Разница ощутимая: из 8958 объявлений с пешей доступностью до 10 минут
+    889 держатся на диаметре, а не на метро, а у 914 пешего метрополитена
+    нет вовсе.
     """
     walk = [s["time_min"] for s in stations
-            if s.get("transport_type") == "walk" and s.get("time_min") is not None]
+            if s.get("transport_type") == "walk" and s.get("time_min") is not None
+            and (not real_metro_only or s.get("line_type") is None)]
     return min(walk) if walk else None
 
 
@@ -522,6 +537,7 @@ def parse_offer(payload: dict, snapshot_date, source: str = "cian") -> dict | No
         "build_year": _num(building.get("buildYear"), int),
         "has_lift": bool(_num(_get(building, "passengerLiftsCount"), int) or 0) or None,
         "metro_walk_min": metro_walk_min(stations),
+        "metro_real_walk_min": metro_walk_min(stations, real_metro_only=True),
         **geo,
     }
 
