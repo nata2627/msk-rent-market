@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill terms-backfill fields districts-geo scrub schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -25,6 +25,8 @@ help:
 	@echo "make districts-ref — пересобрать справочник районов из собранных страниц"
 	@echo "make daily    — весь ежедневный прогон разом (сбор + пересчёт)"
 	@echo "make schedule HOUR=10 — ставить прогон на расписание, ежедневно"
+	@echo "make weekly   — добрать комнатности 3+ (в ежедневный срез они не входят)"
+	@echo "make schedule-weekly — добор раз в неделю, по воскресеньям"
 	@echo "make schedule-status — идёт ли расписание и чем кончились прогоны"
 	@echo "make rebuild — пересобрать панель из сырых снимков"
 	@echo "make marts   — пересобрать материализованные витрины"
@@ -170,6 +172,34 @@ schedule:
 	@launchctl bootstrap gui/$$(id -u) $(PLIST)
 	@echo "Прогон поставлен на $(HOUR):$(shell printf %02d $(MINUTE)) ежедневно."
 	@echo "Проверить: make schedule-status"
+
+# Недельный добор комнатностей, которых нет в ежедневном срезе.
+# Воскресенье по умолчанию, час позже ежедневного прогона: замок у них
+# общий, и добор дождётся окончания обхода, а не пропустится молча.
+WEEKDAY ?= 0
+WEEKLY_HOUR ?= 13
+WEEKLY_LABEL := com.nata2627.rent-msk.weekly
+WEEKLY_PLIST := $(HOME)/Library/LaunchAgents/$(WEEKLY_LABEL).plist
+
+schedule-weekly:
+	@mkdir -p $(HOME)/Library/LaunchAgents
+	@sed -e 's|__REPO__|$(CURDIR)|g' \
+	     -e 's|__LABEL__|$(WEEKLY_LABEL)|g' \
+	     -e 's|__WEEKDAY__|$(WEEKDAY)|g' \
+	     -e 's|__HOUR__|$(WEEKLY_HOUR)|g' \
+	     scripts/weekly.plist.template > $(WEEKLY_PLIST)
+	@launchctl bootout gui/$$(id -u)/$(WEEKLY_LABEL) 2>/dev/null || true
+	@launchctl bootstrap gui/$$(id -u) $(WEEKLY_PLIST)
+	@echo "Недельный добор: день недели $(WEEKDAY) (0 — воскресенье), $(WEEKLY_HOUR):00."
+
+unschedule-weekly:
+	@launchctl bootout gui/$$(id -u)/$(WEEKLY_LABEL) 2>/dev/null || true
+	@rm -f $(WEEKLY_PLIST)
+	@echo "Недельный добор снят."
+
+# Добор руками, без расписания.
+weekly:
+	@./scripts/weekly.sh; tail -3 data/logs/daily_summary.log
 
 unschedule:
 	@launchctl bootout gui/$$(id -u)/$(LABEL) 2>/dev/null || true

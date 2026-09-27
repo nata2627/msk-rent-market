@@ -271,12 +271,19 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
             # смотрит в один сегмент, и всё остальное «пропало» бы просто
             # потому, что мы туда не заглядывали.
             #
-            # rooms is None — обязательное условие, а не перестраховка.
-            # Запуск `--mode full --rooms 3,4,5` добирает недостающие
-            # комнатности и полным обходом не является: по нему все
-            # однокомнатные оказались бы «снятыми с публикации».
-            if mode == "full" and rooms is None and status == "ok":
-                gone = db.mark_disappeared(conn, snapshot_date)
+            # Отмечаются только те комнатности, которые обход собирал.
+            #
+            # Раньше здесь стояло `mode == "full" and rooms is None`, и
+            # отметка не ставилась ни разу: обхода всех комнатностей
+            # сразу в проекте не случилось. Узкий срез покрывает одно- и
+            # двухкомнатные целиком, и вывод об их исчезновении столь же
+            # законен; а вот записать в снятые трёхкомнатные, на которые
+            # не смотрели, нельзя — это и защищает список комнатностей.
+            if status == "ok":
+                collected_rooms = rooms or (config.NARROW_ROOM_CODES
+                                            if mode == "narrow"
+                                            else config.ROOM_CODES)
+                gone = db.mark_disappeared(conn, snapshot_date, collected_rooms)
                 log.info("Перестали появляться в выдаче: %d объявлений "
                          "(это снятие с публикации, а не сдача квартиры)", gone)
             db.refresh_marts(conn)

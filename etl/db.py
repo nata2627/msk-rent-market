@@ -408,26 +408,95 @@ def offers_without_pets_verdict(conn, offer_ids: list[str],
         return cur.fetchone()[0]
 
 
-def mark_disappeared(conn, snapshot_date, source: str = "cian") -> int:
+# Сколько подряд не встретить объявление, чтобы счесть его снятым.
+#
+# Не единица, и это принципиально. На панели из шести дней 5.5% объявлений
+# пропадали из выдачи и возвращались: 976 на один день, 113 на два, 25 на
+# три. Это не рынок, а недобор обхода — в сегодняшнем прогоне 134 корзины
+# из 294 недобрали объявлений, покрытие около 90%.
+#
+# При пороге в один день мы записали бы тысячу снятий, которых не было, и
+# кривая выживаемости провалилась бы на ровном месте. При трёх днях таких
+# случаев остаётся 25 из 20 109 — одна восьмая процента.
+#
+# Цена порога: снятие фиксируется на три дня позже, чем произошло, и
+# последние три дня панели цензурированы справа. Для анализа это
+# нормально, лишь бы про это помнили.
+DISAPPEARED_AFTER_DAYS = 3
+
+
+def rooms_predicate(room_codes) -> tuple[str, list]:
+    """Условие «объявление принадлежит собранным комнатностям».
+
+    Коды площадки и колонки панели не совпадают: 1..6 — это число комнат,
+    7 — студия, 9 — свободная планировка, и у последних двух rooms_count
+    пуст, а вид хранится в flat_type.
+    """
+    numeric = [int(c) for c in room_codes if c.isdigit() and int(c) <= 6]
+    parts, params = [], []
+    if numeric:
+        parts.append("rooms_count = any(%s)")
+        params.append(numeric)
+    if "7" in room_codes:
+        parts.append("flat_type = 'studio'")
+    if "9" in room_codes:
+        parts.append("flat_type = 'openPlan'")
+    return "(" + " or ".join(parts) + ")", params
+
+
+def mark_disappeared(conn, snapshot_date, room_codes, source: str = "cian") -> int:
     """Отметить объявления, которых больше нет в выдаче.
 
-    Вызывается ТОЛЬКО после полного обхода. После узкого среза нельзя: он
-    покрывает один сегмент, и всё остальное объявление «исчезло» бы просто
-    потому, что мы туда не смотрели.
+    Отмечаются ТОЛЬКО те комнатности, которые этот обход действительно
+    собирал. Раньше проверка была грубее — отметка ставилась лишь после
+    обхода всех комнатностей сразу, — и из-за этого не ставилась никогда:
+    такого обхода в проекте не случилось ни одного. Узкий ежедневный срез
+    покрывает одно- и двухкомнатные полностью, и для них вывод об
+    исчезновении столь же законен, как после полного обхода. А вот
+    записать в снятые трёхкомнатные, на которые мы не смотрели, нельзя.
+
+    Считаются только дни, когда обход этих комнатностей ЗАВЕРШИЛСЯ УСПЕШНО.
+    Без этого пропущенный или упавший день выглядел бы как исчезновение
+    всего рынка разом — а падения случаются: 27.09.2026 сбор остановился
+    на третьей корзине из почти трёхсот.
+
+    Дата снятия — первый день, когда объявления не стало, а не день, когда
+    мы это заметили.
 
     Ещё раз, потому что это главная ловушка проекта: disappeared_date — это
     дата, когда объявление перестало появляться в выдаче. Это НЕ дата сдачи
     квартиры. Объявление снимают по множеству причин, и в анализе
     выживаемости это событие так и называется — снятие с публикации.
     """
+    where_rooms, params = rooms_predicate(room_codes)
+    if not params and "flat_type" not in where_rooms:
+        return 0
+
     with conn.cursor() as cur:
         cur.execute(
-            """update core.offer
+            f"""
+            with covered as (
+                -- Дни, когда эти комнатности собирались и обход дошёл до конца.
+                select distinct r.snapshot_date
+                from raw.collection_run r
+                join raw.bucket b using (run_id)
+                where r.source = %s and r.status = 'ok'
+                  and b.rooms = any(%s)
+            )
+            update core.offer o
                set is_active = false,
-                   disappeared_date = coalesce(disappeared_date, %s),
+                   disappeared_date = coalesce(o.disappeared_date,
+                                               o.last_seen_date + 1),
                    updated_at = now()
-               where source = %s and is_active and last_seen_date < %s""",
-            (snapshot_date, source, snapshot_date),
+             where o.source = %s
+               and o.is_active
+               and {where_rooms}
+               and o.last_seen_date < %s
+               and (select count(*) from covered c
+                     where c.snapshot_date > o.last_seen_date) >= %s
+            """,
+            [source, list(room_codes), source] + params
+            + [snapshot_date, DISAPPEARED_AFTER_DAYS],
         )
         affected = cur.rowcount
     conn.commit()

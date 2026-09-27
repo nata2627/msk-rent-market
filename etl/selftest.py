@@ -137,22 +137,37 @@ def main() -> int:
                                (SOURCE,))) == 54.3,
                   "площадь сохранилась, хотя в снимке её не было")
 
-            print("5. Полный обход без этого объявления")
-            run_id = db.start_run(conn, "full", D3, source=SOURCE)
-            db.finish_run(conn, run_id, "ok", offers_seen=0, buckets_total=1,
-                          buckets_underfilled=0, requests_made=1)
-            db.mark_disappeared(conn, D3, source=SOURCE)
+            print("5. Объявление пропало из выдачи")
+            # Одного пропуска мало: 5.5% объявлений исчезают на день-другой
+            # из-за недобора обхода и возвращаются. Порог — три успешных
+            # дня подряд без объявления.
+            gone_days = [D2 + timedelta(days=i) for i in (1, 2, 3)]
+            for i, day in enumerate(gone_days, start=1):
+                run_id = db.start_run(conn, "narrow", day, source=SOURCE)
+                db.insert_bucket(conn, run_id, Bucket(rooms="2"),
+                                 {"проверка": day.isoformat()}, None)
+                db.finish_run(conn, run_id, "ok", offers_seen=0, buckets_total=1,
+                              buckets_underfilled=0, requests_made=1)
+                affected = db.mark_disappeared(conn, day, ["2"], source=SOURCE)
+                if i < 3:
+                    check(affected == 0,
+                          f"после {i} дня отсутствия объявление ещё не снято — "
+                          "иначе недобор обхода обернулся бы тысячей мнимых снятий")
             with conn.cursor() as cur:
                 cur.execute("""select is_active, disappeared_date, last_seen_date
                                from core.offer where source=%s""", (SOURCE,))
                 is_active, disappeared, last_seen = cur.fetchone()
-            check(is_active is False, "объявление помечено неактивным")
-            check(disappeared == D3, "дата исчезновения — дата полного обхода")
+            check(is_active is False, "после трёх дней отсутствия объявление снято")
+            check(disappeared == D2 + timedelta(days=1),
+                  "дата снятия — первый день без объявления, а не день, когда заметили")
             check(last_seen == D2, "последний раз видели на предыдущем снимке")
             print("     (напоминание: это снятие с публикации, а НЕ сдача квартиры)")
 
             print("6. Объявление вернулось в выдачу")
-            ingest(conn, payload, D3 + timedelta(days=1))
+            # День возвращения нужен и дальше, в проверке разметки
+            # животных, поэтому он назван, а не посчитан дважды.
+            back_day = D2 + timedelta(days=4)
+            ingest(conn, payload, back_day)
             check(scalar(conn, "select is_active from core.offer where source=%s",
                          (SOURCE,)) is True, "снова активно")
             check(scalar(conn, "select disappeared_date from core.offer where source=%s",
@@ -169,14 +184,14 @@ def main() -> int:
             # raw.pets_hit, и это утверждение следит, чтобы так и осталось.
             last_run = scalar(conn, "select max(run_id) from raw.collection_run "
                                     "where source=%s", (SOURCE,))
-            db.record_pets_hits(conn, last_run, None, D3 + timedelta(days=1),
+            db.record_pets_hits(conn, last_run, None, back_day,
                                 [offer_id], source=SOURCE)
             db.set_pets_pass_complete(conn, last_run, True)
-            db.mark_pets_allowed(conn, [offer_id], D3 + timedelta(days=1),
+            db.mark_pets_allowed(conn, [offer_id], back_day,
                                  source=SOURCE, mark_rest_false=True)
             check(scalar(conn, "select pets_platform_allowed from core.offer_observation "
                                "where source=%s and snapshot_date=%s",
-                         (SOURCE, D3 + timedelta(days=1))) is True,
+                         (SOURCE, back_day)) is True,
                   "метка площадки проставлена")
 
             with conn.cursor() as cur:
@@ -188,11 +203,11 @@ def main() -> int:
             restore_pets(conn, SOURCE)
             check(scalar(conn, "select pets_platform_allowed from core.offer_observation "
                                "where source=%s and snapshot_date=%s",
-                         (SOURCE, D3 + timedelta(days=1))) is True,
+                         (SOURCE, back_day)) is True,
                   "и вернулась после пересборки — из raw.pets_hit, без запросов")
             check(scalar(conn, "select pets_state from core.offer_observation "
                                "where source=%s and snapshot_date=%s",
-                         (SOURCE, D3 + timedelta(days=1))) == "allowed",
+                         (SOURCE, back_day)) == "allowed",
                   "состояние животных восстановлено вместе с ней")
 
             print(f"\nСквозная проверка пройдена: {checks_passed} утверждений. "
