@@ -207,11 +207,27 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
                                  len(bucket_offer_ids))
                         pets_skipped += 1
                     else:
-                        ok, ids = _pets_pass(conn, client, run_id, bucket,
-                                             snapshot_date, claimed, seen_offers,
-                                             dry_run)
-                        pets_ids.update(ids)
-                        pets_complete &= ok
+                        try:
+                            ok, ids = _pets_pass(conn, client, run_id, bucket,
+                                                 snapshot_date, claimed,
+                                                 seen_offers, dry_run)
+                        except PageWithoutData as err:
+                            # Страница фильтра не далась. Это сбой ОДНОЙ
+                            # корзины, а не всего обхода: 27.09.2026 такая
+                            # ошибка остановила дневной сбор на третьей
+                            # корзине из почти трёхсот, и вместо 16 тысяч
+                            # объявлений записались 111.
+                            #
+                            # Разметка животных за день при этом считается
+                            # неполной: пометить необойдённые объявления
+                            # как «животные не разрешены» значило бы выдать
+                            # собственный промах за факт о рынке.
+                            log.warning("    с животными: корзина не далась (%s)", err)
+                            buckets_failed += 1
+                            pets_complete = False
+                        else:
+                            pets_ids.update(ids)
+                            pets_complete &= ok
 
         except Blocked as err:
             # Площадка закрыла доступ. Не ускоряемся, не меняем отпечаток,

@@ -57,6 +57,28 @@ def test_empty_page_is_never_treated_as_an_empty_bucket():
     assert "return [], 0" not in src
 
 
+def test_navigation_failure_is_a_bucket_failure_not_a_crash():
+    """Страница, которая не открылась, не должна ронять весь обход.
+
+    27.09.2026 одна страница фильтра «с животными» не открылась за
+    полторы минуты, исключение Playwright прошло мимо всех обработчиков,
+    и дневной сбор остановился на третьей корзине из почти трёхсот:
+    111 объявлений вместо шестнадцати тысяч."""
+    import inspect
+
+    from etl import browser_client, collect
+
+    src = inspect.getsource(browser_client.BrowserClient.search)
+    assert "PlaywrightError" in src, "ошибка загрузки страницы не ловится"
+    assert "continue" in src, "после сбоя загрузки нет повтора"
+
+    # Проход по животным тоже обязан пережить сбойную корзину, иначе
+    # ошибка снова улетит в обработчик «непредвиденной» и остановит день.
+    run_src = inspect.getsource(collect.run)
+    assert "except PageWithoutData" in run_src
+    assert "pets_complete = False" in run_src
+
+
 # ---------------------------------------------------------------------
 # Справочник районов
 # ---------------------------------------------------------------------

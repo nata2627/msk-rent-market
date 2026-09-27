@@ -29,6 +29,8 @@ import random
 import time
 import urllib.parse
 
+from playwright.sync_api import Error as PlaywrightError
+
 from etl import config
 from etl.cian_client import Blocked, PageWithoutData
 from etl.partition import Bucket, build_url_params
@@ -135,10 +137,27 @@ class BrowserClient:
 
         last_err: Exception | None = None
         for attempt in range(PAGE_RETRIES):
-            resp = self._page.goto(url, wait_until="domcontentloaded", timeout=90_000)
-            self.requests_made += 1
-            status = resp.status if resp else None
-            html = self._page.content()
+            try:
+                resp = self._page.goto(url, wait_until="domcontentloaded",
+                                       timeout=90_000)
+                self.requests_made += 1
+                status = resp.status if resp else None
+                html = self._page.content()
+            except PlaywrightError as err:
+                # Страница не открылась за полторы минуты или браузер
+                # ответил ошибкой. Это НЕ повод ронять весь обход.
+                #
+                # 27.09.2026 ровно так и вышло: одна страница фильтра
+                # «с животными» по Вешнякам не открылась, исключение
+                # прошло мимо всех обработчиков, и дневной сбор
+                # остановился на третьей корзине из почти трёхсот.
+                # Собранными оказались 111 объявлений вместо 16 тысяч.
+                last_err = err
+                wait = 5.0 * (2 ** attempt)
+                log.warning("Страница не открылась (%s из %s): %s. Пауза %.0f с",
+                            attempt + 1, PAGE_RETRIES, type(err).__name__, wait)
+                time.sleep(wait)
+                continue
 
             if status == 403 or self._looks_blocked(html):
                 raise Blocked(f"Площадка закрыла доступ (HTTP {status}). Сбор остановлен.")
@@ -162,7 +181,9 @@ class BrowserClient:
         # Повторы не помогли. Пустой корзиной это считать нельзя — район
         # молча выпал бы из выборки, — поэтому поднимаем отдельную ошибку:
         # сборщик пометит корзину сбойной и пойдёт дальше.
-        raise PageWithoutData(f"Страница без данных выдачи после "
+        # Повторы не помогли — ни по содержимому, ни по загрузке.
+        # Корзина помечается сбойной, обход идёт дальше.
+        raise PageWithoutData(f"Страница не далась после "
                               f"{PAGE_RETRIES} попыток: {last_err}")
 
     def districts_tree(self, location_id: int = config.REGION_MOSCOW) -> list[dict]:
