@@ -460,8 +460,20 @@ def mark_disappeared(conn, snapshot_date, room_codes, source: str = "cian") -> i
     всего рынка разом — а падения случаются: 27.09.2026 сбор остановился
     на третьей корзине из почти трёхсот.
 
-    Дата снятия — первый день, когда объявления не стало, а не день, когда
-    мы это заметили.
+    Покрытие считается ОТДЕЛЬНО ПО КАЖДОЙ комнатности, а не по всем
+    собранным сразу. Прогон 26.09.2026 закрылся успешно, собрав одни
+    двухкомнатные: для однокомнатных этот день пустой, и засчитывать его
+    им нельзя. Прежняя версия складывала дни по «любой из комнатностей» —
+    достаточно было двухкомнатного обхода, чтобы приблизить снятие
+    однокомнатного.
+
+    Дата снятия — первый СОБРАННЫЙ день, в который объявления не нашлось.
+    Не `последний раз видели + 1`: этого дня могло не быть в обходе вовсе,
+    и тогда дата утверждала бы то, чего никто не проверял. Однокомнатные
+    не собирались 23 и 26 сентября 2026 — а 774 объявления из 2417 были
+    помечены снятыми именно этими числами, то есть срок жизни каждого
+    оказался занижен. Для ежедневного среза оба правила совпадают, разница
+    вылезает ровно там, где день пропущен.
 
     Ещё раз, потому что это главная ловушка проекта: disappeared_date — это
     дата, когда объявление перестало появляться в выдаче. Это НЕ дата сдачи
@@ -476,24 +488,49 @@ def mark_disappeared(conn, snapshot_date, room_codes, source: str = "cian") -> i
         cur.execute(
             f"""
             with covered as (
-                -- Дни, когда эти комнатности собирались и обход дошёл до конца.
-                select distinct r.snapshot_date
+                -- Пара «комнатность — день», а не просто день: обход
+                -- бывает частичным, и каждая комнатность отвечает за себя.
+                select distinct b.rooms, r.snapshot_date
                 from raw.collection_run r
                 join raw.bucket b using (run_id)
                 where r.source = %s and r.status = 'ok'
                   and b.rooms = any(%s)
+            ),
+            candidate as (
+                -- Код комнатности площадки: rooms_count не знает про
+                -- студии (7) и свободную планировку (9), у них вид лежит
+                -- в flat_type. Комнатность вперёд вида: у одной студии
+                -- площадка указала и flat_type='studio', и одну комнату —
+                -- и отдавала её в корзине «1», а не «7». Кто в какой
+                -- корзине лежит, решает площадка, и спорить с ней нельзя.
+                select o.source, o.offer_id, o.last_seen_date,
+                       case when o.rooms_count between 1 and 6
+                                 then o.rooms_count::text
+                            when o.flat_type = 'studio'   then '7'
+                            when o.flat_type = 'openPlan' then '9'
+                            end as rooms
+                from core.offer o
+                where o.source = %s
+                  and o.is_active
+                  and {where_rooms}
+                  and o.last_seen_date < %s
+            ),
+            gone as (
+                select c.source, c.offer_id,
+                       min(v.snapshot_date) as first_missing,
+                       count(*) as looked
+                from candidate c
+                join covered v on v.rooms = c.rooms
+                              and v.snapshot_date > c.last_seen_date
+                group by 1, 2
             )
             update core.offer o
                set is_active = false,
-                   disappeared_date = coalesce(o.disappeared_date,
-                                               o.last_seen_date + 1),
+                   disappeared_date = coalesce(o.disappeared_date, g.first_missing),
                    updated_at = now()
-             where o.source = %s
-               and o.is_active
-               and {where_rooms}
-               and o.last_seen_date < %s
-               and (select count(*) from covered c
-                     where c.snapshot_date > o.last_seen_date) >= %s
+              from gone g
+             where o.source = g.source and o.offer_id = g.offer_id
+               and g.looked >= %s
             """,
             [source, list(room_codes), source] + params
             + [snapshot_date, DISAPPEARED_AFTER_DAYS],
@@ -501,6 +538,43 @@ def mark_disappeared(conn, snapshot_date, room_codes, source: str = "cian") -> i
         affected = cur.rowcount
     conn.commit()
     return affected
+
+
+def remark_disappeared(conn, until_date, source: str = "cian") -> int:
+    """Пересчитать снятия по всей панели с нуля.
+
+    Нужно в двух случаях. Первый — пересборка core: upsert_offers
+    возвращает объявлению is_active, потому что снимок для него означает
+    встречу в выдаче, и отличить пересборку от настоящей встречи он не
+    может. Снятия при этом стираются все разом, а в raw их нет: они не
+    данные, а вывод из того, в какие дни какая комнатность собиралась.
+    Второй — правка самого правила, как 29.09.2026.
+
+    Считается целиком из raw, поэтому идемпотентно: повторный запуск даёт
+    то же самое. Комнатности берутся тоже из raw — какие обходились, по
+    тем и судим.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """select distinct b.rooms
+               from raw.collection_run r join raw.bucket b using (run_id)
+               where r.source = %s and r.status = 'ok' and b.rooms is not null
+               order by 1""",
+            (source,),
+        )
+        codes = [r[0] for r in cur.fetchall()]
+    if not codes:
+        return 0
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """update core.offer set is_active = true, disappeared_date = null
+               where source = %s and not is_active""",
+            (source,),
+        )
+    # Без commit: сброс и новая отметка обязаны попасть в базу одной
+    # транзакцией, иначе оборванный пересчёт оставит панель без снятий.
+    return mark_disappeared(conn, until_date, codes, source=source)
 
 
 def refresh_marts(conn) -> None:

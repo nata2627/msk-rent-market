@@ -141,15 +141,25 @@ def main() -> int:
             # Одного пропуска мало: 5.5% объявлений исчезают на день-другой
             # из-за недобора обхода и возвращаются. Порог — три успешных
             # дня подряд без объявления.
-            gone_days = [D2 + timedelta(days=i) for i in (1, 2, 3)]
-            for i, day in enumerate(gone_days, start=1):
+            #
+            # Первый день обходит ЧУЖУЮ комнатность: объявление
+            # двухкомнатное, а собирали однокомнатные. Такой день ничего
+            # о нём не говорит и не должен ни приближать снятие, ни
+            # становиться его датой. На живых данных эта разница стоила
+            # 774 неверных дат из 4020: однокомнатные не собирались
+            # 23 и 26 сентября 2026, а снятия стояли именно этими числами.
+            gone_days = [(D2 + timedelta(days=1), "1"),
+                         (D2 + timedelta(days=2), "2"),
+                         (D2 + timedelta(days=3), "2"),
+                         (D2 + timedelta(days=4), "2")]
+            for i, (day, rooms) in enumerate(gone_days, start=1):
                 run_id = db.start_run(conn, "narrow", day, source=SOURCE)
-                db.insert_bucket(conn, run_id, Bucket(rooms="2"),
+                db.insert_bucket(conn, run_id, Bucket(rooms=rooms),
                                  {"проверка": day.isoformat()}, None)
                 db.finish_run(conn, run_id, "ok", offers_seen=0, buckets_total=1,
                               buckets_underfilled=0, requests_made=1)
-                affected = db.mark_disappeared(conn, day, ["2"], source=SOURCE)
-                if i < 3:
+                affected = db.mark_disappeared(conn, day, [rooms], source=SOURCE)
+                if i < len(gone_days):
                     check(affected == 0,
                           f"после {i} дня отсутствия объявление ещё не снято — "
                           "иначе недобор обхода обернулся бы тысячей мнимых снятий")
@@ -158,15 +168,16 @@ def main() -> int:
                                from core.offer where source=%s""", (SOURCE,))
                 is_active, disappeared, last_seen = cur.fetchone()
             check(is_active is False, "после трёх дней отсутствия объявление снято")
-            check(disappeared == D2 + timedelta(days=1),
-                  "дата снятия — первый день без объявления, а не день, когда заметили")
+            check(disappeared == D2 + timedelta(days=2),
+                  "дата снятия — первый СОБРАННЫЙ день без объявления; день, "
+                  "когда обходили другую комнатность, датой быть не может")
             check(last_seen == D2, "последний раз видели на предыдущем снимке")
             print("     (напоминание: это снятие с публикации, а НЕ сдача квартиры)")
 
             print("6. Объявление вернулось в выдачу")
             # День возвращения нужен и дальше, в проверке разметки
             # животных, поэтому он назван, а не посчитан дважды.
-            back_day = D2 + timedelta(days=4)
+            back_day = D2 + timedelta(days=5)
             ingest(conn, payload, back_day)
             check(scalar(conn, "select is_active from core.offer where source=%s",
                          (SOURCE,)) is True, "снова активно")

@@ -14,12 +14,17 @@ core.offer_photo. Что НЕ трогается: raw (он источник), �
 обогащения — расстояния до парков, флаг МКАД, дедупликация. Обогащение
 считается отдельными командами по координатам, которые пересборка
 восстанавливает.
+
+Снятия с публикации пересчитываются здесь же, последним шагом: запись
+снимка возвращает объявлению is_active, и без пересчёта пересборка
+оставила бы панель без единого снятия, ничем себя не выдав.
 """
 from __future__ import annotations
 
 import argparse
 import logging
 import sys
+from datetime import date
 
 import psycopg
 
@@ -118,6 +123,11 @@ def main(argv=None) -> int:
             log.info("  пересобрано наблюдений: %d", done)
 
         restore_pets(conn, args.source)
+
+        # Снятия выводятся из журнала обхода, а не хранятся в raw, поэтому
+        # переживают пересборку только так — пересчётом.
+        gone = db.remark_disappeared(conn, date.today(), source=args.source)
+        log.info("  снятий с публикации пересчитано: %d", gone)
 
         log.info("Готово. Обогащение (парки, МКАД, дубли) считается отдельно: "
                  "make parks && make dedup")

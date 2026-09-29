@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -230,6 +230,12 @@ hedonic-full:
 # Нужен, только если разметка потерялась: обычный сбор делает это сам.
 pets-backfill:
 	$(PY) -m etl.pets_backfill --date $(DATE)
+
+# Пересчитать снятия с публикации по всей панели. К площадке не
+# обращается: в какие дни какая комнатность собиралась, записано в
+# журнале обхода. Нужен после `make rebuild` и после правок правила.
+disappeared-backfill:
+	$(PY) -m etl.disappeared_backfill
 
 # Пересчитать условия платежа (предоплата и залог в месяцах) из уже
 # сохранённых описаний. К площадке не обращается — нужен после правок
