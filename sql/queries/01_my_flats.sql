@@ -27,6 +27,16 @@ select score as оценка,
                        when 'negotiable' then 'по догов.'
                        when 'forbidden' then 'нельзя'
                        else 'не указано' end as животные,
+       -- Когда объявление последний раз попадалось в выдаче. Без этого
+       -- список молча мешал вчерашние строки с недельными: комнатности
+       -- 3+ и студии собираются раз в неделю, и половина ссылок ведёт
+       -- на уже снятое.
+       case when not is_active
+                 then 'снято ' || to_char(disappeared_date, 'DD.MM')
+            when last_seen_date = current_date     then 'сегодня'
+            when last_seen_date = current_date - 1 then 'вчера'
+            else (current_date - last_seen_date) || ' дн. назад'
+       end as видели,
        split_part(url, '?', 1) as ссылка
 from marts.offer_scored
 where source = 'cian'
