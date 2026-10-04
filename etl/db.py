@@ -71,14 +71,25 @@ def insert_bucket(conn, run_id: int, bucket, query: dict, parent_id: int | None,
 
 
 def close_bucket(conn, bucket_id: int, *, claimed=None, collected=None,
-                 pages=None, was_split=False, is_truncated=False, error=None) -> None:
+                 pages=None, was_split=False, is_truncated=False, error=None,
+                 split_after_underfill=False) -> None:
+    """Записать итог корзины.
+
+    `split_after_underfill` отличает деление по недобору от обычного.
+    Оба дают was_split, но означают разное: обычное — «заранее видно, что
+    не влезет», это норма; по недобору — «площадка пообещала больше, чем
+    отдала», это поломка, которую мы обошли. Без отдельной пометки
+    посчитать, как часто выдача врёт, задним числом уже нельзя.
+    """
     with conn.cursor() as cur:
         cur.execute(
             """update raw.bucket
                set claimed_count = %s, collected_count = %s, pages_fetched = %s,
-                   was_split = %s, is_truncated = %s, error = %s
+                   was_split = %s, is_truncated = %s, error = %s,
+                   split_after_underfill = %s
                where bucket_id = %s""",
-            (claimed, collected, pages, was_split, is_truncated, error, bucket_id),
+            (claimed, collected, pages, was_split, is_truncated, error,
+             split_after_underfill, bucket_id),
         )
     conn.commit()
 
