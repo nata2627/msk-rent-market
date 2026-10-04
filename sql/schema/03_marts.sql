@@ -56,6 +56,53 @@ order by ob.source, ob.offer_id, ob.snapshot_date desc;
 -- до обогащения выборка была бы пуста, и это выглядело бы как поломка
 -- сбора, а не как незаполненное поле.
 -- ---------------------------------------------------------------------
+-- Какой обход был последним для каждой комнатности.
+--
+-- Свежесть объявления нельзя мерить календарными днями. Однушки и
+-- двушки собираются ежедневно, трёшки, студии и свободная планировка —
+-- раз в неделю, и «последний раз видели четыре дня назад» означает для
+-- них совершенно разное: для двушки это четыре пропущенных обхода, для
+-- трёшки — что обхода с тех пор просто не было.
+--
+-- Поэтому точка отсчёта у каждой комнатности своя. Тот же разрез пара
+-- «комнатность и день» уже используется в db.mark_disappeared: там он
+-- не даёт записать в снятые то, на что мы не смотрели.
+--
+-- Считаются только УСПЕШНЫЕ обходы. Упавший прогон не доказывает
+-- отсутствия объявления, он доказывает отсутствие прогона.
+-- ---------------------------------------------------------------------
+create or replace view marts.room_coverage as
+with days as (
+    select distinct b.rooms as room_code, r.snapshot_date
+      from raw.collection_run r
+      join raw.bucket b using (run_id)
+     where r.status = 'ok' and r.source = 'cian' and b.rooms is not null
+), ranked as (
+    select room_code, snapshot_date,
+           row_number() over (partition by room_code
+                                  order by snapshot_date desc) as rn
+      from days
+)
+select room_code,
+       max(snapshot_date) filter (where rn = 1) as last_crawl_date,
+       max(snapshot_date) filter (where rn = 2) as prev_crawl_date,
+       count(*)                                 as crawls_total
+  from ranked
+ group by room_code;
+
+comment on view marts.room_coverage is
+    'Последний и предпоследний успешный обход по каждой комнатности';
+
+-- Все дни успешных обходов, по комнатностям. Нужен, чтобы считать не
+-- «сколько дней прошло», а «сколько обходов мы её не застали» — для
+-- трёшки это разные числа в семь раз.
+create or replace view marts.room_crawl_day as
+select distinct b.rooms as room_code, r.snapshot_date
+  from raw.collection_run r
+  join raw.bucket b using (run_id)
+ where r.status = 'ok' and r.source = 'cian' and b.rooms is not null;
+
+-- ---------------------------------------------------------------------
 -- Дубль ли это объявление: у группы одинаковых остаётся один
 -- представитель, остальные помечаются. Не удаляются: сырые данные и
 -- панель не трогаются, а аналитика сама решает, фильтровать или нет.
@@ -152,9 +199,44 @@ select l.*
      , (   (l.deposit_rub is null and l.deposit_months is null)
         or (l.deposit_rub is not null and l.deposit_rub > l.price * 6)
        ) as deposit_assumed
+     -- Свежесть в обходах, а не в днях. См. marts.room_coverage.
+     --
+     -- Застали ли мы объявление в последнем обходе ЕГО комнатности.
+     -- Это не то же самое, что «снято»: снятие подтверждается только
+     -- после трёх собранных дней отсутствия, и до тех пор объявление
+     -- считается активным. Но для того, кто собирается звонить, разница
+     -- между «было в последней выдаче» и «в последней выдаче его уже
+     -- нет» — главная, и она должна быть видна сразу, а не через три дня.
+     -- Счётчик, а не флаг «пропущено два обхода». Флаг сваливал в одну
+     -- кучу объявление, пропавшее вчера, и объявление из веб-архива,
+     -- которое в живой выдаче не встречалось ни разу: у архивных
+     -- last_seen_date — декабрь 2025, и «пропущено два обхода» про них
+     -- формально верно и совершенно бесполезно. Число различает.
+     , coalesce(m.crawls_missed, 0)              as crawls_missed
+     , (coalesce(m.crawls_missed, 0) = 0)        as seen_in_last_crawl
+     , rc.last_crawl_date
 from marts.offer_latest l
 left join core.offer_duplicate d
-       on d.source = l.source and d.offer_id = l.offer_id;
+       on d.source = l.source and d.offer_id = l.offer_id
+-- Код комнатности площадки, а не rooms_count: студии и свободная
+-- планировка живут в flat_type, и обходятся они своими корзинами.
+-- Комнатность вперёд вида — так же, как в db.mark_disappeared.
+left join marts.room_coverage rc
+       on rc.room_code = case when l.rooms_count between 1 and 6
+                                   then l.rooms_count::text
+                              when l.flat_type = 'studio'   then '7'
+                              when l.flat_type = 'openPlan' then '9'
+                         end
+left join lateral (
+    select count(*) as crawls_missed
+      from marts.room_crawl_day cd
+     where cd.room_code = case when l.rooms_count between 1 and 6
+                                    then l.rooms_count::text
+                               when l.flat_type = 'studio'   then '7'
+                               when l.flat_type = 'openPlan' then '9'
+                          end
+       and cd.snapshot_date > l.last_seen_date
+) m on true;
 
 -- ---------------------------------------------------------------------
 -- Уровень района: насколько он дороже или дешевле города.
