@@ -104,6 +104,7 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
         pets_skipped = 0
         buckets_total = 0
         buckets_underfilled = 0
+        buckets_resplit = 0
         buckets_failed = 0
         status, note = "ok", None
 
@@ -181,6 +182,47 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
                     seen_offers.update(_ids(page_offers))
 
                 truncated = claimed > config.BUCKET_CAPACITY
+                missing = claimed - collected
+
+                # Корзина отдала заметно меньше обещанного — делим и
+                # проходим заново.
+                #
+                # Решение делить принимается до листания, по заявленному
+                # числу, и этого мало: 04.10.2026 корзина четырёхкомнатных
+                # заявила 1231, в порог уложилась и отдала 633. Листание
+                # прошло без единой ошибки, страницы были не пустые —
+                # площадка просто повторяла уже показанное. Поймать такое
+                # можно только задним числом, по разнице обещанного и
+                # собранного. Пороги и таблица, из которой они взяты, —
+                # в config.RESPLIT_RATIO.
+                #
+                # Собранное не выбрасывается и не теряется: оно уже
+                # записано, а ключ панели не даст задвоить его детьми.
+                #
+                # Усечённые корзины сюда не попадают: у них недобор
+                # объясняется пределом выдачи, они уже помечены, и делить
+                # их бесполезно — делить было нечем, иначе бы поделили.
+                if (not truncated
+                        and missing >= config.RESPLIT_MIN_MISSING
+                        and collected < claimed * config.RESPLIT_RATIO):
+                    children = split(bucket, districts)
+                    if children:
+                        log.warning("Корзина %s отдала %d из %d (%.0f%%) — "
+                                    "делю и прохожу заново",
+                                    bucket.label(), collected, claimed,
+                                    100 * collected / claimed)
+                        buckets_resplit += 1
+                        if not dry_run:
+                            db.close_bucket(conn, bucket_id, claimed=claimed,
+                                            collected=collected, pages=pages_needed,
+                                            was_split=True,
+                                            split_after_underfill=True)
+                        stack.extend((c, bucket_id) for c in reversed(children))
+                        continue
+                    # Делить нечем — остаётся честно признать недобор.
+                    log.warning("Корзина %s отдала %d из %d и не делится — "
+                                "недобор остаётся", bucket.label(), collected, claimed)
+
                 if collected < claimed and not truncated:
                     buckets_underfilled += 1
                 if not dry_run:
@@ -288,10 +330,11 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
                          "(это снятие с публикации, а не сдача квартиры)", gone)
             db.refresh_marts(conn)
 
-        log.info("Итог: корзин %d, недобрано в %d, не прочиталось %d, "
-                 "уникальных объявлений %d, запросов %d, статус %s",
-                 buckets_total, buckets_underfilled, buckets_failed,
-                 len(seen_offers), client.requests_made, status)
+        log.info("Итог: корзин %d, недобрано в %d, переделено по недобору %d, "
+                 "не прочиталось %d, уникальных объявлений %d, запросов %d, "
+                 "статус %s",
+                 buckets_total, buckets_underfilled, buckets_resplit,
+                 buckets_failed, len(seen_offers), client.requests_made, status)
 
     if hasattr(client, "close"):
         client.close()
