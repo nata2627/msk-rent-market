@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>__LABEL__</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__REPO__/scripts/catchup.sh</string>
+        <string>__DATE__</string>
+        <string>__ROOMS__</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+
+    <!-- launchd запускает задачу с пустым окружением: docker и python
+         из Homebrew в PATH не попадут, если его не задать.
+         CATCHUP_PLIST — путь к этому файлу: скрипт удалит его в начале
+         работы, иначе разовая задача выстрелит ещё раз при следующем
+         входе в систему и запишет старую дату снимка поверх свежей. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>CATCHUP_PLIST</key>
+        <string>__PLIST__</string>
+    </dict>
+
+    <!-- Единственное отличие от планового прогона: задача срабатывает
+         сразу при загрузке и больше никогда. Расписания здесь нет
+         намеренно — догон всегда про конкретный прошедший день. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__REPO__/data/logs/catchup.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__REPO__/data/logs/catchup.err.log</string>
+</dict>
+</plist>
