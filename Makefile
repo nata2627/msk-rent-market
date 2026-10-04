@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -31,6 +31,7 @@ help:
 	@echo "make catchup DATE=2026-10-04 ROOMS=1,2 — догнать пропущенный день"
 	@echo "make survival — срок жизни объявления до снятия"
 	@echo "make drops-analysis — кто снижает цену и через сколько дней"
+	@echo "make figures — перерисовать графики README"
 	@echo "make rebuild — пересобрать панель из сырых снимков"
 	@echo "make marts   — пересобрать материализованные витрины"
 	@echo "make checks  — проверки качества собранных данных"
@@ -261,6 +262,9 @@ survival:      ## срок жизни объявления до снятия
 
 drops-analysis: ## кто снижает цену и через сколько дней
 	$(PY) -m src.drops
+
+figures:       ## перерисовать графики для README из текущих данных
+	$(PY) -m src.figures
 
 hedonic-full:
 	$(PY) -m src.hedonic --coefficients
