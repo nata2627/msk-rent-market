@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -28,6 +28,7 @@ help:
 	@echo "make weekly   — добрать комнатности 3+ (в ежедневный срез они не входят)"
 	@echo "make schedule-weekly — добор раз в неделю, по воскресеньям"
 	@echo "make schedule-status — идёт ли расписание и чем кончились прогоны"
+	@echo "make catchup DATE=2026-10-04 ROOMS=1,2 — догнать пропущенный день"
 	@echo "make rebuild — пересобрать панель из сырых снимков"
 	@echo "make marts   — пересобрать материализованные витрины"
 	@echo "make checks  — проверки качества собранных данных"
@@ -196,6 +197,34 @@ unschedule-weekly:
 	@launchctl bootout gui/$$(id -u)/$(WEEKLY_LABEL) 2>/dev/null || true
 	@rm -f $(WEEKLY_PLIST)
 	@echo "Недельный добор снят."
+
+# Догон пропущенного дня. Та же дата снимка, только нужные комнатности;
+# уже собранное не задваивается ключом панели.
+#
+#   make catchup                      # сегодня, комнатности 1,2
+#   make catchup DATE=2026-10-04 ROOMS=1,2
+#
+# Разовой задачей launchd, а не прямо из терминала. Часовой обход,
+# запущенный из сеанса, умирает вместе с ним — так 26.09.2026 прогон
+# оборвался на 191-й корзине из 294. Задача снимает себя сама, в начале
+# работы скрипта, поэтому второй раз при входе в систему не выстрелит.
+CATCHUP_LABEL := com.nata2627.rent-msk.catchup
+CATCHUP_PLIST := $(HOME)/Library/LaunchAgents/$(CATCHUP_LABEL).plist
+
+catchup:
+	@mkdir -p $(HOME)/Library/LaunchAgents
+	@d="$(DATE)"; [ -n "$$d" ] || d="$$(date +%F)"; \
+	 r="$(ROOMS)"; [ -n "$$r" ] || r="1,2"; \
+	 sed -e 's|__REPO__|$(CURDIR)|g' \
+	     -e 's|__LABEL__|$(CATCHUP_LABEL)|g' \
+	     -e 's|__PLIST__|$(CATCHUP_PLIST)|g' \
+	     -e "s|__DATE__|$$d|g" \
+	     -e "s|__ROOMS__|$$r|g" \
+	     scripts/catchup.plist.template > $(CATCHUP_PLIST); \
+	 launchctl bootout gui/$$(id -u)/$(CATCHUP_LABEL) 2>/dev/null || true; \
+	 launchctl bootstrap gui/$$(id -u) $(CATCHUP_PLIST); \
+	 echo "Догон поставлен: дата $$d, комнатности $$r."
+	@echo "Он ждёт освобождения замка, до трёх часов. Журнал — data/logs/catchup_*.log"
 
 # Добор руками, без расписания.
 weekly:
