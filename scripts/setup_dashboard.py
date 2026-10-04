@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -26,10 +27,20 @@ import psycopg
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from etl.config import DB  # noqa: E402
 
-MB = "http://localhost:3000"
-EMAIL, PASSWORD = "", ""
-DB_ID = 3
+# Metabase живёт не здесь, а в контейнере соседнего проекта, и доступ к
+# нему — чужой секрет. Поэтому адрес, учётка и номер подключения читаются
+# из .env, а не лежат в коде: репозиторий публичный, и зашитый пароль в
+# нём — это пароль, выложенный в интернет, сколько бы раз он ни был «от
+# локального стенда».
+MB = os.getenv("METABASE_URL", "http://localhost:3000")
+EMAIL = os.getenv("METABASE_USER", "")
+PASSWORD = os.getenv("METABASE_PASSWORD", "")
+DB_ID = int(os.getenv("METABASE_DB_ID", "0"))
 DASH_NAME = "Аренда Москвы"
+
+if not (EMAIL and PASSWORD and DB_ID):
+    sys.exit("Нет доступа к Metabase. Заполните METABASE_USER, "
+             "METABASE_PASSWORD и METABASE_DB_ID в .env — образец в .env.example")
 
 SESSION = json.loads(urllib.request.urlopen(urllib.request.Request(
     f"{MB}/api/session", method="POST",
