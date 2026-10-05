@@ -122,8 +122,16 @@ def collect(conn) -> dict[str, str]:
     """)
     f["fill_coords"] = thousands(coords)
     f["fill_district"] = thousands(district)
-    f["fill_park"] = thousands(park)
-    f["fill_no_park"] = thousands(total - park)
+    # Целой фразой, а не числом. Отставших бывает ноль, и тогда «у
+    # остальных 0 координаты появились позже» — бессмыслица, которая
+    # попадёт в публичный текст и там останется.
+    behind = total - park
+    f["park_fill_note"] = (
+        f"посчитано у всех {thousands(park)}"
+        if behind == 0 else
+        f"посчитано у {thousands(park)}: у остальных {thousands(behind)} "
+        f"координаты появились позже последнего пересчёта, "
+        f"он догонит их следующим прогоном")
 
     (mkad,) = one("select count(*) from marts.offer_segment "
                   "where source='cian' and inside_mkad")
