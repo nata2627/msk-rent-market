@@ -526,6 +526,122 @@ join core.offer o on o.source = pc.source and o.offer_id = pc.offer_id
 where pc.direction = 'down';
 
 -- ---------------------------------------------------------------------
+-- Ушедшие с рынка: цена того, что перестало висеть, против цены того,
+-- что висит до сих пор.
+--
+-- Зачем отдельная витрина. Медиана выдачи и даже индекс по совпавшим
+-- объявлениям описывают СТОК: то, что лежит на полке. А вопрос «сколько
+-- на самом деле стоит квартира» — про то, что с полки уходит. Сток
+-- засорён объявлениями, которые висят именно потому, что по своей цене
+-- никому не нужны, и чем дольше наблюдение, тем больше их доля.
+--
+-- ПЕРВАЯ И ГЛАВНАЯ ОГОВОРКА: исчезновение объявления это НЕ сдача
+-- квартиры. Объявление снимают, когда квартиру сдали, когда передумали
+-- сдавать, когда переложили к другому агенту и когда у публикации вышел
+-- срок. Различить причины по выдаче нельзя. И цена здесь по-прежнему
+-- ЗАПРАШИВАЕМАЯ — последняя, которую автор просил перед тем, как убрать
+-- объявление. Цен сделок у нас нет и не будет.
+--
+-- Когорта — только настоящие новые публикации, появившиеся не раньше
+-- первого дня панели. Иначе левое усечение: объявление, которое мы
+-- застали уже висящим, прожило неизвестно сколько до нашей первой
+-- встречи, и «ушло за один обход» у него значило бы совсем другое.
+-- Возраст считается от даты публикации площадки, а не от первой встречи:
+-- проверено в src/survival.py, у 38 990 объявлений нет ни одного, где
+-- первая встреча раньше публикации, то есть площадка дату не поднимает.
+--
+-- Скорость ухода мерится В ОБХОДАХ, а не в днях: это то, что мы
+-- действительно наблюдали. Объявление, увиденное в одном обходе и
+-- больше ни в одном, пробыло на полке меньше двух суток.
+--
+-- Цена сравнивается с медианой своего района и комнатности
+-- (marts.comparable_median), а не в рублях: сорок метров в Капотне и в
+-- Хамовниках это разные сорок метров, и абсолютная шкала сравнивала бы
+-- районы, а не скорость ухода. Отношение берётся в логарифме — ставки
+-- логнормальны, и среднее логарифмов даёт геометрическое среднее, по
+-- которому проценты складываются, а не расползаются.
+--
+-- Неудобные наблюдения не выброшены, а помечены: exclude_reason говорит,
+-- почему строка не идёт в счёт, и карточка «Что сюда не вошло»
+-- показывает, сколько их. Порог отношения 0,2-5 отсекает опечатки
+-- площадки (85 млн руб./мес за 55 м² — настоящая строка в raw).
+-- ---------------------------------------------------------------------
+drop materialized view if exists marts.offer_exit cascade;
+create materialized view marts.offer_exit as
+with panel_start as (
+    select min(snapshot_date) as d0
+    from core.offer_observation where source = 'cian'),
+-- Последний ЗАВЕРШЁННЫЙ обход, а не последняя дата в панели: сегодняшний
+-- день уже есть в наблюдениях, но собран наполовину.
+last_ok as (
+    select max(snapshot_date) as d1
+    from raw.collection_run where source = 'cian' and status = 'ok'),
+seen as (
+    select offer_id, count(distinct snapshot_date) as crawls
+    from core.offer_observation where source = 'cian' group by 1)
+select s.source
+     , s.offer_id
+     , s.district
+     , s.rooms_count
+     , s.total_area
+     , s.price                                            as price
+     , s.med_price
+     , s.published_at::date                               as published_on
+     , s.first_seen_date
+     , s.last_seen_date
+     , s.disappeared_date
+     , sn.crawls
+     , s.disappeared_date is not null                     as has_left
+     , s.disappeared_date - s.published_at::date          as age_at_exit
+     , ln(s.price / s.med_price)                          as log_rel_price
+     -- Было ли у публикации время не только исчезнуть, но и подтвердить
+     -- исчезновение. Без этой отметки последний день ряда всегда провален:
+     -- 03.10.2026 показывал 1,5% быстрых уходов против 7-10% в остальные
+     -- дни — не потому, что рынок встал, а потому, что подтвердиться они
+     -- не успели.
+     --
+     -- Четыре дня, и каждый за своё. Объявление, опубликованное после
+     -- десяти утра, попадает в выдачу только следующим обходом — это
+     -- один день. Снятие подтверждается тремя СОБРАННЫМИ днями отсутствия
+     -- (DISAPPEARED_AFTER_DAYS = 3) — это ещё три. Порог посчитан от
+     -- константы сбора, а не назначен на глаз.
+     , s.published_at::date <= l.d1 - 4                   as exit_observable
+     -- Границы групп взяты для читаемости таблицы, а не выведены из
+     -- данных. Вывод от них не зависит: рядом на графике тот же разрез по
+     -- каждому обходу отдельно, без всяких границ.
+     , case when s.disappeared_date is null then 5
+            when sn.crawls = 1 then 1
+            when sn.crawls <= 3 then 2
+            when sn.crawls <= 7 then 3
+            else 4 end                                    as speed_order
+     , case when s.disappeared_date is null then 'ещё висит'
+            when sn.crawls = 1  then 'ушло за один обход'
+            when sn.crawls <= 3 then 'ушло за 2-3 обхода'
+            when sn.crawls <= 7 then 'ушло за 4-7 обходов'
+            else 'ушло за 8 и больше обходов' end          as speed_group
+     , case when coalesce(s.is_duplicate, false)   then 'дубль'
+            when coalesce(s.is_room_share, false)  then 'комната, а не квартира'
+            when coalesce(s.is_price_outlier, false) then 'выброс по цене'
+            when s.price / s.med_price < 0.2 or s.price / s.med_price > 5
+                 then 'отношение к сопоставимым вне 0,2-5'
+            end                                           as exclude_reason
+from marts.offer_scored s
+cross join panel_start p
+cross join last_ok l
+join seen sn on sn.offer_id = s.offer_id
+where s.source = 'cian'
+  and s.rooms_count in (1, 2)
+  and s.published_at is not null
+  and s.published_at::date >= p.d0
+  and s.first_seen_date >= s.published_at::date
+  and s.price > 0
+  and s.total_area > 0
+  and s.med_price > 0;
+
+create unique index if not exists offer_exit_key
+    on marts.offer_exit (source, offer_id);
+
+-- ---------------------------------------------------------------------
 -- Обновление всех материализованных витрин одной командой.
 -- CONCURRENTLY требует уникального индекса (он выше) и не блокирует чтение.
 -- ---------------------------------------------------------------------
@@ -537,11 +653,15 @@ begin
     -- Порядок важен: оценка считается из сопоставимых, поэтому она
     -- обновляется после них, а не до.
     refresh materialized view concurrently marts.offer_scored;
+    -- Ушедшие считаются из оценки (там уже сведены сопоставимые и метки
+    -- дублей), поэтому строго после неё.
+    refresh materialized view concurrently marts.offer_exit;
 exception when others then
     -- CONCURRENTLY падает, если представление ещё ни разу не наполнялось.
     refresh materialized view marts.median_price_by_district;
     refresh materialized view marts.comparable_median;
     refresh materialized view marts.district_level;
     refresh materialized view marts.offer_scored;
+    refresh materialized view marts.offer_exit;
 end;
 $$ language plpgsql;
