@@ -642,6 +642,105 @@ create unique index if not exists offer_exit_key
     on marts.offer_exit (source, offer_id);
 
 -- ---------------------------------------------------------------------
+-- Суточные агрегаты панели и уходов.
+--
+-- Зачем. Три карточки дашборда («Медиана по дням сбора», «Медиана цены
+-- ушедших по дням», «Для сравнения: что делают со своей ценой те, кто не
+-- уходит») проходили всю панель целиком при каждом открытии: 1,2-4,5 с на
+-- тёплом кеше и до 9 с на холодном. Панель растёт на 16 тысяч наблюдений
+-- в сутки, и дальше это только хуже. Проход делается один раз за прогон,
+-- здесь, а карточки читают три десятка строк.
+--
+-- Зерно — день × комнатность, где **комнатность 0 означает «одно- и
+-- двухкомнатные вместе»**. Отдельной строкой, а не суммой на лету: медиану
+-- из двух медиан не получить, а сводная медиана карточке нужна.
+--
+-- Для индекса по совпавшим объявлениям хранится не готовый шаг, а сумма
+-- логарифмов и число пар. Среднее логарифмов это сумма, делённая на число
+-- пар, и из таких слагаемых сводный шаг собирается правильно; из готовых
+-- средних по комнатностям — нет.
+-- ---------------------------------------------------------------------
+drop materialized view if exists marts.panel_day cascade;
+create materialized view marts.panel_day as
+with obs as (
+    select ob.snapshot_date as d, ob.offer_id, ob.price, o.rooms_count
+    from core.offer_observation ob
+    join core.offer o using (source, offer_id)
+    where ob.source = 'cian' and o.rooms_count in (1, 2)
+      and not ob.is_daily and ob.price > 0
+      -- Последний ЗАВЕРШЁННЫЙ обход: сегодняшний день уже есть в
+      -- наблюдениях, но собран наполовину, и медиана по нему показала бы
+      -- не рынок, а то, до какой корзины успел дойти обход.
+      and ob.snapshot_date <= (select max(snapshot_date) from raw.collection_run
+                               where source = 'cian' and status = 'ok')),
+-- Пары только соседних дней: разрыв в сутки и разрыв в неделю — разные
+-- величины, в один дневной шаг их складывать нельзя.
+pairs as (
+    select d, rooms_count, lag(d) over w as prev_d,
+           ln(price / lag(price) over w) as g
+    from obs window w as (partition by offer_id order by d)),
+agg as (
+    select d, rooms_count::smallint as rooms_count, count(*) as offers,
+           percentile_cont(0.5) within group (order by price) as med_price
+    from obs group by 1, 2
+    union all
+    select d, 0::smallint, count(*),
+           percentile_cont(0.5) within group (order by price)
+    from obs group by 1),
+step as (
+    select d, rooms_count::smallint as rooms_count, sum(g) as sum_ln,
+           count(*) as pairs
+    from pairs where g is not null and prev_d = d - 1 group by 1, 2
+    union all
+    select d, 0::smallint, sum(g), count(*)
+    from pairs where g is not null and prev_d = d - 1 group by 1)
+select a.d                as snapshot_date
+     , a.rooms_count
+     , a.offers
+     , a.med_price
+     , s.sum_ln
+     , coalesce(s.pairs, 0) as pairs
+from agg a left join step s on s.d = a.d and s.rooms_count = a.rooms_count;
+
+create unique index if not exists panel_day_key
+    on marts.panel_day (snapshot_date, rooms_count);
+
+-- ---------------------------------------------------------------------
+-- Цена ушедших по календарным дням.
+--
+-- День события — последний день присутствия в выдаче, а не дата снятия:
+-- снятие это день, когда мы заметили отсутствие, а цена наблюдалась в
+-- последний день присутствия. Ряд поэтому кончается за три дня до
+-- последнего обхода.
+--
+-- Когорта здесь ШИРЕ, чем в offer_exit: берутся все подтверждённые уходы,
+-- а не только опубликованные внутри панели. Для календарного уровня
+-- ограничение когортой не нужно — цену мы наблюдали прямо, — а выборка
+-- вдвое больше.
+-- ---------------------------------------------------------------------
+drop materialized view if exists marts.exit_day cascade;
+create materialized view marts.exit_day as
+with e as (
+    select s.last_seen_date as d, s.rooms_count, s.price
+    from marts.offer_scored s
+    where s.source = 'cian' and s.rooms_count in (1, 2)
+      and s.disappeared_date is not null
+      and s.price > 0 and s.total_area > 0
+      and not coalesce(s.is_duplicate, false)
+      and not coalesce(s.is_room_share, false)
+      and not coalesce(s.is_price_outlier, false))
+select d as exit_date, rooms_count::smallint as rooms_count, count(*) as exits,
+       percentile_disc(0.5) within group (order by price)::int as med_price
+from e group by 1, 2
+union all
+select d, 0::smallint, count(*),
+       percentile_disc(0.5) within group (order by price)::int
+from e group by 1;
+
+create unique index if not exists exit_day_key
+    on marts.exit_day (exit_date, rooms_count);
+
+-- ---------------------------------------------------------------------
 -- Обновление всех материализованных витрин одной командой.
 -- CONCURRENTLY требует уникального индекса (он выше) и не блокирует чтение.
 -- ---------------------------------------------------------------------
@@ -656,6 +755,9 @@ begin
     -- Ушедшие считаются из оценки (там уже сведены сопоставимые и метки
     -- дублей), поэтому строго после неё.
     refresh materialized view concurrently marts.offer_exit;
+    refresh materialized view concurrently marts.panel_day;
+    -- Уходы по дням считаются из оценки, поэтому после неё.
+    refresh materialized view concurrently marts.exit_day;
 exception when others then
     -- CONCURRENTLY падает, если представление ещё ни разу не наполнялось.
     refresh materialized view marts.median_price_by_district;
@@ -663,5 +765,7 @@ exception when others then
     refresh materialized view marts.district_level;
     refresh materialized view marts.offer_scored;
     refresh materialized view marts.offer_exit;
+    refresh materialized view marts.panel_day;
+    refresh materialized view marts.exit_day;
 end;
 $$ language plpgsql;
