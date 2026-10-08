@@ -751,16 +751,19 @@ MARKET = [
     # Линии выходят почти плоскими, и это не недоделка расчёта. Масса
     # объявлений стоит ровно на круглых числах, 65 000 и 90 000, поэтому
     # медиана перескакивает ступенями и двухпроцентное движение рынка
-    # различить не может в принципе. Для движения есть карточка выше.
-    market_card("Медиана по дням сбора, руб./мес", f"""
-        select ob.snapshot_date as "День",
-               o.rooms_count::text as "Комнат",
-               percentile_cont(0.5) within group (order by ob.price)::int as "Медиана"
-        from core.offer_observation ob join core.offer o using (source, offer_id)
-        where ob.source = 'cian' and o.rooms_count in (1, 2)
-          and not ob.is_daily and ob.price > 0
-          and ob.snapshot_date <= {LATEST}
-        group by 1, 2 order by 1, 2
+    # различить не может в принципе. Движение — на вкладке «Ушедшие».
+    #
+    # Считается из marts.panel_day, а не из панели: проход по 283 тысячам
+    # наблюдений стоил 1,6 с на тёплом кеше и 7,6 с на холодном, а панель
+    # растёт на 16 тысяч строк в сутки. Отсечение по последнему
+    # завершённому обходу уже сделано в самой витрине.
+    market_card("Медиана по дням сбора, руб./мес", """
+        select snapshot_date as "День",
+               rooms_count::text as "Комнат",
+               med_price::int as "Медиана"
+        from marts.panel_day
+        where rooms_count in (1, 2)
+        order by 1, 2
     """, "line", {"graph.dimensions": ["День", "Комнат"],
                   "graph.metrics": ["Медиана"],
                   "column_settings": {'["name","Медиана"]': {"compact": False}},
@@ -943,7 +946,17 @@ LEVELS_CTE = """
 # Разрез расширяется сам: каждый новый обход открывает следующий возраст,
 # каждая новая неделя — ещё один столбец.
 # =====================================================================
-WEEKLY_CTE = """
+def weekly_cte(by_rooms=False):
+    """Основа недельного разреза. by_rooms=True добавляет комнатность в зерно.
+
+    Разрезов два, и оба нужны. Сводный даёт узкие интервалы, раздельный
+    показывает то, что сводный усредняет в кашу: однушки уходят заметно
+    быстрее двушек (на первом обходе 7,1% против 5,4% при замере
+    08.10.2026), то есть сводная доля складывает два разных рынка.
+    Платится за это вдвое меньшей ячейкой и вдвое более широким интервалом.
+    """
+    g2 = "rooms_count" if by_rooms else "0::smallint"
+    return f"""
         with b as (
           select (select min(snapshot_date) from core.offer_observation
                   where source = 'cian') as d0,
@@ -966,6 +979,7 @@ WEEKLY_CTE = """
         pool as (
           select 1 + ((e.published_on - b.d0) / 7) as wk,
                  (e.published_on - b.d0) % 7 as dow,
+                 {g2} as g2,
                  e.crawls, e.has_left, e.price, e.log_rel_price, e.district
           from marts.offer_exit e, b where e.exclude_reason is null),
         sel as (
@@ -975,24 +989,26 @@ WEEKLY_CTE = """
           join matched m on m.j = w.j and p.dow < m.n_days
           where w.own_days > 0 and m.n_days >= 4 and m.weeks_ready >= 2),
         cell as (
-          select j, n_days, wk,
+          select j, n_days, wk, g2,
                  count(*) filter (where crawls >= j) as risk,
                  count(*) filter (where crawls = j and has_left) as died,
                  percentile_disc(0.5) within group (order by price)
                    filter (where crawls = j and has_left)::int as medp,
                  avg(log_rel_price) filter (where crawls = j and has_left) as mu,
                  count(distinct district) filter (where crawls = j and has_left) as nc
-          from sel group by 1, 2, 3),
-        ex as (select j, wk, district, log_rel_price
+          from sel group by 1, 2, 3, 4),
+        ex as (select j, wk, g2, district, log_rel_price
                from sel where crawls = j and has_left),
-        eg as (select ex.j, ex.wk, ex.district, sum(ex.log_rel_price - c.mu) as g
-               from ex join cell c using (j, wk) group by 1, 2, 3),
-        ev as (select j, wk, sum(g * g) as ss from eg group by 1, 2),
+        eg as (select ex.j, ex.wk, ex.g2, ex.district, sum(ex.log_rel_price - c.mu) as g
+               from ex join cell c using (j, wk, g2) group by 1, 2, 3, 4),
+        ev as (select j, wk, g2, sum(g * g) as ss from eg group by 1, 2, 3),
         tot as (
           select c.*,
                  sqrt((c.nc::numeric / nullif(c.nc - 1, 0)) * ev.ss
-                      / (c.died::numeric * c.died)) as se
-          from cell c join ev using (j, wk))
+                      / (c.died::numeric * c.died)) as se,
+                 case c.g2 when 1 then 'однокомнатные' when 2 then 'двухкомнатные'
+                           else 'все' end as rooms_label
+          from cell c join ev using (j, wk, g2))
 """
 
 
@@ -1177,7 +1193,7 @@ EXITS = [
 
     # Длинный формат, а не столбец на неделю: недель будет больше, и
     # таблица обязана расти сама, без правки запроса.
-    market_card("Уход и цена по возрасту и неделям", WEEKLY_CTE + """
+    market_card("Уход и цена по возрасту и неделям", weekly_cte() + """
         select j as "Возраст, обходов",
                n_days as "Дней в окне",
                'неделя ' || wk as "Неделя",
@@ -1195,7 +1211,7 @@ EXITS = [
                     "объявлений. Окно совпадает по дням недели, уже четырёх дней "
                     "не показывается."),
 
-    market_card("Доля ушедших на этом обходе, по неделям", WEEKLY_CTE + """
+    market_card("Доля ушедших на этом обходе, по неделям", weekly_cte() + """
         select j as "Возраст, обходов",
                'неделя ' || wk as "Неделя",
                round(100.0 * died / nullif(risk, 0), 2) as "Ушло, %"
@@ -1206,7 +1222,7 @@ EXITS = [
          "graph.y_axis.title_text": "Процентов от дошедших до этого возраста",
          "graph.x_axis.title_text": "Сколько обходов объявление прожило"}),
 
-    market_card("Медиана цены ушедших на этом обходе, по неделям", WEEKLY_CTE + """
+    market_card("Медиана цены ушедших на этом обходе, по неделям", weekly_cte() + """
         select j as "Возраст, обходов",
                'неделя ' || wk as "Неделя",
                medp as "Медиана"
@@ -1222,10 +1238,55 @@ EXITS = [
                     "одного возраста между неделями, уровень между возрастами "
                     "частично состав."),
 
+    # Тот же разрез по комнатностям. Он показывает то, что сводный
+    # усредняет в кашу: однушки уходят заметно быстрее двушек. На первом
+    # обходе 7,1% против 5,4%, на втором 10,9% против 6,0% (замер
+    # 08.10.2026) — это два разных рынка, и сводная доля складывает их.
+    #
+    # Цена при этом по неделям не двинулась ни в одной из шести ячеек:
+    # медиана однушек 52 000 против 55 000 и двушек 70 000 против 78 000
+    # выглядят скачками, но отклонение от сопоставимых даёт +2,6% (±5,9) и
+    # +6,8% (±8,8) — внутри интервала. Поэтому в таблице стоят и медиана,
+    # и отклонение с интервалом: по одной медиане вывод был бы неверным.
+    market_card("Уход и цена по возрасту, неделям и комнатности",
+                weekly_cte(by_rooms=True) + """
+        select j as "Возраст, обходов",
+               rooms_label as "Комнатность",
+               'неделя ' || wk as "Неделя",
+               n_days as "Дней в окне",
+               risk as "Дошло до этого возраста",
+               died as "Ушло на этом обходе",
+               round(100.0 * died / nullif(risk, 0), 1) as "Ушло, % от дошедших",
+               medp as "Медиана, руб",
+               round((100 * (exp(mu) - 1))::numeric, 1) as "К сопоставимым, %",
+               round((100 * 1.96 * se)::numeric, 1) as "± 95% к сопоставимым"
+        from tot order by j, g2, wk
+    """, "table",
+        {"column_settings": {'["name","Медиана, руб"]': {"compact": False}}},
+        size=(24, 11),
+        description="Ячейка здесь вдвое меньше сводной, и интервалы вдвое шире. "
+                    "Читать так: доля и медиана — по этой таблице, значимость "
+                    "разницы между неделями — по колонке с интервалом."),
+
+    market_card("Доля ушедших на этом обходе: комнатности и недели",
+                weekly_cte(by_rooms=True) + """
+        select j as "Возраст, обходов",
+               rooms_label || ', неделя ' || wk as "Разрез",
+               round(100.0 * died / nullif(risk, 0), 2) as "Ушло, %"
+        from tot order by j, g2, wk
+    """, "line",
+        {"graph.dimensions": ["Возраст, обходов", "Разрез"],
+         "graph.metrics": ["Ушло, %"],
+         "graph.y_axis.title_text": "Процентов от дошедших до этого возраста",
+         "graph.x_axis.title_text": "Сколько обходов объявление прожило"},
+        description="Линии однокомнатных идут выше двухкомнатных на всех "
+                    "возрастах: однушки уходят быстрее. Это и есть причина "
+                    "делить — сводная линия складывала два разных рынка."),
+
     # Выводы и, главное, честный ответ на вопрос «уже можно смотреть
     # динамику или ещё нет». Даты, когда разрез расширится, считаются из
     # того же правила досмотра, а не вписаны.
-    market_card("Что говорит недельный разрез", WEEKLY_CTE + """
+    market_card("Что говорит недельный разрез", weekly_cte() + """
         -- Сравниваются ДВЕ ПОСЛЕДНИЕ недели: вопрос «сдвинулось ли с прошлой
         -- недели». Когда недель станет много, пары всех со всеми только
         -- запутали бы вывод.
@@ -1309,18 +1370,13 @@ EXITS = [
     # наблюдалась в последний день присутствия. Ряд поэтому кончается за
     # три дня до последнего обхода — раньше снятие не подтверждается.
     market_card("Медиана цены ушедших по дням, руб./мес", """
-        select s.last_seen_date as "Последний день в выдаче",
-               case s.rooms_count when 1 then 'однокомнатные'
-                                  else 'двухкомнатные' end as "Комнатность",
-               percentile_disc(0.5) within group (order by s.price)::int as "Медиана"
-        from marts.offer_scored s
-        where s.source = 'cian' and s.rooms_count in (1, 2)
-          and s.disappeared_date is not null
-          and s.price > 0 and s.total_area > 0
-          and not coalesce(s.is_duplicate, false)
-          and not coalesce(s.is_room_share, false)
-          and not coalesce(s.is_price_outlier, false)
-        group by 1, 2 order by 1, 2
+        select exit_date as "Последний день в выдаче",
+               case rooms_count when 1 then 'однокомнатные'
+                                else 'двухкомнатные' end as "Комнатность",
+               med_price as "Медиана"
+        from marts.exit_day
+        where rooms_count in (1, 2)
+        order by 1, 2
     """, "line",
         {"graph.dimensions": ["Последний день в выдаче", "Комнатность"],
          "graph.metrics": ["Медиана"],
@@ -1570,32 +1626,26 @@ EXITS = [
     # больше чем в полтора раза всего 43, и индекс от них сдвигается на
     # 0,003 п.п. Подрезка добавила бы произвольный порог и ничего не
     # изменила.
-    market_card("Для сравнения: что делают со своей ценой те, кто не уходит", f"""
-        with obs as materialized (
-          select ob.offer_id, ob.snapshot_date as d, ob.price
-          from core.offer_observation ob join core.offer o using (source, offer_id)
-          where ob.source = 'cian' and o.rooms_count in (1, 2)
-            and not ob.is_daily and ob.price > 0
-            and ob.snapshot_date <= {LATEST}),
-        pairs as (
-          select d, lag(d) over w as prev_d, ln(price / lag(price) over w) as g
-          from obs window w as (partition by offer_id order by d)),
-        step as (
-          select d, avg(g) as g from pairs
-          where g is not null and prev_d = d - 1 group by 1),
-        days as (select distinct d from obs),
-        matched as (
-          select v.d, exp(coalesce(sum(s.g) over (order by v.d), 0)) as idx
-          from days v left join step s using (d)),
-        pool as (
-          select d, percentile_cont(0.5) within group (order by price) as med
-          from obs group by d),
-        b as (select med from pool order by d limit 1)
+    #
+    # Считается из marts.panel_day: там лежит СУММА логарифмов и число пар
+    # за день, а не готовый шаг. Из суммы и числа пар сводный шаг
+    # собирается правильно, из готовых средних по комнатностям — нет.
+    # Карточка стоила 4,5 с на тёплом кеше и 9 с на холодном, потому что
+    # дважды проходила панель оконной функцией.
+    market_card("Для сравнения: что делают со своей ценой те, кто не уходит", """
+        with s as (
+          select snapshot_date as d, med_price,
+                 case when pairs > 0 then sum_ln / pairs end as g
+          from marts.panel_day where rooms_count = 0),
+        m as (
+          select d, med_price,
+                 exp(coalesce(sum(g) over (order by d), 0)) as idx
+          from s),
+        b as (select med_price from m order by d limit 1)
         select m.d as "День",
                round((100 * m.idx)::numeric, 2) as "По совпавшим объявлениям",
-               round((100 * p.med / b.med)::numeric, 2) as "Медиана всей панели"
-        from matched m join pool p using (d), b
-        order by 1
+               round((100 * m.med_price / b.med_price)::numeric, 2) as "Медиана всей панели"
+        from m, b order by 1
     """, "line", {"graph.dimensions": ["День"],
                   "graph.metrics": ["По совпавшим объявлениям", "Медиана всей панели"],
                   "graph.y_axis.title_text": "Первый день сбора = 100",
