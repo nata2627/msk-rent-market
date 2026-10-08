@@ -341,11 +341,19 @@ def search_card(name, select, display="table", viz=None, order="order by price",
     return card
 
 
-def market_card(name, sql, display="table", viz=None):
-    return {"name": name, "display": display, "filtered": False,
+def market_card(name, sql, display="table", viz=None, size=None, description=None):
+    card = {"name": name, "display": display, "filtered": False,
             "dataset_query": {"type": "native", "database": DB_ID,
                               "native": {"query": sql}},
             "visualization_settings": viz or {}}
+    if size:
+        card["size"] = size
+    # Подсказка у заголовка карточки. Место для оговорки, которая нужна,
+    # чтобы число прочитали верно, но которая не стоит отдельной строки
+    # на экране.
+    if description:
+        card["description"] = description
+    return card
 
 
 # ---------------------------------------------------------------------
@@ -738,6 +746,32 @@ MARKET = [
     """, "map", {"map.type": "region", "map.region": "moscow_districts",
                  "map.dimension": "Район", "map.metric": "Медиана"}),
 
+    # Медиана в рублях, а не в индексе: сюда смотрят, чтобы узнать цену.
+    #
+    # Линии выходят почти плоскими, и это не недоделка расчёта. Масса
+    # объявлений стоит ровно на круглых числах, 65 000 и 90 000, поэтому
+    # медиана перескакивает ступенями и двухпроцентное движение рынка
+    # различить не может в принципе. Для движения есть карточка выше.
+    market_card("Медиана по дням сбора, руб./мес", f"""
+        select ob.snapshot_date as "День",
+               o.rooms_count::text as "Комнат",
+               percentile_cont(0.5) within group (order by ob.price)::int as "Медиана"
+        from core.offer_observation ob join core.offer o using (source, offer_id)
+        where ob.source = 'cian' and o.rooms_count in (1, 2)
+          and not ob.is_daily and ob.price > 0
+          and ob.snapshot_date <= {LATEST}
+        group by 1, 2 order by 1, 2
+    """, "line", {"graph.dimensions": ["День", "Комнат"],
+                  "graph.metrics": ["Медиана"],
+                  "column_settings": {'["name","Медиана"]': {"compact": False}},
+                  "graph.y_axis.title_text": "Медиана, руб./мес",
+                  "graph.x_axis.title_text": ""},
+       description="Линии почти плоские, и это свойство данных, а не ошибка "
+                   "расчёта: масса объявлений стоит ровно на круглых числах, "
+                   "65 000 и 90 000, поэтому медиана ходит ступенями и "
+                   "двухпроцентное движение рынка не различает. Движение "
+                   "смотреть на вкладке «Ушедшие»."),
+
     market_card("Подешевевшие объявления", f"""
         select pc.changed_on as "Когда", o.district as "Район",
                o.rooms_count as "Комн", o.total_area::int as "м²",
@@ -791,6 +825,792 @@ MARKET = [
     """),
 ]
 
+
+
+# =====================================================================
+# Вкладка «Ушедшие»: цена того, что с рынка уходит, против цены того,
+# что на нём остаётся.
+#
+# Зачем отдельная вкладка. Медиана выдачи и индекс по совпавшим
+# объявлениям описывают сток — то, что лежит на полке. Но сток засорён
+# объявлениями, которые висят именно потому, что по своей цене никому не
+# нужны, и смотреть на рынок по ним значит смотреть на худшее из него.
+# Вопрос «сколько на самом деле стоит квартира» — про то, что с полки
+# уходит.
+#
+# Оговорки, без которых вкладка читается неправильно, и обе стоят прямо
+# в карточке выводов: исчезновение объявления это НЕ сдача квартиры, и
+# цена здесь по-прежнему запрашиваемая — последняя, которую автор просил
+# перед тем, как снять объявление.
+#
+# Когорта, скорость в обходах, отношение к сопоставимым и отметка
+# «успело подтвердиться» считаются один раз в marts.offer_exit — там же
+# лежат и обоснования порогов. Карточки только агрегируют.
+# =====================================================================
+
+# Кластеризация по районам, а не обычная ошибка среднего.
+#
+# Объявления одного района не независимы: один дом, один агент, одна
+# улица дают похожие цены, и обычный интервал на таких данных выходит
+# уже настоящего. Измерено на этой же когорте: по группе «ушло за один
+# обход» обычный интервал ±2,1 п.п., кластеризованный ±2,7 — занижение
+# неопределённости на четверть.
+#
+# Формула CR1: V = (G/(G−1)) · Σ_g (Σ_i e_i)² / n², где e_i — отклонение
+# наблюдения от среднего своей группы, g — район. nullif спасает группу
+# из одного района: интервала там не существует, и пустая ячейка честнее
+# деления на ноль.
+def rel_ci(key_sql, label_sql, where=""):
+    return f"""
+        with x as (
+          select *, {key_sql} as k, {label_sql} as lbl
+          from marts.offer_exit
+          where exclude_reason is null and exit_observable {where}),
+        m as (
+          select k, min(lbl) as lbl, avg(log_rel_price) as mu, count(*) as n,
+                 count(distinct district) as nc,
+                 percentile_disc(0.5) within group (order by price)::int as medp
+          from x group by 1),
+        e as (
+          select x.k, x.district, sum(x.log_rel_price - m.mu) as s
+          from x join m using (k) group by 1, 2),
+        v as (select k, sum(s * s) as ss from e group by 1),
+        ci as (
+          select m.*,
+                 1.96 * sqrt((m.nc::numeric / nullif(m.nc - 1, 0))
+                             * v.ss / (m.n::numeric * m.n)) as h
+          from m join v using (k))"""
+
+
+# Основа двух карточек уровня цены. «Ещё висит» получает ключ 99, чтобы
+# встать последней точкой оси, а не затеряться среди чисел; девять
+# обходов и больше собраны в одну группу — дальше наблюдений меньше сотни.
+LEVELS_CTE = """
+        with x as (
+          select case when has_left then (case when crawls >= 9 then 9 else crawls end)
+                      else 99 end as k,
+                 rooms_count, price
+          from marts.offer_exit
+          where exclude_reason is null and exit_observable),
+        a as (
+          select k,
+                 case when k = 99 then 'ещё висит'
+                      when k = 9 then '9 и больше'
+                      else k::text end as lbl,
+                 rooms_count,
+                 percentile_disc(0.5) within group (order by price)::int as med,
+                 round(avg(price))::int as avg_p,
+                 count(*) as n
+          from x group by 1, 2, 3)
+"""
+
+
+# =====================================================================
+# Недельный разрез: ось возраста остаётся, неделя становится вторым
+# измерением. Решение владелицы от 08.10.2026, и оно правильное.
+#
+# Почему именно так. Календарный ряд одного числа не работал: цена
+# ушедших по дням даёт интервалы ±5-9 п.п. при движении в 2 п.п., а в
+# наклон затекает сам градиент возраста (ушедшие позже в среднем старше,
+# а старшие дороже). Если же зафиксировать возраст и менять неделю,
+# градиент уходит по построению, а наблюдений в ячейке хватает.
+#
+# ТРИ ЛОВУШКИ, и без них разрез врёт.
+#
+# 1. Знаменатель — «дошло до этого возраста», а не «вся неделя». Свежая
+#    неделя физически не может содержать старых объявлений: им негде
+#    было состариться. С знаменателем «вся неделя» каждая новая неделя
+#    навсегда выглядела бы быстрее предыдущих. С знаменателем «дошло»
+#    артефакт исчезает: сокращается и числитель, и знаменатель.
+#
+# 2. Окно должно совпадать по ДНЯМ НЕДЕЛИ. Неделя досматривается до
+#    возраста j не целиком: публикация последних дней ещё не успела ни
+#    уйти, ни подтвердить уход. Поэтому все недели режутся до первых
+#    n дней, где n — самое узкое окно среди них. Недели сдвинуты ровно на
+#    семь суток, поэтому «первые n дней» — это одни и те же дни недели.
+#    Без этого сравниваются вторник со средой против всех семи дней, а
+#    публикаций в сутки от 389 до 732, почти вдвое.
+#
+# 3. Окно уже четырёх дней не показывается вовсе. На трёх днях и меньше
+#    разброс по дням недели не усредняется, а ячейка на одном дне — это
+#    не неделя. Порог посчитан от того же разброса публикаций почти
+#    вдвое, а не назначен на глаз.
+#
+# Возраст показывается, только если сравнимы хотя бы две недели. Возраст,
+# открытый у одной недели, на недельный разрез не ставится — ему место на
+# сводных карточках выше.
+#
+# Разрез расширяется сам: каждый новый обход открывает следующий возраст,
+# каждая новая неделя — ещё один столбец.
+# =====================================================================
+WEEKLY_CTE = """
+        with b as (
+          select (select min(snapshot_date) from core.offer_observation
+                  where source = 'cian') as d0,
+                 (select max(snapshot_date) from raw.collection_run
+                  where source = 'cian' and status = 'ok') as d1),
+        weeks as (select generate_series(1, 1 + ((select d1 - d0 from b) / 7)) as wk),
+        ages as (select generate_series(1, 9) as j),
+        -- Сколько дней недели wk досмотрено до возраста j. Публикация дня p
+        -- доживает до j-го обхода к p + j - 1, и ещё три собранных дня нужны
+        -- на подтверждение ухода (DISAPPEARED_AFTER_DAYS), отсюда d1 - j - 2.
+        win as (
+          select w.wk, a.j,
+                 greatest(0, least(7, (b.d1 - a.j - 2)
+                                      - (b.d0 + 7 * (w.wk - 1)) + 1)) as own_days
+          from weeks w cross join ages a cross join b),
+        matched as (
+          select j, min(own_days) filter (where own_days > 0) as n_days,
+                 count(*) filter (where own_days > 0) as weeks_ready
+          from win group by 1),
+        pool as (
+          select 1 + ((e.published_on - b.d0) / 7) as wk,
+                 (e.published_on - b.d0) % 7 as dow,
+                 e.crawls, e.has_left, e.price, e.log_rel_price, e.district
+          from marts.offer_exit e, b where e.exclude_reason is null),
+        sel as (
+          select p.*, m.j, m.n_days
+          from pool p
+          join win w on w.wk = p.wk
+          join matched m on m.j = w.j and p.dow < m.n_days
+          where w.own_days > 0 and m.n_days >= 4 and m.weeks_ready >= 2),
+        cell as (
+          select j, n_days, wk,
+                 count(*) filter (where crawls >= j) as risk,
+                 count(*) filter (where crawls = j and has_left) as died,
+                 percentile_disc(0.5) within group (order by price)
+                   filter (where crawls = j and has_left)::int as medp,
+                 avg(log_rel_price) filter (where crawls = j and has_left) as mu,
+                 count(distinct district) filter (where crawls = j and has_left) as nc
+          from sel group by 1, 2, 3),
+        ex as (select j, wk, district, log_rel_price
+               from sel where crawls = j and has_left),
+        eg as (select ex.j, ex.wk, ex.district, sum(ex.log_rel_price - c.mu) as g
+               from ex join cell c using (j, wk) group by 1, 2, 3),
+        ev as (select j, wk, sum(g * g) as ss from eg group by 1, 2),
+        tot as (
+          select c.*,
+                 sqrt((c.nc::numeric / nullif(c.nc - 1, 0)) * ev.ss
+                      / (c.died::numeric * c.died)) as se
+          from cell c join ev using (j, wk))
+"""
+
+
+EXITS = [
+    market_card("Ушло за один обход", """
+        select count(*) as v from marts.offer_exit
+        where exclude_reason is null and exit_observable and has_left and crawls = 1
+    """, "scalar",
+        {"column_settings": {'["name","v"]': {"compact": False}},
+         "scalar.field": "v", "scalar.compact_primary_number": False},
+        description="Новые публикации одно- и двухкомнатных, которых не стало "
+                    "после единственного обхода. Исчезновение подтверждено тремя "
+                    "собранными днями отсутствия, а не одним промахом выдачи."),
+
+    market_card("Их цена к сопоставимым", f"""
+        {rel_ci("1", "'все'", "and has_left and crawls = 1")}
+        select round((100 * (exp(mu) - 1))::numeric, 1) as v from ci
+    """, "scalar",
+        {"column_settings": {'["name","v"]': {"suffix": " %", "compact": False}},
+         "scalar.field": "v", "scalar.compact_primary_number": False},
+        description="Насколько цена ушедших за один обход ниже медианы своего "
+                    "района и комнатности. Геометрическое среднее отношения, "
+                    "95% интервал кластеризован по районам — он в таблице ниже."),
+
+    market_card("Цена тех, кто ещё висит", f"""
+        {rel_ci("1", "'все'", "and not has_left")}
+        select round((100 * (exp(mu) - 1))::numeric, 1) as v from ci
+    """, "scalar",
+        {"column_settings": {'["name","v"]': {"suffix": " %", "compact": False}},
+         "scalar.field": "v", "scalar.compact_primary_number": False},
+        description="Та же мера для публикаций той же когорты, которые с рынка "
+                    "так и не ушли. Разрыв с предыдущей плиткой и есть ответ на "
+                    "вопрос, насколько сток дороже того, что уходит."),
+
+    # Главная таблица вкладки. Интервал текстом, а не двумя колонками:
+    # «от −12,0 до −7,2 %» читается с одного взгляда, а две числовые
+    # колонки читатель вынужден складывать в голове.
+    market_card("Цена относительно сопоставимых: кто ушёл быстро и кто висит", f"""
+        {rel_ci("speed_order", "speed_group")}
+        select lbl as "Как быстро ушло",
+               n as "Объявлений",
+               medp as "Медиана цены, руб",
+               round((100 * (exp(mu) - 1))::numeric, 1) as "К сопоставимым, %",
+               'от ' || round((100 * (exp(mu - h) - 1))::numeric, 1)
+                     || ' до ' || round((100 * (exp(mu + h) - 1))::numeric, 1)
+                     as "95% интервал, %",
+               nc as "Районов"
+        from ci order by k
+    """, "table",
+        {"column_settings": {'["name","Медиана цены, руб"]': {"compact": False}}},
+        size=(24, 7)),
+
+    # Уровень цены в рублях, по числу прожитых обходов. Сюда смотрят,
+    # чтобы узнать, СКОЛЬКО стоит то, что уходит, а не на сколько
+    # процентов оно отклоняется.
+    #
+    # Комнатности РАЗДЕЛЕНЫ, и это не украшение. В общей медиане доля
+    # однокомнатных гуляет от 42% до 62% между группами, то есть
+    # «подорожание» на общей линии частично означает всего лишь, что в
+    # группе стало больше двухкомнатных. Разделение убирает главную
+    # подмену состава; районы оно не убирает — для этого есть карточка с
+    # отношением к сопоставимым ниже.
+    #
+    # «Ещё висит» стоит последней точкой той же оси, а не отдельной
+    # карточкой: вопрос был про динамику, и сток — её конец. Девять
+    # обходов и больше собраны в одну точку, дальше наблюдений в группе
+    # меньше сотни.
+    #
+    # Читать надо медиану, а не среднее. У двухкомнатных среднее скачет
+    # (92 406 на двух обходах, 101 057 на шести при замере 07.10.2026) —
+    # это длинный правый хвост, десяток квартир за полмиллиона двигает
+    # среднее сильнее, чем вся остальная группа. Среднее оставлено в
+    # таблице рядом, чтобы это было видно, а не спрятано.
+    market_card("Медиана цены по числу прожитых обходов, руб./мес", LEVELS_CTE + """
+        select lbl as "Обходов прожило",
+               case rooms_count when 1 then 'однокомнатные'
+                                else 'двухкомнатные' end as "Комнатность",
+               med as "Медиана"
+        from a order by k, rooms_count
+    """, "line",
+        {"graph.dimensions": ["Обходов прожило", "Комнатность"],
+         "graph.metrics": ["Медиана"],
+         "column_settings": {'["name","Медиана"]': {"compact": False}},
+         "graph.y_axis.title_text": "Медиана цены, руб./мес",
+         "graph.x_axis.title_text": "Сколько обходов объявление прожило",
+         "series_settings": {"однокомнатные": {"color": "#2a78d6"},
+                             "двухкомнатные": {"color": "#eb6834"}}},
+        description="Последняя точка — те, кто с рынка так и не ушёл. "
+                    "Комнатности разделены: в общей медиане доля однокомнатных "
+                    "гуляет от 42% до 62% между группами, и движение общей линии "
+                    "наполовину было бы сменой состава, а не ценой."),
+
+    market_card("Цена ушедших в рублях: медиана и среднее", LEVELS_CTE + """
+        select lbl as "Обходов прожило",
+               max(n) filter (where rooms_count = 1) as "1к, объявлений",
+               max(med) filter (where rooms_count = 1) as "1к медиана, руб",
+               max(avg_p) filter (where rooms_count = 1) as "1к среднее, руб",
+               max(n) filter (where rooms_count = 2) as "2к, объявлений",
+               max(med) filter (where rooms_count = 2) as "2к медиана, руб",
+               max(avg_p) filter (where rooms_count = 2) as "2к среднее, руб"
+        from a group by lbl, k order by k
+    """, "table",
+        {"column_settings": {'["name","1к медиана, руб"]': {"compact": False},
+                             '["name","1к среднее, руб"]': {"compact": False},
+                             '["name","2к медиана, руб"]': {"compact": False},
+                             '["name","2к среднее, руб"]': {"compact": False}}},
+        size=(24, 11),
+        description="Среднее рядом с медианой нарочно: у двухкомнатных оно "
+                    "скачет из-за длинного правого хвоста, и читать надо "
+                    "медиану."),
+
+    # Тот же разрез, но без границ групп: по каждому числу обходов
+    # отдельно. Нужен ровно для того, чтобы вывод нельзя было списать на
+    # удачно подобранные границы в таблице выше.
+    #
+    # Полоса интервала показана двумя линиями, а не усами: усов у
+    # Metabase нет вовсе, а полоса из трёх серий читается не хуже и сразу
+    # говорит, где разница есть, а где только кажется.
+    #
+    # «Ещё висящие» на этой оси стоять не могут: у них число обходов это
+    # возраст на сегодня, а не прожитый срок. Их уровень вынесен
+    # горизонтальной линией-ориентиром.
+    market_card("Цена относительно сопоставимых по числу прожитых обходов", f"""
+        {rel_ci("case when crawls >= 9 then 9 else crawls end",
+                "case when crawls >= 9 then '9 и больше' else crawls::text end",
+                "and has_left")}
+        select lbl as "Обходов прожило",
+               round((100 * (exp(mu) - 1))::numeric, 1) as "К сопоставимым, %",
+               round((100 * (exp(mu - h) - 1))::numeric, 1) as "Низ интервала, %",
+               round((100 * (exp(mu + h) - 1))::numeric, 1) as "Верх интервала, %"
+        from ci order by k
+    """, "line",
+        {"graph.dimensions": ["Обходов прожило"],
+         "graph.metrics": ["К сопоставимым, %", "Низ интервала, %",
+                           "Верх интервала, %"],
+         "graph.y_axis.title_text": "Отклонение от медианы района и комнатности, %",
+         "graph.x_axis.title_text": "Сколько обходов объявление прожило",
+         "graph.show_goal": True, "graph.goal_value": 0,
+         "graph.goal_label": "уровень сопоставимых",
+         "series_settings": {"К сопоставимым, %": {"color": "#eb6834"},
+                             "Низ интервала, %": {"color": "#b8b8b8"},
+                             "Верх интервала, %": {"color": "#b8b8b8"}}}),
+
+    # Скорость рынка, а не его цена. Единственный ряд во времени, который
+    # наши пятнадцать дней действительно различают: цена ушедших по дням
+    # даёт интервалы в ±5-9 п.п. при движении в 2 п.п., то есть не
+    # говорит ничего, а доля при шестистах публикациях в день — говорит.
+    #
+    # Интервал Уилсона, а не обычный нормальный: на долях около 6%
+    # нормальный интервал заезжает в отрицательные значения и на малых
+    # днях врёт в обе стороны. z² = 3.8416 это 1.96².
+    market_card("Доля новых объявлений, ушедших за один обход", """
+        with x as (
+          select published_on as d, (has_left and crawls = 1) as fast
+          from marts.offer_exit
+          where exclude_reason is null and exit_observable),
+        a as (select d, count(*) as n, count(*) filter (where fast) as k
+              from x group by 1),
+        w as (select d, n, k, k::numeric / n as p, 3.8416 as z2 from a)
+        select d as "День публикации",
+               round(100 * p, 1) as "Ушло за один обход, %",
+               round(100 * ((p + z2 / (2 * n)
+                     - 1.96 * sqrt(p * (1 - p) / n + z2 / (4 * n * n)))
+                     / (1 + z2 / n)), 1) as "Низ интервала, %",
+               round(100 * ((p + z2 / (2 * n)
+                     + 1.96 * sqrt(p * (1 - p) / n + z2 / (4 * n * n)))
+                     / (1 + z2 / n)), 1) as "Верх интервала, %",
+               n as "Новых публикаций"
+        from w order by d
+    """, "line",
+        {"graph.dimensions": ["День публикации"],
+         "graph.metrics": ["Ушло за один обход, %", "Низ интервала, %",
+                           "Верх интервала, %"],
+         "graph.y_axis.title_text": "Процентов от новых публикаций этого дня",
+         "graph.x_axis.title_text": "",
+         "series_settings": {"Ушло за один обход, %": {"color": "#2a78d6"},
+                             "Низ интервала, %": {"color": "#b8b8b8"},
+                             "Верх интервала, %": {"color": "#b8b8b8"}}},
+        description="Знаменатель — публикации этого дня, у которых уже было "
+                    "время и исчезнуть, и подтвердить исчезновение. Последние "
+                    "четыре дня поэтому в ряд не входят: они не успели."),
+
+    # Длинный формат, а не столбец на неделю: недель будет больше, и
+    # таблица обязана расти сама, без правки запроса.
+    market_card("Уход и цена по возрасту и неделям", WEEKLY_CTE + """
+        select j as "Возраст, обходов",
+               n_days as "Дней в окне",
+               'неделя ' || wk as "Неделя",
+               risk as "Дошло до этого возраста",
+               died as "Ушло на этом обходе",
+               round(100.0 * died / nullif(risk, 0), 1) as "Ушло, % от дошедших",
+               medp as "Медиана, руб",
+               round((100 * (exp(mu) - 1))::numeric, 1) as "К сопоставимым, %"
+        from tot order by j, wk
+    """, "table",
+        {"column_settings": {'["name","Медиана, руб"]': {"compact": False}}},
+        size=(24, 10),
+        description="Знаменатель — дошедшие до этого возраста, а не вся неделя: "
+                    "свежая неделя физически не может содержать старых "
+                    "объявлений. Окно совпадает по дням недели, уже четырёх дней "
+                    "не показывается."),
+
+    market_card("Доля ушедших на этом обходе, по неделям", WEEKLY_CTE + """
+        select j as "Возраст, обходов",
+               'неделя ' || wk as "Неделя",
+               round(100.0 * died / nullif(risk, 0), 2) as "Ушло, %"
+        from tot order by j, wk
+    """, "line",
+        {"graph.dimensions": ["Возраст, обходов", "Неделя"],
+         "graph.metrics": ["Ушло, %"],
+         "graph.y_axis.title_text": "Процентов от дошедших до этого возраста",
+         "graph.x_axis.title_text": "Сколько обходов объявление прожило"}),
+
+    market_card("Медиана цены ушедших на этом обходе, по неделям", WEEKLY_CTE + """
+        select j as "Возраст, обходов",
+               'неделя ' || wk as "Неделя",
+               medp as "Медиана"
+        from tot order by j, wk
+    """, "line",
+        {"graph.dimensions": ["Возраст, обходов", "Неделя"],
+         "graph.metrics": ["Медиана"],
+         "column_settings": {'["name","Медиана"]': {"compact": False}},
+         "graph.y_axis.title_text": "Медиана цены ушедших, руб./мес",
+         "graph.x_axis.title_text": "Сколько обходов объявление прожило"},
+        description="Комнатности здесь НЕ разделены: при делении ячейка "
+                    "становится слишком мелкой. Сравнивать можно только внутри "
+                    "одного возраста между неделями, уровень между возрастами "
+                    "частично состав."),
+
+    # Выводы и, главное, честный ответ на вопрос «уже можно смотреть
+    # динамику или ещё нет». Даты, когда разрез расширится, считаются из
+    # того же правила досмотра, а не вписаны.
+    market_card("Что говорит недельный разрез", WEEKLY_CTE + """
+        -- Сравниваются ДВЕ ПОСЛЕДНИЕ недели: вопрос «сдвинулось ли с прошлой
+        -- недели». Когда недель станет много, пары всех со всеми только
+        -- запутали бы вывод.
+        , pair as (
+          select t1.j, t1.n_days,
+                 t1.risk r1, t1.died d1, t1.mu mu1, t1.se se1, t1.medp m1,
+                 t2.risk r2, t2.died d2, t2.mu mu2, t2.se se2, t2.medp m2
+          from tot t1 join tot t2 on t2.j = t1.j and t2.wk = t1.wk + 1
+          where t2.wk = (select max(wk) from tot)),
+        hz as (
+          select j, n_days,
+                 100.0 * d2 / r2 - 100.0 * d1 / r1 as dh,
+                 100 * 1.96 * sqrt((d1::numeric/r1)*(1-d1::numeric/r1)/r1
+                                 + (d2::numeric/r2)*(1-d2::numeric/r2)/r2) as hh,
+                 mu2 - mu1 as dp,
+                 1.96 * sqrt(se1*se1 + se2*se2) as hp,
+                 m1, m2
+          from pair),
+        -- Когда возраст j станет сравнимым: нужна вторая по счёту неделя,
+        -- досмотренная до j хотя бы на четыре дня.
+        ready as (
+          select w.j, w.wk,
+                 (select d0 from b) + 7 * (w.wk - 1) + 3 + w.j + 2 as d_ready,
+                 row_number() over (partition by w.j order by w.wk) as rn
+          from win w),
+        nextup as (
+          select min(d_ready) as d_next from ready
+          where rn = 2 and d_ready > (select d1 from b))
+        select "Вывод" from (
+            select 1 as i,
+                   'Сравнимы возрасты ' || (select string_agg(j::text, ', ' order by j) from hz)
+                   || ' обходов, окна ' || (select string_agg(n_days::text, ', ' order by j) from hz)
+                   || ' дней. Остальные возрасты вторая неделя ещё не досмотрела, '
+                   || 'и ставить их рядом нельзя' as "Вывод"
+            where exists (select 1 from hz)
+            union all
+            select 2,
+                   'Скорость ухода: разница между неделями по возрастам '
+                   || (select string_agg(round(dh,1)::text || ' п.п. (±' || round(hh,1) || ')', '; ' order by j) from hz)
+                   || '. ' || case when (select count(*) from hz where abs(dh) > hh) = 0
+                                        then 'Ни одна разница за свой интервал не вышла'
+                                   else 'За интервал вышло разниц: '
+                                        || (select count(*) from hz where abs(dh) > hh) end
+            where exists (select 1 from hz)
+            union all
+            select 3,
+                   'Цена при зафиксированном возрасте: разница '
+                   || (select string_agg(round((100*(exp(dp)-1))::numeric,1)::text || '% (±'
+                                         || round((100*(exp(hp)-1))::numeric,1) || ')', '; ' order by j) from hz)
+                   || '. ' || case when (select count(*) from hz where abs(dp) > hp) = 0
+                                        then 'Ни одна разница за свой интервал не вышла — '
+                                             || 'изменения цены между неделями не видно'
+                                   else 'За интервал вышло разниц: '
+                                        || (select count(*) from hz where abs(dp) > hp) end
+            where exists (select 1 from hz)
+            union all
+            select 4,
+                   case when (select d_next from nextup) is null
+                             then 'Все девять возрастов уже сравнимы'
+                        else 'Следующий возраст откроется ' ||
+                             to_char((select d_next from nextup), 'DD.MM.YYYY')
+                             || ', то есть разрез расширяется примерно на один '
+                             || 'возраст за обход' end
+            union all
+            select 5,
+                   'Две недели — это две точки, и тренда по ним не бывает. '
+                   || 'Разрез начнёт отвечать на вопрос «куда идёт рынок», когда '
+                   || 'недель станет четыре-пять. Пока он отвечает на другой: '
+                   || 'сдвинулось ли что-нибудь с прошлой недели'
+        ) z order by i
+    """, "table",
+        {"column_settings": {'["name","Вывод"]': {"text_wrapping": True}}},
+        size=(24, 9)),
+
+    # Изменение во ВРЕМЕНИ, а не по возрасту. Ось предыдущих карточек —
+    # сколько объявление прожило; здесь календарь: что стоило то, что
+    # уходило 22 сентября, и что стоило уходившее 3 октября.
+    #
+    # День события — последний день, когда объявление ещё было в выдаче.
+    # Не дата снятия: снятие это день, когда мы заметили отсутствие, а цена
+    # наблюдалась в последний день присутствия. Ряд поэтому кончается за
+    # три дня до последнего обхода — раньше снятие не подтверждается.
+    market_card("Медиана цены ушедших по дням, руб./мес", """
+        select s.last_seen_date as "Последний день в выдаче",
+               case s.rooms_count when 1 then 'однокомнатные'
+                                  else 'двухкомнатные' end as "Комнатность",
+               percentile_disc(0.5) within group (order by s.price)::int as "Медиана"
+        from marts.offer_scored s
+        where s.source = 'cian' and s.rooms_count in (1, 2)
+          and s.disappeared_date is not null
+          and s.price > 0 and s.total_area > 0
+          and not coalesce(s.is_duplicate, false)
+          and not coalesce(s.is_room_share, false)
+          and not coalesce(s.is_price_outlier, false)
+        group by 1, 2 order by 1, 2
+    """, "line",
+        {"graph.dimensions": ["Последний день в выдаче", "Комнатность"],
+         "graph.metrics": ["Медиана"],
+         "column_settings": {'["name","Медиана"]': {"compact": False}},
+         "graph.y_axis.title_text": "Медиана цены ушедших, руб./мес",
+         "graph.x_axis.title_text": "",
+         "series_settings": {"однокомнатные": {"color": "#2a78d6"},
+                             "двухкомнатные": {"color": "#eb6834"}}},
+        description="Ряд кончается за три дня до последнего обхода: снятие "
+                    "подтверждается тремя собранными днями отсутствия, и у более "
+                    "свежих уходов подтверждения ещё нет."),
+
+    # Та же динамика, но проверенная, а не на глаз. Медиана в рублях
+    # прибита к круглым числам и 2% не различает, поэтому вопрос
+    # «изменилось ли» решается интервалами, а не линией.
+    #
+    # Три строки устроены как ловушка и её разоблачение. Наклон без
+    # поправки выглядит ростом и ноль не содержит. Но ушедшие позже в
+    # среднем старше, а старшие дороже — это градиент с карточек выше, и он
+    # течёт в календарный наклон. Третья строка вычитает среднее своей
+    # группы возраста, и роста не остаётся.
+    #
+    # Проверка 2 и 3 идут по опубликованным внутри панели: только у них
+    # число обходов — настоящий возраст, а не срок с первой встречи.
+    # Проверка 1 берёт всех ушедших, там возраст не нужен, и выборка вдвое
+    # больше.
+    market_card("Изменилась ли цена ушедших за время панели", """
+        with base as (
+          select s.last_seen_date as d, s.district, ln(s.price / s.med_price) as y,
+                 least(x.crawls, 9) as age,
+                 s.published_at::date >= (select min(snapshot_date)
+                                          from core.offer_observation where source = 'cian') as newborn
+          from marts.offer_scored s
+          join (select offer_id, count(distinct snapshot_date) as crawls
+                from core.offer_observation where source = 'cian' group by 1) x using (offer_id)
+          where s.source = 'cian' and s.rooms_count in (1, 2)
+            and s.disappeared_date is not null
+            and s.price > 0 and s.med_price > 0 and s.total_area > 0
+            and not coalesce(s.is_duplicate, false)
+            and not coalesce(s.is_room_share, false)
+            and not coalesce(s.is_price_outlier, false)
+            and s.price / s.med_price between 0.2 and 5),
+        -- Проверка 1. Два крайних дня, по всем ушедшим: прямой ответ на вопрос
+        -- «на первый день и на последний».
+        ends as (
+          select district, y,
+                 case when d = (select min(d) from base) then 1
+                      when d = (select max(d) from base) then 2 end as g
+          from base),
+        em as (select g, avg(y) mu, count(*) n, count(distinct district) nc
+               from ends where g is not null group by 1),
+        eg as (select e.g, e.district, sum(e.y - em.mu) as s
+               from ends e join em using (g) where e.g is not null group by 1, 2),
+        ev as (select g, sum(s * s) as ss from eg group by 1),
+        ese as (select em.g, em.mu, em.n,
+                       sqrt((em.nc::numeric / nullif(em.nc - 1, 0)) * ev.ss / (em.n::numeric * em.n)) as se
+                from em join ev using (g)),
+        test1 as (
+          select (select mu from ese where g = 2) - (select mu from ese where g = 1) as est,
+                 sqrt((select se * se from ese where g = 1)
+                      + (select se * se from ese where g = 2)) as se,
+                 (select n from ese where g = 1) || ' и ' || (select n from ese where g = 2) as nn),
+        -- Проверки 2 и 3. Наклон по дням на одной и той же выборке: только
+        -- опубликованные внутри панели, у них число обходов это настоящий возраст.
+        -- Разница между проверками одна — вычтено ли среднее своей группы возраста.
+        nb as (select d, district, y, age,
+                      (d - (select min(d) from base where newborn))::numeric as tt
+               from base where newborn),
+        fe as (select age, avg(y) as amu from nb group by 1),
+        dm as (select nb.d, nb.district, nb.tt, nb.y as y_raw, nb.y - fe.amu as y_fe
+               from nb join fe using (age)),
+        span as (select max(tt) as days from dm),
+        slopes as (
+          select 'raw' as kind, sum((tt - (select avg(tt) from dm)) * (y_raw - (select avg(y_raw) from dm)))
+                                / sum((tt - (select avg(tt) from dm)) * (tt - (select avg(tt) from dm))) as slope,
+                 sum((tt - (select avg(tt) from dm)) * (tt - (select avg(tt) from dm))) as sxx,
+                 count(*) as n, count(distinct district) as nc from dm
+          union all
+          select 'fe', sum((tt - (select avg(tt) from dm)) * (y_fe - (select avg(y_fe) from dm)))
+                       / sum((tt - (select avg(tt) from dm)) * (tt - (select avg(tt) from dm))),
+                 sum((tt - (select avg(tt) from dm)) * (tt - (select avg(tt) from dm))),
+                 count(*), count(distinct district) from dm),
+        resid as (
+          select s.kind, dm.district,
+                 sum((dm.tt - (select avg(tt) from dm))
+                     * (case when s.kind = 'raw' then dm.y_raw - (select avg(y_raw) from dm)
+                             else dm.y_fe - (select avg(y_fe) from dm) end
+                        - s.slope * (dm.tt - (select avg(tt) from dm)))) as gs
+          from dm cross join slopes s group by 1, 2),
+        rv as (select kind, sum(gs * gs) as ss from resid group by 1),
+        trend as (
+          select s.kind, s.n, sp.days,
+                 s.slope * sp.days as est,
+                 1.96 * sqrt((s.nc::numeric / (s.nc - 1)) * rv.ss / (s.sxx * s.sxx)) * sp.days as h
+          from slopes s join rv using (kind) cross join span sp)
+        select "Проверка", "Наблюдений", "Изменение, %", "Низ, %", "Верх, %", "Что это значит"
+        from (
+          select 1 as i,
+                 'Первый день против последнего, все ушедшие' as "Проверка",
+                 nn as "Наблюдений",
+                 round((100 * (exp(est) - 1))::numeric, 2) as "Изменение, %",
+                 round((100 * (exp(est - 1.96 * se) - 1))::numeric, 2) as "Низ, %",
+                 round((100 * (exp(est + 1.96 * se) - 1))::numeric, 2) as "Верх, %",
+                 case when est - 1.96 * se < 0 and est + 1.96 * se > 0
+                           then 'Ноль внутри интервала — изменения не видно'
+                      else 'Ноль вне интервала' end as "Что это значит"
+          from test1
+          union all
+          select 2, 'Наклон за весь срок, опубликованные в панели', n::text,
+                 round((100 * (exp(est) - 1))::numeric, 2),
+                 round((100 * (exp(est - h) - 1))::numeric, 2),
+                 round((100 * (exp(est + h) - 1))::numeric, 2),
+                 case when est - h < 0 and est + h > 0
+                           then 'Ноль внутри интервала'
+                      else 'Ноль вне интервала — похоже на рост, но см. строку ниже' end
+          from trend where kind = 'raw'
+          union all
+          select 3, 'Тот же наклон при зафиксированном возрасте', n::text,
+                 round((100 * (exp(est) - 1))::numeric, 2),
+                 round((100 * (exp(est - h) - 1))::numeric, 2),
+                 round((100 * (exp(est + h) - 1))::numeric, 2),
+                 case when est - h < 0 and est + h > 0
+                           then 'Ноль внутри интервала. Значит рост в строке выше — это '
+                                || 'градиент возраста, а не рынок: ушедшие позже в среднем '
+                                || 'старше, а старшие дороже'
+                      else 'Ноль вне интервала даже с поправкой на возраст' end
+          from trend where kind = 'fe'
+        ) z order by i
+    """, "table",
+        {"column_settings": {'["name","Что это значит"]': {"text_wrapping": True},
+                             '["name","Проверка"]': {"text_wrapping": True}}},
+        size=(24, 7),
+        description="Интервалы кластеризованы по районам. Наклон приведён к "
+                    "полному сроку ряда, а не к суткам, чтобы его можно было "
+                    "сравнивать с первой строкой."),
+
+    # Выводы считаются, а не вписаны: через неделю когорта другая.
+    #
+    # Строки 4 и 5 — оговорки, и они не числа, а условия, при которых
+    # первые три строки вообще что-то значат. Убирать их нельзя: без них
+    # «ушло» читается как «сдали», а этого в данных нет.
+    market_card("Что видно по ушедшим", """
+        with x as (select * from marts.offer_exit
+                   where exclude_reason is null and exit_observable),
+        m as (select speed_order k, avg(log_rel_price) mu, count(*) n,
+                     count(distinct district) nc from x group by 1),
+        e as (select x.speed_order k, x.district, sum(x.log_rel_price - m.mu) s
+              from x join m on m.k = x.speed_order group by 1, 2),
+        v as (select k, sum(s * s) ss from e group by 1),
+        se as (select m.k, m.mu, m.n,
+                      sqrt((m.nc::numeric / nullif(m.nc - 1, 0))
+                           * v.ss / (m.n::numeric * m.n)) s
+               from m join v using (k)),
+        gap as (
+          select (select mu from se where k = 1) - (select mu from se where k = 5) as d,
+                 sqrt((select s * s from se where k = 1)
+                      + (select s * s from se where k = 5)) as sd,
+                 (select n from se where k = 1) as n_fast,
+                 (select n from se where k = 5) as n_stay),
+        speed as (
+          select count(*) filter (where has_left and crawls = 1) as fast,
+                 count(*) as total,
+                 min(published_on) as d0, max(published_on) as d1
+          from x)
+        select "Вывод" from (
+            select 1 as i,
+                   case when n_fast < 100 or n_stay < 100
+                             then 'Быстрых уходов или оставшихся меньше сотни — '
+                                  || 'сравнивать не на чем'
+                        else 'Ушедшие за один обход стоили на '
+                             || abs(round((100 * (exp(d) - 1))::numeric, 1))
+                             || '% меньше тех, кто с рынка так и не ушёл '
+                             || '(95% интервал от '
+                             || abs(round((100 * (exp(d + 1.96 * sd) - 1))::numeric, 1))
+                             || '% до '
+                             || abs(round((100 * (exp(d - 1.96 * sd) - 1))::numeric, 1))
+                             || '%, кластеризация по районам). Ноль в интервал не попадает'
+                   end as "Вывод"
+            from gap
+            union all
+            select 2,
+                   'Связь монотонная: чем дольше объявление висело, тем дороже оно '
+                   || 'было относительно своего района и комнатности — '
+                   || (select round((100*(exp(mu)-1))::numeric,1) from se where k=1) || '% '
+                   || 'за один обход, '
+                   || (select round((100*(exp(mu)-1))::numeric,1) from se where k=4) || '% '
+                   || 'за восемь и больше, +'
+                   || (select round((100*(exp(mu)-1))::numeric,1) from se where k=5) || '% '
+                   || 'у тех, кто остался. Границы групп на это не влияют: тот же '
+                   || 'подъём виден по каждому обходу отдельно на графике выше'
+            union all
+            select 3,
+                   'За один обход уходит ' || round(100.0 * fast / total, 1)
+                   || '% новых публикаций (' || fast || ' из ' || total
+                   || ' за ' || to_char(d0, 'DD.MM') || ' — ' || to_char(d1, 'DD.MM') || ')'
+            from speed
+            union all
+            select 4,
+                   'ИСЧЕЗНОВЕНИЕ ОБЪЯВЛЕНИЯ НЕ РАВНО СДАЧЕ КВАРТИРЫ. Объявление '
+                   || 'снимают и когда сдали, и когда передумали сдавать, и когда '
+                   || 'переложили к другому агенту, и когда у публикации вышел срок. '
+                   || 'Цена здесь тоже запрашиваемая — последняя, которую автор '
+                   || 'просил перед тем, как убрать объявление'
+            union all
+            select 5,
+                   'Уходы быстрее суток нам не видны вовсе: обход раз в день около '
+                   || 'десяти утра, и квартира, выставленная и снятая между двумя '
+                   || 'обходами, в данные не попадает. Значит самые быстрые уходы '
+                   || 'здесь недосчитаны, а не переоценены'
+        ) z order by i
+    """, "table",
+        {"column_settings": {'["name","Вывод"]': {"text_wrapping": True}}},
+        size=(24, 9)),
+
+    # Отброшенное показано, а не выброшено молча. Дублей здесь десятая
+    # часть когорты, и это не мелочь: агент выкладывает одну квартиру
+    # несколькими объявлениями, удаление одной копии выглядит уходом с
+    # рынка, хотя квартира никуда не делась.
+    market_card("Что в счёт не вошло", """
+        select coalesce(exclude_reason, 'в счёт') as "Причина",
+               count(*) as "Объявлений",
+               round(100.0 * count(*) / sum(count(*)) over (), 1) as "Доля когорты, %"
+        from marts.offer_exit group by 1 order by 2 desc
+    """, "table", {}, size=(24, 6)),
+    # Что делает со своей ценой тот, кто НЕ уходит. Это сток, и смотреть
+    # на рынок по нему нельзя — карточка стоит здесь именно как то, с чем
+    # сравнивают карточки выше.
+    #
+    # Индекс сравнивает цену объявления с его же ценой вчера, поэтому
+    # смена состава корзины на него не влияет. Но и измеряет он ровно
+    # уступки задержавшихся лотов: −2,7% за две недели (замер 07.10.2026)
+    # легко принять за падение рынка на 5-6% в месяц, чем это не является.
+    #
+    # Медиана всей панели рядом для масштаба: она за тот же срок не
+    # сдвинулась вовсе, потому что прибита к круглым числам.
+    #
+    # Среднее берётся по логарифмам, а потом возводится в экспоненту.
+    # Среднее арифметическое процентов не перемножается в накопленный
+    # итог: +10% и −10% подряд это не ноль, а −1%. Сумма логарифмов
+    # складывается правильно и даёт честную цепочку.
+    #
+    # Пары только соседних дней (prev_d = d - 1). Разрыв в сутки и разрыв
+    # в неделю — разные величины, складывать их в один дневной шаг нельзя,
+    # и заодно это само отсекает комнатности 3+ с недельным обходом.
+    #
+    # Крайние значения не подрезаются: на 210 тысячах пар изменений
+    # больше чем в полтора раза всего 43, и индекс от них сдвигается на
+    # 0,003 п.п. Подрезка добавила бы произвольный порог и ничего не
+    # изменила.
+    market_card("Для сравнения: что делают со своей ценой те, кто не уходит", f"""
+        with obs as materialized (
+          select ob.offer_id, ob.snapshot_date as d, ob.price
+          from core.offer_observation ob join core.offer o using (source, offer_id)
+          where ob.source = 'cian' and o.rooms_count in (1, 2)
+            and not ob.is_daily and ob.price > 0
+            and ob.snapshot_date <= {LATEST}),
+        pairs as (
+          select d, lag(d) over w as prev_d, ln(price / lag(price) over w) as g
+          from obs window w as (partition by offer_id order by d)),
+        step as (
+          select d, avg(g) as g from pairs
+          where g is not null and prev_d = d - 1 group by 1),
+        days as (select distinct d from obs),
+        matched as (
+          select v.d, exp(coalesce(sum(s.g) over (order by v.d), 0)) as idx
+          from days v left join step s using (d)),
+        pool as (
+          select d, percentile_cont(0.5) within group (order by price) as med
+          from obs group by d),
+        b as (select med from pool order by d limit 1)
+        select m.d as "День",
+               round((100 * m.idx)::numeric, 2) as "По совпавшим объявлениям",
+               round((100 * p.med / b.med)::numeric, 2) as "Медиана всей панели"
+        from matched m join pool p using (d), b
+        order by 1
+    """, "line", {"graph.dimensions": ["День"],
+                  "graph.metrics": ["По совпавшим объявлениям", "Медиана всей панели"],
+                  "graph.y_axis.title_text": "Первый день сбора = 100",
+                  "graph.x_axis.title_text": "",
+                  "graph.y_axis.auto_range": False,
+                  "graph.y_axis.min": 96, "graph.y_axis.max": 101,
+                  "graph.show_goal": True, "graph.goal_value": 100,
+                  "graph.goal_label": "первый день",
+                  "series_settings": {"По совпавшим объявлениям": {"color": "#eb6834"},
+                                      "Медиана всей панели": {"color": "#2a78d6"}}},
+       description="Сток, а не рынок: индекс считается по объявлениям, которые "
+                   "видны и вчера и сегодня, то есть по тем, кто с рынка не ушёл. "
+                   "Падение здесь — уступки задержавшихся лотов, а не уровень "
+                   "рынка. Уровень рынка на карточках выше."),
+]
 
 YEARS = [[y, str(y)] for y in range(2015, 2027)]
 
@@ -1057,7 +1877,9 @@ def main() -> None:
     # меняется при каждом запуске скрипта, и закладка в браузере ведёт
     # на архив.
     DESCRIPTION = ("Подбор — фильтры задаются сверху. "
-                   "Рынок — фиксированная база, фильтры на неё не действуют.")
+                   "Рынок и Ушедшие — фиксированная база, фильтры на неё не "
+                   "действуют. Ушедшие — цена того, что с рынка уходит, против "
+                   "цены того, что остаётся висеть.")
     existing = [d for d in api("/api/dashboard") if d["name"] == DASH_NAME]
     if existing:
         dash = existing[0]
@@ -1088,10 +1910,11 @@ def main() -> None:
 
     tabs = [{"id": -1, "name": "Подбор", "position": 0},
             {"id": -2, "name": "Рынок", "position": 1},
-            {"id": -3, "name": "История", "position": 2}]
+            {"id": -4, "name": "Ушедшие", "position": 2},
+            {"id": -3, "name": "История", "position": 3}]
 
     dashcards, n = [], 0
-    for tab_id, specs in ((-1, SEARCH), (-2, MARKET), (-3, HISTORY)):
+    for tab_id, specs in ((-1, SEARCH), (-2, MARKET), (-4, EXITS), (-3, HISTORY)):
         row, kpi_col = 0, 0
         for spec in specs:
             n += 1
@@ -1113,7 +1936,8 @@ def main() -> None:
             dashcards.append(dc)
             if spec["display"] != "scalar":
                 row += h
-            tab_name = {-1: "Подбор ", -2: "Рынок  ", -3: "История"}[tab_id]
+            tab_name = {-1: "Подбор ", -2: "Рынок  ",
+                        -4: "Ушедшие", -3: "История"}[tab_id]
             print(f"  [{tab_name}] {spec['name']}")
 
         # Формула оценки внизу вкладки подбора.
