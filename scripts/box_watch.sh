@@ -1,0 +1,101 @@
+#!/bin/bash
+# Сторож: ловит окно, когда площадка отдаёт выдачу, и запускает обход.
+#
+# Зачем. После аварии 11.10.2026 ЦИАН отвечает рывками: выдача даётся
+# примерно в одном запросе из десяти, остальные возвращают код 553 и
+# страницу в 178 байт. Проверено 12.10.2026 на обеих машинах разом —
+# макбук с профилем на 68 кук и Mac mini с чистым получили один и тот же
+# отказ в одну минуту, то есть дело не в машине и не в куках. Обход,
+# запущенный по часам, в такие сутки тратит попытки впустую, а день
+# панели теряется.
+#
+# Поэтому обход запускается не по расписанию, а по факту: раз в двадцать
+# минут делается одна проба, и как только она проходит — идёт полный
+# обход. Проба стоит два запроса, это меньше, чем одна корзина обхода.
+#
+# Ставится в cron рядом с ежедневным прогоном:
+#   */20 * * * * /home/dev2/rent_msk/scripts/box_watch.sh
+#
+# Сам себя сторож выключает: как только за сегодня собрано достаточно,
+# он молча выходит, не трогая площадку вовсе.
+
+set -uo pipefail
+
+export TZ=Europe/Moscow
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO" || exit 1
+
+IMAGE="rent-collector:latest"
+PG_CONTAINER="rent_pg"
+
+# Сколько объявлений считать достаточным, чтобы день был собран. Обычный
+# ежедневный срез даёт около 16 тысяч, полный обход больше. Порог ниже
+# обычного намеренно: лучше оставить в покое неполный, но содержательный
+# день, чем гонять обход по кругу ради последних процентов.
+ENOUGH="${WATCH_ENOUGH:-12000}"
+
+LOG_DIR="$REPO/data/logs"
+mkdir -p "$LOG_DIR"
+WATCH_LOG="$LOG_DIR/box_watch.log"
+
+note() { echo "$(date '+%d.%m %H:%M') $*" >>"$WATCH_LOG"; }
+
+# Журнал сторожа живёт год: это одна строка в двадцать минут, но он
+# единственный след того, в какие часы площадка была жива.
+find "$LOG_DIR" -name 'box_watch.log' -mtime +365 -delete 2>/dev/null
+
+# Идёт обход — сторожу делать нечего. Проверка по замку, а не по
+# процессу: замок держит и ручной запуск тоже.
+if [ -d "$REPO/data/box.lock" ]; then
+  exit 0
+fi
+
+if ! docker exec "$PG_CONTAINER" pg_isready -U rent -d rent >/dev/null 2>&1; then
+  note "база не отвечает, пропускаю"
+  exit 0
+fi
+
+TODAY="$(date +%F)"
+COLLECTED="$(docker exec -i "$PG_CONTAINER" psql -qtA -U rent -d rent -c \
+  "select count(distinct offer_id) from raw.offer_snapshot where snapshot_date = '$TODAY';" \
+  2>/dev/null | tr -d '[:space:]')"
+COLLECTED="${COLLECTED:-0}"
+
+if [ "$COLLECTED" -ge "$ENOUGH" ]; then
+  # Тишина намеренная: писать «всё хорошо» семьдесят раз в сутки незачем.
+  exit 0
+fi
+
+# Проба. Профиль браузера тот же, что у обхода, — куки копятся в нём, а
+# не заводятся заново на каждую проверку.
+PROBE_OUT="$(docker run --rm \
+  --name rent_probe_watch \
+  --network host \
+  --shm-size=1g \
+  -v "$REPO":/work \
+  -w /work \
+  --user "$(id -u):$(id -g)" \
+  -e HOME=/tmp \
+  -e TZ=Europe/Moscow \
+  -e CHROME_NO_SANDBOX=1 \
+  -e PYTHONUNBUFFERED=1 \
+  -e PYTHONPATH=/work \
+  "$IMAGE" \
+  bash -c 'Xvfb :99 -screen 0 1440x900x24 >/tmp/xvfb.log 2>&1 &
+           sleep 3
+           DISPLAY=:99 python scripts/box_probe.py' 2>&1 | tail -n 1)"
+# Код берётся от docker run, а не от tail: это обеспечивает pipefail,
+# включённый в начале файла. Без него был бы всегда ноль.
+PROBE_CODE=$?
+
+if [ "$PROBE_CODE" != 0 ]; then
+  note "собрано $COLLECTED из $ENOUGH; $PROBE_OUT"
+  exit 0
+fi
+
+note "собрано $COLLECTED из $ENOUGH; $PROBE_OUT — ЗАПУСКАЮ ОБХОД"
+
+# Полный обход, а не узкий срез: сторож работает в дни, когда что-то уже
+# потеряно, и добирать имеет смысл все комнатности сразу.
+exec "$REPO/scripts/box_daily.sh" full
