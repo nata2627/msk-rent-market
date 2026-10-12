@@ -86,6 +86,9 @@ class BrowserClient:
             headless=self.headless,
             locale="ru-RU",
             viewport={"width": 1440, "height": 900},
+            # Пусто на макбуке, --no-sandbox при сборе в контейнере: см.
+            # CHROME_NO_SANDBOX в etl/config.py.
+            args=["--no-sandbox"] if config.CHROME_NO_SANDBOX else [],
         )
         self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
 
