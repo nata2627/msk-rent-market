@@ -20,6 +20,39 @@ def connect():
 # ---------------------------------------------------------------------
 # Журнал запуска
 # ---------------------------------------------------------------------
+def collected_bucket_keys(conn, snapshot_date, source: str = "cian") -> set:
+    """Корзины, уже собранные за эту дату снимка.
+
+    Нужна для продолжения прерванного обхода. Площадка 12.10.2026 отдавала
+    выдачу рывками, обход падал через несколько минут, и каждый следующий
+    заход начинал список районов заново — за пять часов очередь не дошла
+    дальше Раменок, хотя суммарно корзин пройдено было втрое больше.
+
+    Берутся только листовые корзины: разделённые (`was_split`) сами ничего
+    не собирали, за них отвечают дети. Родитель при продолжении запросится
+    снова, потратит один запрос и снова разделится — это дешевле, чем
+    держать в базе дерево и разбираться, целиком ли оно собрано.
+
+    Ключ — то, что однозначно задаёт запрос к площадке: район, комнатность
+    и границы цены.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select b.district_id, b.rooms, b.price_min, b.price_max
+            from raw.bucket b
+            join raw.collection_run r using (run_id)
+            where r.source = %s
+              and r.snapshot_date = %s
+              and b.error is null
+              and b.collected_count is not null
+              and not b.was_split
+            """,
+            [source, snapshot_date],
+        )
+        return {tuple(row) for row in cur.fetchall()}
+
+
 def start_run(conn, mode: str, snapshot_date, source: str = "cian") -> int:
     with conn.cursor() as cur:
         cur.execute(

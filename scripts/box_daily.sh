@@ -92,7 +92,11 @@ case "$MODE" in
   weekly) COLLECT_ARGS="--mode full --rooms 3,4,5,6,7,9" ;;
   *)      COLLECT_ARGS="--mode $MODE" ;;
 esac
-COLLECT_ARGS="$COLLECT_ARGS --transport browser --snapshot-date $SNAPSHOT_DATE"
+# --resume: пропустить корзины, уже собранные за эту дату. В обычный день
+# пропускать нечего и флаг ничего не меняет, а в день, когда площадка
+# роняет обход раз за разом, без него очередь районов не уходит дальше
+# первых двух десятков (проверено 12.10.2026).
+COLLECT_ARGS="$COLLECT_ARGS --transport browser --resume --snapshot-date $SNAPSHOT_DATE"
 
 docker run --rm \
   --name rent_collect \
