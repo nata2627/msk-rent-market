@@ -73,7 +73,7 @@ def initial_buckets(mode: str, districts: list[dict],
 def run(mode: str, snapshot_date: date, max_requests: int | None,
         dry_run: bool, refresh_districts: bool, pets_pass: bool = True,
         transport: str | None = None, rooms: list[str] | None = None,
-        resume: bool = False) -> int:
+        resume: bool = False, resume_keys: set | None = None) -> int:
     # 'browser' — настоящий Chrome через Playwright. Понадобился потому,
     # что площадка отвечает заглушкой на запросы из Python, но нормально
     # отдаёт страницы браузеру с того же адреса.
@@ -113,8 +113,11 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
         # Продолжение прерванного обхода. Пока площадка отдаёт выдачу
         # рывками, обход падает через несколько минут, и без этого каждый
         # следующий заход заново перемалывает те же первые районы.
-        resume_keys = (db.collected_bucket_keys(conn, snapshot_date)
-                       if resume and not dry_run else None)
+        #
+        # Набор ключей можно передать готовым: откуда он взялся, обходу
+        # безразлично, а проверять логику пропуска так можно без базы.
+        if resume_keys is None and resume and not dry_run:
+            resume_keys = db.collected_bucket_keys(conn, snapshot_date)
         if resume_keys:
             log.info("Продолжение: за %s уже собрано корзин %d, их пропущу",
                      snapshot_date, len(resume_keys))
@@ -308,6 +311,18 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
             status = "failed"
             note = f"{type(err).__name__}: {err}"
             log.exception("Непредвиденная ошибка, обход остановлен")
+
+        # Обход, где не прочиталась ни одна корзина, успешным не считается.
+        # Иначе день попадает в покрытие: прогон 149 от 12.10.2026 закрылся
+        # как 'ok' с двумя корзинами, обе сбойные, ноль объявлений — и
+        # 12.10 стал «собранным днём» для одно- и двухкомнатных. Порог
+        # MAX_FAILED_BUCKETS тут не спасает: он ловит десять сбоев подряд,
+        # а корзин в узком срезе всего две.
+        if status == "ok" and buckets_total > 0 and buckets_failed == buckets_total:
+            status = "failed"
+            note = (f"ни одна из {buckets_total} корзин не прочиталась — "
+                    f"собирать было нечего")
+            log.error(note)
 
         if not dry_run and pets_pass and status == "ok":
             db.set_pets_pass_complete(conn, run_id, pets_complete)

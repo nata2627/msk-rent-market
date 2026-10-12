@@ -47,6 +47,11 @@ def collected_bucket_keys(conn, snapshot_date, source: str = "cian") -> set:
               and b.error is null
               and b.collected_count is not null
               and not b.was_split
+              -- Заявленный ноль не считается собранной корзиной. В рывок
+              -- площадка отдаёт разборную страницу с нулём результатов,
+              -- и такая корзина заперла бы район вместе со всем его
+              -- поддеревом до конца суток. Перепросить стоит один запрос.
+              and coalesce(b.claimed_count, 0) > 0
             """,
             [source, snapshot_date],
         )
@@ -539,6 +544,13 @@ def mark_disappeared(conn, snapshot_date, room_codes, source: str = "cian") -> i
                 join raw.bucket b using (run_id)
                 where r.source = %s and r.status = 'ok'
                   and b.rooms = any(%s)
+                  -- Корзина с ошибкой не покрывает день. Прогон 149 от
+                  -- 12.10.2026 закрылся как 'ok' с двумя корзинами, обе
+                  -- не прочитались, и день уже числился собранным по
+                  -- одно- и двухкомнатным при нуле собранного. Ещё два
+                  -- таких дня — и 14 тысяч объявлений получили бы снятие
+                  -- задним числом.
+                  and b.error is null
             ),
             candidate as (
                 -- Код комнатности площадки: rooms_count не знает про
