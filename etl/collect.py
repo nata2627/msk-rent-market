@@ -72,7 +72,8 @@ def initial_buckets(mode: str, districts: list[dict],
 # ---------------------------------------------------------------------
 def run(mode: str, snapshot_date: date, max_requests: int | None,
         dry_run: bool, refresh_districts: bool, pets_pass: bool = True,
-        transport: str | None = None, rooms: list[str] | None = None) -> int:
+        transport: str | None = None, rooms: list[str] | None = None,
+        resume: bool = False) -> int:
     # 'browser' — настоящий Chrome через Playwright. Понадобился потому,
     # что площадка отвечает заглушкой на запросы из Python, но нормально
     # отдаёт страницы браузеру с того же адреса.
@@ -106,7 +107,17 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
         buckets_underfilled = 0
         buckets_resplit = 0
         buckets_failed = 0
+        buckets_skipped = 0
         status, note = "ok", None
+
+        # Продолжение прерванного обхода. Пока площадка отдаёт выдачу
+        # рывками, обход падает через несколько минут, и без этого каждый
+        # следующий заход заново перемалывает те же первые районы.
+        resume_keys = (db.collected_bucket_keys(conn, snapshot_date)
+                       if resume and not dry_run else None)
+        if resume_keys:
+            log.info("Продолжение: за %s уже собрано корзин %d, их пропущу",
+                     snapshot_date, len(resume_keys))
 
         try:
             while stack:
@@ -116,6 +127,14 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
                     break
 
                 bucket, parent_id = stack.pop()
+
+                if resume_keys is not None:
+                    key = (bucket.district_id, bucket.rooms,
+                           bucket.price_min, bucket.price_max)
+                    if key in resume_keys:
+                        buckets_skipped += 1
+                        continue
+
                 buckets_total += 1
                 query = client.describe_query(bucket)
                 bucket_id = (db.insert_bucket(conn, run_id, bucket, query, parent_id)
@@ -330,11 +349,12 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
                          "(это снятие с публикации, а не сдача квартиры)", gone)
             db.refresh_marts(conn)
 
-        log.info("Итог: корзин %d, недобрано в %d, переделено по недобору %d, "
-                 "не прочиталось %d, уникальных объявлений %d, запросов %d, "
-                 "статус %s",
-                 buckets_total, buckets_underfilled, buckets_resplit,
-                 buckets_failed, len(seen_offers), client.requests_made, status)
+        log.info("Итог: корзин %d, пропущено собранных %d, недобрано в %d, "
+                 "переделено по недобору %d, не прочиталось %d, "
+                 "уникальных объявлений %d, запросов %d, статус %s",
+                 buckets_total, buckets_skipped, buckets_underfilled,
+                 buckets_resplit, buckets_failed, len(seen_offers),
+                 client.requests_made, status)
 
     if hasattr(client, "close"):
         client.close()
@@ -451,6 +471,9 @@ def main(argv=None) -> int:
     parser.add_argument("--rooms", default=None,
                         help="через запятую, например 3,4,5,6,7,9 — собрать "
                              "только эти комнатности")
+    parser.add_argument("--resume", action="store_true",
+                        help="продолжить прерванный обход: пропустить корзины, "
+                             "уже собранные за эту дату снимка")
     parser.add_argument("--no-pets-pass", action="store_true",
                         help="не делать второй проход с фильтром «можно с животными». "
                              "Запросов будет меньше, но про животных придётся "
@@ -468,7 +491,8 @@ def main(argv=None) -> int:
     return run(args.mode, snapshot, args.max_requests,
                args.dry_run, args.refresh_districts,
                pets_pass=not args.no_pets_pass, transport=args.transport,
-               rooms=[r.strip() for r in args.rooms.split(",")] if args.rooms else None)
+               rooms=[r.strip() for r in args.rooms.split(",")] if args.rooms else None,
+               resume=args.resume)
 
 
 if __name__ == "__main__":
