@@ -29,10 +29,18 @@ cd "$REPO" || exit 1
 IMAGE="rent-collector:latest"
 PG_CONTAINER="rent_pg"
 
-# Сколько объявлений считать достаточным, чтобы день был собран. Обычный
-# ежедневный срез даёт около 16 тысяч, полный обход больше. Порог ниже
-# обычного намеренно: лучше оставить в покое неполный, но содержательный
-# день, чем гонять обход по кругу ради последних процентов.
+# Сколько объявлений считать достаточным, чтобы день был собран.
+#
+# Считается ТОЛЬКО искомый сегмент — одно- и двухкомнатные, те самые
+# NARROW_ROOM_CODES. Это важнее, чем кажется: сторож запускает полный
+# обход, а он даёт около 25 тысяч против 16 тысяч узкого дня. 13.10.2026
+# счёт по всем комнатностям дошёл до 13 410 и порог взялся, тогда как
+# одно- и двухкомнатные стояли на 54% нормы — сторож замолчал на половине
+# дня. Порог, считанный по тому, ради чего затеян проект, такого не даёт.
+#
+# Величина: норма сегмента около 16,5 тысяч, порог ниже намеренно —
+# лучше оставить в покое неполный, но содержательный день, чем гонять
+# обход по кругу ради последних процентов.
 ENOUGH="${WATCH_ENOUGH:-12000}"
 
 LOG_DIR="$REPO/data/logs"
@@ -58,7 +66,11 @@ fi
 
 TODAY="$(date +%F)"
 COLLECTED="$(docker exec -i "$PG_CONTAINER" psql -qtA -U rent -d rent -c \
-  "select count(distinct offer_id) from raw.offer_snapshot where snapshot_date = '$TODAY';" \
+  "select count(distinct s.offer_id)
+     from raw.offer_snapshot s
+     join core.offer o using (source, offer_id)
+    where s.snapshot_date = '$TODAY'
+      and o.rooms_count in (1, 2);" \
   2>/dev/null | tr -d '[:space:]')"
 COLLECTED="${COLLECTED:-0}"
 
@@ -90,11 +102,11 @@ PROBE_OUT="$(docker run --rm \
 PROBE_CODE=$?
 
 if [ "$PROBE_CODE" != 0 ]; then
-  note "собрано $COLLECTED из $ENOUGH; $PROBE_OUT"
+  note "1-2 комнаты: собрано $COLLECTED из $ENOUGH; $PROBE_OUT"
   exit 0
 fi
 
-note "собрано $COLLECTED из $ENOUGH; $PROBE_OUT — ЗАПУСКАЮ ОБХОД"
+note "1-2 комнаты: собрано $COLLECTED из $ENOUGH; $PROBE_OUT — ЗАПУСКАЮ ОБХОД"
 
 # Полный обход, а не узкий срез: сторож работает в дни, когда что-то уже
 # потеряно, и добирать имеет смысл все комнатности сразу.
