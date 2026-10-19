@@ -192,16 +192,45 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
                                 "Будет усечена.", bucket.label())
 
                 pages_needed = min(math.ceil(claimed / config.PAGE_SIZE), config.MAX_PAGE)
+                page_failed = False
                 for page in range(2, pages_needed + 1):
                     if max_requests and client.requests_made >= max_requests:
                         break
-                    page_offers, _ = client.search(bucket, page=page)
+                    try:
+                        page_offers, _ = client.search(bucket, page=page)
+                    except PageWithoutData as err:
+                        # Страница в середине корзины не далась. Раньше это
+                        # исключение летело наружу и роняло весь обход: день
+                        # 17.10.2026 собрал нормальные 16 161 объявление и
+                        # всё равно закрылся как failed из-за одной страницы
+                        # на сороковой корзине, а значит не покрыл сутки и
+                        # выпал из расчёта снятий.
+                        #
+                        # Правильно — бросить эту корзину, но не обход:
+                        # собранное уже записано, недобор посчитается сам
+                        # и при большой разнице включит переделение.
+                        log.warning("Корзина %s: страница %d не далась (%s). "
+                                    "Листание прерываю, собранное оставляю.",
+                                    bucket.label(), page, err)
+                        page_failed = True
+                        break
                     if not page_offers:
                         break
                     collected += _store(conn, run_id, bucket_id, snapshot_date,
                                         page_offers, page=page, dry_run=dry_run)
                     bucket_offer_ids |= _ids(page_offers)
                     seen_offers.update(_ids(page_offers))
+
+                if page_failed:
+                    # Пометка нужна, чтобы корзину перепросили: без неё она
+                    # попала бы в набор продолжения как собранная, и недобор
+                    # закрепился бы на весь день.
+                    buckets_failed += 1
+                    if not dry_run:
+                        db.close_bucket(conn, bucket_id, claimed=claimed,
+                                        collected=collected, pages=page,
+                                        error="листание прервано: страница не далась")
+                    continue
 
                 truncated = claimed > config.BUCKET_CAPACITY
                 missing = claimed - collected
