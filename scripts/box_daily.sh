@@ -74,6 +74,19 @@ if ! docker exec "$PG_CONTAINER" pg_isready -U rent -d rent >/dev/null 2>&1; the
 fi
 say "База отвечает"
 
+# Кеш браузера растёт примерно по 200 МБ в сутки: 15.10.2026 его почистили
+# до 57 МБ, через четыре дня профиль весил 828 МБ. Чистится только кеш,
+# файл Cookies лежит отдельно и не страдает — в нём накопленная сессия
+# площадки, без неё выдача даётся заметно хуже.
+CACHE_DIR="$REPO/data/browser_profile/Default"
+if [ -d "$CACHE_DIR/Cache" ]; then
+  CACHE_MB=$(du -sm "$CACHE_DIR/Cache" 2>/dev/null | cut -f1)
+  if [ "${CACHE_MB:-0}" -gt 300 ]; then
+    rm -rf "$CACHE_DIR/Cache" "$CACHE_DIR/Code Cache"
+    say "Кеш браузера разросся до ${CACHE_MB} МБ, вычищен (куки не тронуты)"
+  fi
+fi
+
 # Шаги сбора и разбора идут одним запуском контейнера: браузер
 # поднимается один раз на весь обход, как и на макбуке.
 #

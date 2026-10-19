@@ -140,3 +140,38 @@ def test_пустой_обход_не_считается_успешным(monkey
                        transport="html")
     # Код возврата ненулевой — обход сообщает о беде, а не о success.
     assert code != 0
+
+
+def test_сбой_страницы_не_роняет_обход(monkeypatch):
+    """Страница в середине корзины не далась — обход идёт дальше.
+
+    17.10.2026 день собрал нормальные 16 161 объявление и всё равно
+    закрылся как failed: исключение с сороковой страницы одной корзины
+    летело наружу мимо обработчика, который прикрывал только первую.
+    Непокрытый день выпадает из расчёта снятий, то есть цена такой
+    мелочи — дыра в сроках жизни объявлений.
+    """
+    from etl.cian_client import PageWithoutData
+
+    class FlakyPages(FakeClient):
+        """Первая страница даётся, вторая нет."""
+
+        def search(self, bucket, page=1):
+            self.requests_made += 1
+            if page == 1:
+                self.seen_buckets.append(bucket.label())
+                # Заявляем много, чтобы обход пошёл листать дальше.
+                return [{"id": f"{bucket.label()}#0"}], 200
+            raise PageWithoutData("страница не далась")
+
+    client = FlakyPages({})
+    monkeypatch.setattr(collect, "CianClient", lambda **kw: client)
+    monkeypatch.setattr(collect, "load_districts", lambda c, refresh=False: [])
+    code = collect.run("narrow", date(2026, 10, 17), None, dry_run=True,
+                       refresh_districts=False, pets_pass=False,
+                       transport="html")
+
+    # Обе корзины узкого среза пройдены: обход не свалился на первой.
+    assert client.seen_buckets == ["вся Москва, комнат=1", "вся Москва, комнат=2"]
+    # И вернулся не «успех»: корзины недобраны, это honest failure.
+    assert code != 0
