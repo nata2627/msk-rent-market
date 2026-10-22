@@ -207,8 +207,8 @@ $(date '+%d.%m, %H:%M')
 Держится $((LOCK_AGE_MIN / 60)) ч, каталог не пуст — сам сторож такое не трогает.
 Пока он стоит, обход не запускается и день теряется.
 
-Посмотреть, что внутри:
-$ ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST} 'ls -la ~/rent_msk/data/box.lock'"
+Посмотреть на машине сбора, что внутри:
+$ ls -la ~/rent_msk/data/box.lock"
       exit 1
     fi
     note "  замок снят, заклинивший обход остановлен — иду пробовать выдачу"
@@ -291,8 +291,8 @@ $(date '+%d.%m, %H:%M')
 Пять минут на два запроса, код 124. Обычно это память или демон Docker.
 Собрано $COLLECTED из $NORM по сегменту.
 
-Посмотреть машину:
-$ ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST} 'free -m; docker ps'"
+Посмотреть на машине сбора:
+$ free -m; docker ps"
   exit 0
 fi
 

@@ -6,7 +6,7 @@
 # (host.docker.internal:5433). С переездом сбора эта база замерла, и
 # дашборд десять дней показывал мёртвые данные, ничего об этом не говоря.
 # Прямо подключить Metabase к боксу нельзя: бокс за NAT, снаружи проброшен
-# только ssh на 2202.
+# только ssh.
 #
 # Поэтому дашборд кормится переливом по требованию. Данные в нём свежи на
 # момент команды — это цена простоты, зато ни туннеля, ни ключа в чужом
@@ -23,12 +23,26 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO" || exit 1
 
-BOX="ssh -o ConnectTimeout=20 -o BatchMode=yes -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST}"
 DUMP_DIR="$REPO/data/dumps"
 DUMP="$DUMP_DIR/rent_$(date +%Y%m%d_%H%M).dump"
 
 say() { echo "$(date +%H:%M:%S) === $*"; }
 die() { echo "$(date +%H:%M:%S) !!! $*" >&2; exit 1; }
+
+# Адрес машины сбора берётся из .env, а не из кода: репозиторий публичный,
+# и сведения о домашней сети в нём не нужны никому, кроме нас. Образец
+# переменных — в .env.example.
+box_env() {
+    sed -n "s/^[[:space:]]*$1=//p" "$REPO/.env" 2>/dev/null | tail -n 1 \
+      | sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+}
+BOX_HOST="${BOX_SSH_HOST:-$(box_env BOX_SSH_HOST)}"
+BOX_PORT="${BOX_SSH_PORT:-$(box_env BOX_SSH_PORT)}"
+BOX_USER="${BOX_SSH_USER:-$(box_env BOX_SSH_USER)}"
+if [ -z "$BOX_HOST" ] || [ -z "$BOX_USER" ]; then
+    die "не заданы BOX_SSH_HOST и BOX_SSH_USER — ни в окружении, ни в .env (образец в .env.example)"
+fi
+BOX="ssh -o ConnectTimeout=20 -o BatchMode=yes -p ${BOX_PORT:-22} ${BOX_USER}@${BOX_HOST}"
 
 mkdir -p "$DUMP_DIR"
 

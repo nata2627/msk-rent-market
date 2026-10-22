@@ -2,8 +2,11 @@
 # репозитории, а не то, что лежит на машине. Ставится так:
 #
 #   scp -P <порт> scripts/box_crontab <кто>@<машина>:~/rent_msk/scripts/
-#   ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST} 'crontab ~/rent_msk/scripts/box_crontab'
-#   ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST} 'crontab -l'   # сверить
+#   ssh -p <порт> <кто>@<машина> 'crontab ~/rent_msk/scripts/box_crontab'
+#   ssh -p <порт> <кто>@<машина> 'crontab -l'   # сверить
+#
+# Адрес машины — в .env (BOX_SSH_HOST и соседние), а не здесь:
+# репозиторий публичный.
 #
 # ЧАСЫ ЗДЕСЬ ПО UTC. Это не оплошность, а вынужденное.
 #

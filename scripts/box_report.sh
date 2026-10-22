@@ -146,8 +146,8 @@ if [ -z "$SEG" ]; then
 
 Числа дня неизвестны — сам сбор мог при этом пройти.
 
-Посмотреть машину:
-\$ ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST} 'docker ps'"
+Посмотреть на машине сбора:
+\$ docker ps"
 else
   PCT=$(( SEG * 100 / NORM ))
   if [ "${COVERED:-0}" -gt 0 ]; then COVER="день покрыт"; else COVER="день НЕ ПОКРЫТ"; fi
