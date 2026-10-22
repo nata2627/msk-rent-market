@@ -17,6 +17,7 @@ scripts/box_bot.sh — вся работа с базой и машиной ос�
     box_tg.py poll <offset>            строка на событие, поля через \x1f
     box_tg.py send <текст> [клавиатура]
     box_tg.py edit <msg_id> <текст> [клавиатура]
+    box_tg.py photo <url> <подпись> [чат]
     box_tg.py answer <callback_id> [всплывающая подсказка]
     box_tg.py commands                 меню команд в телеграме
 """
@@ -29,6 +30,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -171,6 +173,67 @@ def cmd_poll(offset: str) -> None:
                             c.get("data", "")]))
 
 
+def send_photo(url: str, caption: str, chat: str) -> bool:
+    """Фотография объявления в чат.
+
+    Сначала пробуем отдать телеграму ссылку: тогда картинку качает он
+    сам, и бокс не тратит ни трафика, ни памяти. Но ЦИАН его фетчеру не
+    отвечает — телеграм возвращает «failed to get HTTP URL content», —
+    поэтому запасной путь обязателен: качаем сами и отправляем файлом.
+
+    Почему ссылка всё-таки пробуется первой: она дешевле, и если
+    площадка однажды перестанет резать чужие запросы, всё станет
+    работать само.
+    """
+    r = call("sendPhoto", chat_id=chat, photo=url,
+             caption=render(caption), parse_mode="HTML")
+    if r.get("ok"):
+        return True
+
+    # Качаем сами. Заголовок браузера — потому что без него площадка
+    # отдаёт отказ: ровно по этой причине и не справился телеграм.
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/155.0.0.0 Safari/537.36"),
+            "Referer": "https://www.cian.ru/",
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            # Предел телеграма на фотографию — 10 МБ, и качать больше
+            # незачем: память бокса дороже картинки.
+            blob = resp.read(10 * 1024 * 1024)
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return False
+    if not blob:
+        return False
+
+    # Multipart руками: ради одной отправки тащить зависимость незачем, а
+    # в боксе лишних пакетов и нет.
+    boundary = "----rentmsk" + uuid.uuid4().hex
+    parts = []
+    for name, value in (("chat_id", str(chat)),
+                        ("caption", render(caption)),
+                        ("parse_mode", "HTML")):
+        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; "
+                     f'name="{name}"\r\n\r\n{value}\r\n'.encode())
+    parts.append(f"--{boundary}\r\nContent-Disposition: form-data; "
+                 'name="photo"; filename="flat.jpg"\r\n'
+                 "Content-Type: image/jpeg\r\n\r\n".encode())
+    parts.append(blob)
+    parts.append(f"\r\n--{boundary}--\r\n".encode())
+    body = b"".join(parts)
+
+    try:
+        req = urllib.request.Request(
+            f"{API}/bot{TOKEN}/sendPhoto", data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read()).get("ok", False)
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, TimeoutError):
+        return False
+
+
 def main() -> int:
     if not TOKEN or not CHAT:
         return 0
@@ -199,6 +262,9 @@ def main() -> int:
              text=render(sys.argv[3]), parse_mode="HTML",
              disable_web_page_preview="true",
              reply_markup=keyboard_arg(sys.argv[4] if len(sys.argv) > 4 else None))
+    elif what == "photo":
+        print("ok" if send_photo(sys.argv[2], sys.argv[3],
+                                 sys.argv[4] if len(sys.argv) > 4 else CHAT) else "fail")
     elif what == "answer":
         # Без этого ответа кнопка крутится у человека на экране до
         # таймаута, даже когда всё уже сделано.
