@@ -546,5 +546,9 @@ def test_в_подборе_есть_фотография():
     src = BOT.read_text()
     assert "core.offer_photo" in src
     assert "box_tg.py\" photo" in src
-    assert '[ "$sent" = "ok" ] || reply "$line"' in src
+    # Запасной путь: не вышло картинкой — вариант всё равно уходит
+    # текстом, и в журнале видно, почему.
+    assert 'if [ "$sent" = "ok" ]; then' in src
+    assert 'вариант без фото' in src
+    assert 'reply "$line"' in src
     assert "sendPhoto" in TG.read_text()
