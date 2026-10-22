@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -41,6 +41,7 @@ help:
 	@echo "make districts — сравнить районы по цене"
 	@echo "make report  — всё вместе"
 	@echo "make dashboard — собрать дашборд в Metabase (подбор + рынок)"
+	@echo "make pull-box  — перелить живую базу с Mac mini в копию для дашборда"
 	@echo "make psql    — консоль базы"
 	@echo "make test    — прогнать тесты"
 	@echo "make selftest— сквозная проверка записи и панели на фикстуре"
@@ -311,6 +312,11 @@ report: districts flats drops
 
 dashboard:
 	$(PY) scripts/setup_dashboard.py
+
+# Дашборд смотрит на локальную базу, а сбор живёт на Mac mini: без
+# перелива он показывает данные на день переезда. Подробности в скрипте.
+pull-box:
+	bash scripts/pull_box.sh
 
 psql:
 	docker compose exec postgres psql -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
