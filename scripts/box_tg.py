@@ -14,7 +14,7 @@ scripts/box_bot.sh — вся работа с базой и машиной ос�
 (жирным), строка, начатая «$ », — команда (моноширинной), остальное как
 есть. Проверяется тестом, что обе стороны рисуют одинаково.
 
-    box_tg.py poll <offset>            строка на событие, TSV
+    box_tg.py poll <offset>            строка на событие, поля через \x1f
     box_tg.py send <текст> [клавиатура]
     box_tg.py edit <msg_id> <текст> [клавиатура]
     box_tg.py answer <callback_id> [всплывающая подсказка]
@@ -125,6 +125,18 @@ def keyboard_arg(arg: str | None) -> str | None:
     return raw
 
 
+# Разделитель полей — \x1f, а не табуляция.
+#
+# Табуляция для bash — ПРОБЕЛЬНЫЙ разделитель: два таба подряд
+# схлопываются в один, и пустое поле исчезает вместе с ними. У обычного
+# сообщения поле «id нажатия» пустое, поэтому текст команды уезжал на
+# позицию влево и до разбора доходил пустым — бот отвечал «я понимаю
+# только команды» на любую команду. Кнопки при этом работали: у них это
+# поле непустое. \x1f пробельным не считается, и пустые поля остаются на
+# своих местах.
+SEP = "\x1f"
+
+
 def cmd_poll(offset: str) -> None:
     """Длинное ожидание: соединение висит, пока не придёт событие.
 
@@ -145,15 +157,18 @@ def cmd_poll(offset: str) -> None:
             m = u["message"]
             chat = (m.get("chat") or {}).get("id")
             text = (m.get("text") or "").replace("\t", " ").replace("\n", " ")
-            print(f"{uid}\tmsg\t{chat}\t{m.get('date', 0)}\t\t{text}")
+            print(SEP.join([str(uid), "msg", str(chat),
+                            str(m.get("date", 0)), "", text]))
         elif "callback_query" in u:
             c = u["callback_query"]
             msg = c.get("message") or {}
             chat = (msg.get("chat") or {}).get("id")
             # Нажатие кнопки несёт с собой id сообщения: по нему экран
             # фильтров правится на месте, а не засыпается копиями.
-            print(f"{uid}\tcb\t{chat}\t{msg.get('date', 0)}\t"
-                  f"{c.get('id')}:{msg.get('message_id')}\t{c.get('data', '')}")
+            print(SEP.join([str(uid), "cb", str(chat),
+                            str(msg.get("date", 0)),
+                            f"{c.get('id')}:{msg.get('message_id')}",
+                            c.get("data", "")]))
 
 
 def main() -> int:

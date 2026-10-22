@@ -430,3 +430,38 @@ def test_замок_опроса_снимается_и_по_сигналу_и_п
     src = BOT.read_text()
     assert "trap 'rmdir \"$POLL_LOCK\" 2>/dev/null' EXIT INT TERM HUP" in src
     assert '[ "$LOCK_AGE" -lt 3 ]' in src
+
+
+def test_поля_опроса_разделены_непробельным_знаком():
+    """Таб для bash — пробельный разделитель, и пустое поле исчезает.
+
+    У обычного сообщения поле «id нажатия» пустое. С табом два
+    разделителя подряд схлопывались, текст команды уезжал влево и до
+    разбора доходил пустым: бот отвечал «я понимаю только команды» на
+    любую команду. Кнопки при этом работали — у них поле непустое, —
+    поэтому поломка выглядела выборочной.
+    """
+    assert 'SEP = "\\x1f"' in TG.read_text()
+    assert "IFS=$'\\x1f'" in BOT.read_text()
+    assert "IFS=$'\\t'" not in BOT.read_text()
+
+
+def test_строка_опроса_разбирается_с_пустым_полем(tmp_path):
+    """Проверка на настоящей строке, а не на глаз."""
+    line = "\x1f".join(["7", "msg", "42", "1761140000", "", "/filter цена 90"])
+    script = (
+        "while IFS=$'\\x1f' read -r UPD_ID KIND CHAT WHEN EXTRA TEXT; do\n"
+        '  echo "$KIND|$CHAT|$EXTRA|$TEXT"\n'
+        f"done <<'EOF'\n{line}\nEOF\n")
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert out.stdout.strip() == "msg|42||/filter цена 90"
+
+
+def test_заход_опрашивает_по_кругу_но_не_вечно():
+    """Один опрос на заход означал минуту ожидания для второй команды."""
+    src = BOT.read_text()
+    assert "DEADLINE=$(( $(date +%s) + 55 ))" in src
+    assert 'while [ "$(date +%s)" -lt "$DEADLINE" ]' in src
+    # Пустой ответ без паузы при недоступном телеграме дал бы цикл в
+    # тысячу запросов в минуту.
+    assert "sleep 3" in src
