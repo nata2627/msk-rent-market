@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box notify-test notify-tg dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -42,7 +42,9 @@ help:
 	@echo "make report  — всё вместе"
 	@echo "make dashboard — собрать дашборд в Metabase (подбор + рынок)"
 	@echo "make pull-box  — перелить живую базу с Mac mini в копию для дашборда"
+	@echo "make notify-tg — подключить бота телеграма как канал доклада"
 	@echo "make psql    — консоль базы"
+	@echo "make notify-test — проверить канал уведомлений: дойдёт ли сообщение"
 	@echo "make test    — прогнать тесты"
 	@echo "make selftest— сквозная проверка записи и панели на фикстуре"
 
@@ -323,6 +325,17 @@ psql:
 
 logs:
 	docker compose logs -f --tail=50
+
+# Разовая проверка канала уведомлений: печатает код ответа и прямо
+# говорит, дошло ли. Канал не настроен — выходит с ненулевым кодом и
+# пишет, что положить в .env. Это ручная проверка, и молчать ей нельзя.
+notify-test:
+	bash scripts/box_notify.sh --test
+
+# Бота нельзя создать программно: @BotFather разговаривает только с живым
+# аккаунтом. Всё остальное скрипт делает сам, включая поиск id чата.
+notify-tg:
+	bash scripts/notify_tg_setup.sh
 
 test:
 	$(VENV)/bin/pytest -q tests
