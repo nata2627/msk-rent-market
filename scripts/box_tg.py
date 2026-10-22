@@ -181,7 +181,11 @@ def main() -> int:
     if what == "poll":
         cmd_poll(sys.argv[2] if len(sys.argv) > 2 else "0")
     elif what == "send":
-        r = call("sendMessage", chat_id=CHAT, text=render(sys.argv[2]),
+        # Четвёртым доводом можно указать чат: ответ уходит тому, кто
+        # спросил. Без этого гость писал бы боту, а ответ приходил бы
+        # владелице — и выглядело бы это как молчание.
+        to = sys.argv[4] if len(sys.argv) > 4 else CHAT
+        r = call("sendMessage", chat_id=to, text=render(sys.argv[2]),
                  parse_mode="HTML", disable_web_page_preview="true",
                  reply_markup=keyboard_arg(sys.argv[3] if len(sys.argv) > 3 else None))
         # id отправленного сообщения печатается наружу: по нему экран с
