@@ -169,6 +169,8 @@ for i, line in enumerate(lines):
         out.append(f"<b>{safe}</b>")
     elif line.startswith("$ "):
         out.append(f"<code>{html.escape(line[2:])}</code>")
+    elif line.startswith(("http://", "https://")):
+        out.append(f"<a href=\"{html.escape(line, quote=True)}\">Открыть объявление</a>")
     else:
         out.append(safe)
 print("\n".join(out))
