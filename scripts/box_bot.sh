@@ -195,24 +195,140 @@ filter_human() {
   echo "${out#, }"
 }
 
+# Клавиатура экрана фильтров. Собирается питоном, а не склейкой строк в
+# bash: это JSON, и кавычки в нём живут по своим правилам.
+#
+# В callback_data телеграм пускает не больше 64 байт, поэтому метки
+# короткие: p-10 это «цена минус десять тысяч». Пришедшее значение всё
+# равно сверяется белым списком — кнопка снаружи выглядит как любой
+# другой ввод из интернета.
+filter_keyboard() {
+  python3 -c '
+import json, sys
+price, rooms, area, metro, pets, park, mkad = sys.argv[1:8]
+
+def mark(flag, label):
+    # Точка перед надписью показывает, что выбрано: у телеграма нет
+    # состояния «нажато», кнопка всегда выглядит одинаково.
+    return "\u25cf " + label if flag else label
+
+price_label = "цена: " + (price + " тыс" if price else "любая")
+area_label = "от " + (area + " м2" if area else "любой")
+
+rows = [
+    [("Цена -10", "p-10"), (price_label, "noop"), ("+10", "p+10")],
+    [("Площадь -5", "a-5"), (area_label, "noop"), ("+5", "a+5")],
+    [(mark(rooms == "1", "1к"), "r1"), (mark(rooms == "2", "2к"), "r2"),
+     (mark(rooms == "1,2", "1-2к"), "r12"), (mark(not rooms, "любая"), "r0")],
+    [(mark(metro == "10", "метро 10"), "m10"), (mark(metro == "15", "15"), "m15"),
+     (mark(metro == "20", "20"), "m20"), (mark(not metro, "любое"), "m0")],
+    [(mark(pets == "allowed", "питомцы можно"), "ea"),
+     (mark(pets == "negotiable", "договор"), "en"),
+     (mark(not pets, "не важно"), "e0")],
+    [(mark(bool(park), "парк в км"), "k"), (mark(bool(mkad), "внутри МКАД"), "d")],
+    [("Сбросить всё", "x"), ("Показать 5 вариантов", "s")],
+]
+print(json.dumps({"inline_keyboard": [
+    [{"text": t, "callback_data": d} for t, d in row] for row in rows]},
+    ensure_ascii=False))
+' "$(filter_get price)" "$(filter_get rooms)" "$(filter_get area)" \
+  "$(filter_get metro)" "$(filter_get pets)" "$(filter_get park)" "$(filter_get mkad)"
+}
+
+filter_screen_text() {
+  local human found
+  human="$(filter_human)"
+  found="$(q "select count(*) from marts.offer_pick where true $(filter_where);" | tr -d '[:space:]')"
+  printf '%s' "Фильтры подбора
+
+Сейчас: ${human:-не заданы, поэтому наверх лезет дорогое}
+Подходит вариантов: ${found:-?}
+
+Кнопками ниже или текстом: /filter цена 90"
+}
+
+# Экран фильтров: отправить новый или поправить на месте после нажатия.
+filter_screen() {
+  local msg_id="${1:-}" kb
+  kb="$(filter_keyboard)"
+  if [ -n "$msg_id" ]; then
+    python3 "$REPO/scripts/box_tg.py" edit "$msg_id" "$(filter_screen_text)" "$kb"
+  else
+    python3 "$REPO/scripts/box_tg.py" send "$(filter_screen_text)" "$kb"
+  fi
+}
+
+# Нажатие кнопки. Белый список: ничего, кроме перечисленного здесь, в
+# фильтры не попадает, даже если в callback_data пришло что угодно.
+filter_button() {
+  local data="$1" msg_id="$2" cb_id="$3" cur toast="готово"
+  case "$data" in
+    p-10|p+10)
+      cur="$(filter_get price)"; cur="${cur:-100}"
+      [ "$data" = "p-10" ] && cur=$(( cur - 10 )) || cur=$(( cur + 10 ))
+      [ "$cur" -lt 10 ] && cur=10
+      [ "$cur" -gt 999 ] && cur=999
+      filter_set price "$cur"; toast="цена до $cur тыс" ;;
+    a-5|a+5)
+      cur="$(filter_get area)"; cur="${cur:-40}"
+      [ "$data" = "a-5" ] && cur=$(( cur - 5 )) || cur=$(( cur + 5 ))
+      [ "$cur" -lt 10 ] && cur=10
+      [ "$cur" -gt 300 ] && cur=300
+      filter_set area "$cur"; toast="площадь от $cur м2" ;;
+    r1)  filter_set rooms 1;   toast="однокомнатные" ;;
+    r2)  filter_set rooms 2;   toast="двухкомнатные" ;;
+    r12) filter_set rooms 1,2; toast="одно- и двухкомнатные" ;;
+    r0)  filter_set rooms "";  toast="комнатность любая" ;;
+    m10) filter_set metro 10;  toast="метро до 10 минут" ;;
+    m15) filter_set metro 15;  toast="метро до 15 минут" ;;
+    m20) filter_set metro 20;  toast="метро до 20 минут" ;;
+    m0)  filter_set metro "";  toast="метро не важно" ;;
+    ea)  filter_set pets allowed;    toast="животные можно" ;;
+    en)  filter_set pets negotiable; toast="животные по договорённости" ;;
+    e0)  filter_set pets "";         toast="животные не важны" ;;
+    k)   [ -n "$(filter_get park)" ] && { filter_set park ""; toast="парк не важен"; } \
+                                     || { filter_set park 1;  toast="парк в пределах километра"; } ;;
+    d)   [ -n "$(filter_get mkad)" ] && { filter_set mkad ""; toast="МКАД не важен"; } \
+                                     || { filter_set mkad 1;  toast="только внутри МКАД"; } ;;
+    x)   rm -f "$FILTER_FILE"; toast="фильтры сброшены" ;;
+    s)   python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "ищу"
+         cmd_flats 5
+         return ;;
+    noop) python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "это просто надпись"
+         return ;;
+    *)   note "неизвестная кнопка: $data"
+         python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "не знаю такой кнопки"
+         return ;;
+  esac
+  python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "$toast"
+  filter_screen "$msg_id"
+}
+
 cmd_filter() {
   local key="$1" val="$2" human districts
   case "$key" in
     "")
-      human="$(filter_human)"
-      reply "Фильтры подбора
+      # Экран с кнопками. Текстовый путь никуда не делся и остаётся
+      # единственным для района и для точных чисел: кнопками удобно
+      # крутить, текстом — задавать.
+      filter_screen ;;
+    текстом|help|справка)
+      reply "Фильтры текстом
 
-${human:-не заданы — поэтому наверх лезет дорогое}
+/filter цена 90          потолок в тысячах
+/filter площадь 35       от скольких м2
+/filter комнаты 1,2      комнатность
+/filter метро 15         минут пешком
+/filter сразу 250        сколько нужно денег сразу
+/filter животные можно   можно / договор / нельзя
+/filter парк да          парк от 10 га в километре
+/filter мкад да          только внутри
+/filter район Хамовники  сверяется со справочником базы
+/filter обходы 2         насколько старую выдачу пускать
+/filter цена -           убрать один
+/filter сброс            убрать все
 
-Задать: /filter цена 90
-Убрать один: /filter цена -
-Сбросить все: /filter сброс
-
-Что можно: цена (тыс), площадь (м2), комнаты (1 или 1,2),
-метро (мин пешком), сразу (тыс, нужно денег сразу),
-животные (можно/договор/нельзя), парк (да — в километре),
-мкад (да — внутри), район (название), обходы (0, 1, 2)
-
+Кнопками: /filter
 Колонки и смысл те же, что у фильтров дашборда." ;;
     сброс|reset)
       rm -f "$FILTER_FILE"
@@ -538,6 +654,15 @@ dispatch() {
 # Опрос телеграма
 # ---------------------------------------------------------------------
 
+# Нажатие кнопки руками: проверить обработчик, не доставая телефон.
+#   box_bot.sh --button r12 <id сообщения> <id нажатия>
+if [ "${1:-}" = "--button" ]; then
+  [ -n "$TOKEN" ] && [ -n "$OWNER" ] || { echo "канал не настроен, см. .env"; exit 1; }
+  filter_button "${2:-}" "${3:-}" "${4:-проверка}"
+  echo "кнопка «${2:-}» обработана"
+  exit 0
+fi
+
 # Ручной прогон команды, чтобы проверить ответ, не доставая телефон.
 if [ "${1:-}" = "--run" ]; then
   [ -n "$TOKEN" ] && [ -n "$OWNER" ] || { echo "канал не настроен, см. .env"; exit 1; }
@@ -551,43 +676,48 @@ fi
 
 # Один опрос за раз. Замок с собственным сроком давности: зависший опрос
 # не имеет права заткнуть бота навсегда — именно так и теряются дни.
+# Срок давности — три минуты. Честный опрос живёт не дольше семидесяти
+# секунд (пятьдесят ждёт телеграм плюс запас), поэтому всё, что старше
+# трёх минут, — след убитого процесса.
+#
+# Раньше стояло десять минут, и этого хватило, чтобы обжечься: опрос,
+# прибитый при проверке, оставил замок, и бот молчал бы десять минут. С
+# кнопками это особенно неприятно — человек жмёт, а ответа нет.
 if ! mkdir "$POLL_LOCK" 2>/dev/null; then
   LOCK_AGE=$(( ( $(date +%s) - $(stat -c %Y "$POLL_LOCK" 2>/dev/null || echo 0) ) / 60 ))
-  [ "$LOCK_AGE" -lt 10 ] && exit 0
+  [ "$LOCK_AGE" -lt 3 ] && exit 0
   note "замок опроса висит $LOCK_AGE мин — снимаю"
   rmdir "$POLL_LOCK" 2>/dev/null
   mkdir "$POLL_LOCK" 2>/dev/null || exit 0
 fi
-trap 'rmdir "$POLL_LOCK" 2>/dev/null' EXIT
+# Сигналы ловятся наравне с обычным выходом: замок, оставленный после
+# kill, останавливает бота целиком, а снимается он только по сроку.
+trap 'rmdir "$POLL_LOCK" 2>/dev/null' EXIT INT TERM HUP
 
 OFFSET="$(cat "$OFFSET_FILE" 2>/dev/null || echo 0)"
-UPD="$(curl -sS --max-time 20 \
-        "https://api.telegram.org/bot${TOKEN}/getUpdates?offset=${OFFSET}&timeout=0&allowed_updates=%5B%22message%22%5D" \
-        2>/dev/null)" || exit 0
+# Опрос через scripts/box_tg.py: длинное ожидание вместо мгновенного.
+#
+# Раньше опрос был мгновенным, раз в минуту, и для команд текстом этого
+# хватало. С кнопками так нельзя: нажатие висело бы до минуты с
+# крутящимся индикатором. Теперь телеграм держит соединение до пятидесяти
+# секунд и отдаёт событие сразу, а cron поднимает следующий заход через
+# минуту. Зависнуть процесс всё равно не может — дольше семидесяти
+# секунд он не живёт.
+PARSED="$(python3 "$REPO/scripts/box_tg.py" poll "$OFFSET" 2>/dev/null)"
 
-PARSED="$(printf '%s' "$UPD" | python3 -c '
-import json, sys
-try:
-    d = json.loads(sys.stdin.read())
-except Exception:
-    raise SystemExit
-if not d.get("ok"):
-    raise SystemExit
-for u in d.get("result", []):
-    m = u.get("message") or {}
-    chat = (m.get("chat") or {}).get("id")
-    text = (m.get("text") or "").replace("\t", " ").replace("\n", " ")
-    uid = u.get("update_id")
-    when = m.get("date", 0)
-    print(f"{uid}\t{chat}\t{when}\t{text}")
-')"
+# Меню команд телеграма обновляется раз в сутки: оно меняется редко, а
+# лишний запрос на каждом заходе — это 1440 запросов в день впустую.
+MENU_STAMP="$STATE_DIR/menu"
+if [ ! -f "$MENU_STAMP" ] || [ -n "$(find "$MENU_STAMP" -mtime +1 2>/dev/null)" ]; then
+  python3 "$REPO/scripts/box_tg.py" commands >/dev/null 2>&1 && touch "$MENU_STAMP"
+fi
 
 [ -z "$PARSED" ] && exit 0
 
 FIRST_RUN=0
 [ "$OFFSET" = 0 ] && FIRST_RUN=1
 
-while IFS=$'\t' read -r UPD_ID CHAT WHEN TEXT; do
+while IFS=$'\t' read -r UPD_ID KIND CHAT WHEN EXTRA TEXT; do
   [ -z "$UPD_ID" ] && continue
   echo $(( UPD_ID + 1 )) >"$OFFSET_FILE"
 
@@ -600,6 +730,15 @@ while IFS=$'\t' read -r UPD_ID CHAT WHEN TEXT; do
     # Чужому не отвечаем вовсе: ответ подтвердил бы, что бот живой и
     # что-то умеет. В журнал — да, чтобы знать, что стучались.
     note "чужой чат $CHAT, пропускаю: $TEXT"
+    continue
+  fi
+
+  if [ "$KIND" = "cb" ]; then
+    # Нажатие кнопки. В EXTRA лежит id нажатия и id сообщения через
+    # двоеточие: первое нужно, чтобы погасить индикатор, второе — чтобы
+    # поправить экран на месте.
+    note "кнопка: $TEXT"
+    filter_button "$TEXT" "${EXTRA#*:}" "${EXTRA%%:*}"
     continue
   fi
 
