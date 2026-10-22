@@ -324,3 +324,109 @@ def test_свежесть_в_подборе_не_отключаема():
     объявление ведёт на снятую публикацию.
     """
     assert "crawls_missed <= ${v:-0}" in BOT.read_text()
+
+
+# ---------------------------------------------------------------------
+# Кнопки
+# ---------------------------------------------------------------------
+
+TG = ROOT / "scripts" / "box_tg.py"
+
+
+def keyboard(price="", rooms="", area="", metro="", pets="", park="", mkad=""):
+    """Собрать клавиатуру тем же кодом, что и бот."""
+    body = BOT.read_text().split("  python3 -c '")[1].split("' \"$(filter_get price)\"")[0]
+    out = subprocess.run(["python3", "-c", body, price, rooms, area, metro, pets, park, mkad],
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    import json as _json
+    return _json.loads(out.stdout)
+
+
+def test_клавиатура_собирается(box):
+    kb = keyboard(price="90", rooms="1,2")
+    rows = kb["inline_keyboard"]
+    assert len(rows) >= 6
+    # Телеграм не принимает callback_data длиннее 64 байт, и обрезает он
+    # молча: кнопка просто перестаёт работать.
+    for row in rows:
+        for b in row:
+            assert len(b["callback_data"].encode()) <= 64
+            assert b["text"].strip()
+
+
+def test_выбранное_помечено_в_надписи(box):
+    kb = keyboard(rooms="1,2", pets="allowed")
+    texts = [b["text"] for row in kb["inline_keyboard"] for b in row]
+    assert any(t.startswith("●") and "1-2" in t for t in texts)
+    assert any(t.startswith("●") and "питомцы" in t for t in texts)
+
+
+@pytest.mark.parametrize("data", ["rm -rf /", "p-10; id", "x;reset", "' or 1=1", "эксплойт"])
+def test_неизвестная_кнопка_ничего_не_меняет(box, data):
+    """callback_data приходит из интернета — это такой же недоверенный
+    ввод, как и текст команды."""
+    filters = box["repo"] / "data" / "bot" / "filters"
+    filters.write_text("price=90\n")
+    src = BOT.read_text()
+    # Обработчик кнопок — case по известным меткам, конец списка — отказ.
+    handler = src.split("filter_button() {")[1].split("\n}")[0]
+    assert "case \"$data\" in" in handler
+    assert "не знаю такой кнопки" in handler
+    assert data not in handler
+
+
+def test_шаг_цены_не_уходит_за_границы():
+    """Кнопка «−10», нажатая десять раз, не должна уводить цену в ноль."""
+    handler = BOT.read_text().split("filter_button() {")[1].split("\n}")[0]
+    assert '[ "$cur" -lt 10 ] && cur=10' in handler
+    assert '[ "$cur" -gt 999 ] && cur=999' in handler
+
+
+def test_разметка_одинакова_в_отправщике_и_в_транспорте():
+    """Два места рисуют сообщение — они обязаны рисовать одинаково.
+
+    box_notify.sh шлёт тревоги, box_tg.py — ответы и экраны с кнопками.
+    Разъехавшись, они дали бы сообщения, которые выглядят по-разному в
+    одном и том же чате.
+    """
+    sample = "Заголовок\nвторая строка\n$ команда"
+    out = subprocess.run(
+        ["python3", "-c",
+         "import sys; sys.path.insert(0, %r); "
+         "import importlib.util; "
+         "spec = importlib.util.spec_from_file_location('tg', %r); "
+         "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); "
+         "print(m.render(sys.stdin.read()))" % (str(ROOT / "scripts"), str(TG))],
+        input=sample, capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    rendered = out.stdout.strip()
+    assert rendered.startswith("<b>Заголовок</b>")
+    assert "<code>команда</code>" in rendered
+
+    body = (ROOT / "scripts" / "box_notify.sh").read_text()
+    notify_body = body.split("to_html() {\n  python3 -c '")[1].split("'\n}")[0]
+    out2 = subprocess.run(["python3", "-c", notify_body], input=sample,
+                          capture_output=True, text=True)
+    assert out2.stdout.strip() == rendered, "разметка разъехалась"
+
+
+def test_опрос_длинный_а_процесс_не_вечный():
+    """Кнопки требуют мгновенного ответа, но демона в проекте быть не
+    должно: зависший процесс уже стоил дня."""
+    src = TG.read_text()
+    assert "timeout=50" in src          # телеграм держит соединение
+    assert "timeout = 70" in src        # но не дольше, чем мы готовы ждать
+
+
+def test_замок_опроса_снимается_и_по_сигналу_и_по_сроку():
+    """Убитый опрос не должен останавливать бота надолго.
+
+    Честный опрос живёт не дольше семидесяти секунд, поэтому срок
+    давности в три минуты — это заведомо след убитого процесса. Десять
+    минут, стоявшие сначала, означали десять минут молчания на нажатую
+    кнопку.
+    """
+    src = BOT.read_text()
+    assert "trap 'rmdir \"$POLL_LOCK\" 2>/dev/null' EXIT INT TERM HUP" in src
+    assert '[ "$LOCK_AGE" -lt 3 ]' in src
