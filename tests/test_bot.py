@@ -232,3 +232,95 @@ def test_без_настроенного_канала_бот_молчит_и_н�
     r = run(box)
     assert r.returncode == 0
     assert calls(box) == "" or "curl" not in calls(box)
+
+
+# ---------------------------------------------------------------------
+# Фильтры подбора
+# ---------------------------------------------------------------------
+
+@pytest.mark.parametrize("value", [
+    "90; drop table raw.offer_snapshot",
+    "90 or 1=1",
+    "'",
+    "$(id)",
+    "90'--",
+    "сто",
+])
+def test_числовой_фильтр_не_принимает_мусор(box, value):
+    """В SQL уходит только проверенное число.
+
+    Фильтр собирается в строку запроса, поэтому проверка образцом тут не
+    опрятность, а единственное, что отделяет чат от базы.
+    """
+    r = run(box, "--run", f"/filter цена {value}")
+    assert r.returncode == 0
+    saved = box["repo"] / "data" / "bot" / "filters"
+    assert not saved.exists() or "цена" not in saved.read_text()
+    assert "drop" not in calls(box).lower()
+
+
+def test_число_в_границах_сохраняется(box):
+    run(box, "--run", "/filter цена 90")
+    saved = (box["repo"] / "data" / "bot" / "filters").read_text()
+    assert "price=90" in saved
+
+
+def test_число_вне_границ_отвергается(box):
+    """Цена в рублях вместо тысяч — обычная опечатка, и она бы молча
+    показала пустой список вместо отбора."""
+    run(box, "--run", "/filter цена 90000")
+    saved = box["repo"] / "data" / "bot" / "filters"
+    assert not saved.exists() or "price=" not in saved.read_text()
+
+
+def test_район_сверяется_со_справочником(box):
+    """Название района идёт в запрос только если нашлось в базе."""
+    r = run(box, "--run", "/filter район Выдуманный'; drop table x; --")
+    assert r.returncode == 0
+    saved = box["repo"] / "data" / "bot" / "filters"
+    assert not saved.exists() or "district=" not in saved.read_text()
+
+
+def test_фильтр_переживает_перезапуск(box):
+    run(box, "--run", "/filter комнаты 1,2")
+    run(box, "--run", "/filter площадь 40")
+    saved = (box["repo"] / "data" / "bot" / "filters").read_text()
+    assert "rooms=1,2" in saved and "area=40" in saved
+
+
+def test_сброс_убирает_всё(box):
+    run(box, "--run", "/filter цена 90")
+    run(box, "--run", "/filter сброс")
+    saved = box["repo"] / "data" / "bot" / "filters"
+    assert not saved.exists() or saved.read_text().strip() == ""
+
+
+def test_подбор_не_заводит_своего_определения():
+    """Бот и дашборд читают один и тот же marts.offer_pick.
+
+    Два определения подбора в проекте уже расходились: make flats
+    отбирал по is_my_segment, дашборд этой разметкой не пользовался, и
+    они тихо разъехались. Поэтому базовые условия лежат в схеме, а не
+    повторяются в питоне и в bash.
+    """
+    bot = BOT.read_text()
+    dash = (ROOT / "scripts" / "setup_dashboard.py").read_text()
+    schema = (ROOT / "sql" / "schema" / "04_alter.sql").read_text()
+
+    assert "marts.offer_pick" in bot
+    assert "marts.offer_pick" in dash
+    assert "create or replace view marts.offer_pick" in schema
+    # Базовые условия — ровно в одном месте, в схеме.
+    for gate in ("is_duplicate", "is_room_share", "is_daily", "lease_term_type"):
+        assert gate in schema, f"{gate} пропал из определения подбора"
+        assert gate not in bot, f"{gate} продублирован в боте"
+
+
+def test_свежесть_в_подборе_не_отключаема():
+    """Умолчание «была в последней выдаче» убирается только явно.
+
+    На 04.10.2026 из 17 935 активных однушек и двушек 2091 не
+    встретились в последнем обходе: без этого условия каждое восьмое
+    объявление ведёт на снятую публикацию.
+    """
+    assert "crawls_missed <= ${v:-0}" in BOT.read_text()

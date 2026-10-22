@@ -79,7 +79,8 @@ cmd_help() {
 посмотреть
 
 /status — что сейчас с панелью и машиной
-/flats — верх подбора, самые свежие
+/flats — верх подбора под вашими фильтрами
+/filter — посмотреть и поменять фильтры подбора
 /market — числа рынка за сегодня
 /log — хвост журнала прогона
 /pulse — прислать итог дня прямо сейчас
@@ -128,26 +129,208 @@ $lock
 Память: $mem МБ доступно"
 }
 
+# ---------------------------------------------------------------------
+# Фильтры подбора
+# ---------------------------------------------------------------------
+# Зачем они боту. Балл за цену в проекте перевёрнут намеренно: дешевизна
+# на данных оказалась признаком беды, а не выгоды. Поэтому голый верх по
+# оценке — это верх по дороговизне: в первом же ответе бота вышли
+# квартиры за 175 тысяч и за три миллиона. На дашборде этого не видно,
+# потому что там верх живёт под фильтрами.
+#
+# Колонки и смысл — те же, что у фильтров дашборда (FILTERS в
+# scripts/setup_dashboard.py), а базовые условия отбора общие и лежат в
+# marts.offer_pick. Своего определения подбора бот не заводит.
+#
+# Значения хранятся строками ключ=значение в data/bot/filters и живут
+# между запусками: фильтр, который надо задавать заново каждый раз, в
+# дороге бесполезен.
+FILTER_FILE="$STATE_DIR/filters"
+
+filter_get() {
+  [ -f "$FILTER_FILE" ] || return 0
+  sed -n "s/^$1=//p" "$FILTER_FILE" | tail -n 1
+}
+
+filter_set() {
+  local key="$1" val="$2" tmp
+  tmp="$(mktemp)"
+  grep -v "^$key=" "$FILTER_FILE" 2>/dev/null >"$tmp"
+  [ -n "$val" ] && echo "$key=$val" >>"$tmp"
+  mv "$tmp" "$FILTER_FILE"
+}
+
+# Условие для SQL собирается ТОЛЬКО из проверенных значений: всё, что
+# пришло из чата, уже прошло через образец в filter_apply. Подстановки
+# сырого текста здесь нет ни одной.
+filter_where() {
+  local w="" v
+  v="$(filter_get price)";  [ -n "$v" ] && w="$w and price <= $(( v * 1000 ))"
+  v="$(filter_get area)";   [ -n "$v" ] && w="$w and total_area >= $v"
+  v="$(filter_get rooms)";  [ -n "$v" ] && w="$w and rooms_count in ($v)"
+  v="$(filter_get metro)";  [ -n "$v" ] && w="$w and metro_real_walk_min <= $v"
+  v="$(filter_get entry)";  [ -n "$v" ] && w="$w and entry_cost <= $(( v * 1000 ))"
+  v="$(filter_get pets)";   [ -n "$v" ] && w="$w and pets_state = '$v'"
+  v="$(filter_get park)";   [ -n "$v" ] && w="$w and park_band in ('до 500 м, пешком', '500 м – 1 км')"
+  v="$(filter_get mkad)";   [ -n "$v" ] && w="$w and inside_mkad"
+  v="$(filter_get district)"; [ -n "$v" ] && w="$w and district = '$v'"
+  # Свежесть: умолчание ноль — «была в последней выдаче». Без него каждое
+  # восьмое объявление подбора ведёт на снятую публикацию.
+  v="$(filter_get seen)"; w="$w and crawls_missed <= ${v:-0}"
+  echo "$w and is_active"
+}
+
+filter_human() {
+  local out="" v
+  v="$(filter_get price)";    [ -n "$v" ] && out="$out, цена до $v тыс"
+  v="$(filter_get area)";     [ -n "$v" ] && out="$out, площадь от $v м2"
+  v="$(filter_get rooms)";    [ -n "$v" ] && out="$out, комнат $v"
+  v="$(filter_get metro)";    [ -n "$v" ] && out="$out, метро до $v мин"
+  v="$(filter_get entry)";    [ -n "$v" ] && out="$out, сразу до $v тыс"
+  v="$(filter_get pets)";     [ -n "$v" ] && out="$out, животные $v"
+  v="$(filter_get park)";     [ -n "$v" ] && out="$out, парк в километре"
+  v="$(filter_get mkad)";     [ -n "$v" ] && out="$out, внутри МКАД"
+  v="$(filter_get district)"; [ -n "$v" ] && out="$out, район $v"
+  v="$(filter_get seen)";     [ -n "$v" ] && out="$out, пропущено обходов до $v"
+  echo "${out#, }"
+}
+
+cmd_filter() {
+  local key="$1" val="$2" human districts
+  case "$key" in
+    "")
+      human="$(filter_human)"
+      reply "Фильтры подбора
+
+${human:-не заданы — поэтому наверх лезет дорогое}
+
+Задать: /filter цена 90
+Убрать один: /filter цена -
+Сбросить все: /filter сброс
+
+Что можно: цена (тыс), площадь (м2), комнаты (1 или 1,2),
+метро (мин пешком), сразу (тыс, нужно денег сразу),
+животные (можно/договор/нельзя), парк (да — в километре),
+мкад (да — внутри), район (название), обходы (0, 1, 2)
+
+Колонки и смысл те же, что у фильтров дашборда." ;;
+    сброс|reset)
+      rm -f "$FILTER_FILE"
+      reply "Фильтры сброшены. Остался только один, несбрасываемый:
+показываются объявления, встреченные в последнем обходе — иначе каждое
+восьмое ведёт на снятую публикацию." ;;
+    цена|price)   filter_num price "$val" "цена в тысячах, от 10 до 999" 10 999 ;;
+    площадь|area) filter_num area "$val" "площадь в м2, от 10 до 300" 10 300 ;;
+    метро|metro)  filter_num metro "$val" "минут пешком, от 1 до 60" 1 60 ;;
+    сразу|entry)  filter_num entry "$val" "сумма в тысячах, от 10 до 9999" 10 9999 ;;
+    обходы|seen)  filter_num seen "$val" "пропущено обходов, от 0 до 10" 0 10 ;;
+    комнаты|rooms)
+      case "$val" in
+        -) filter_set rooms ""; reply "Фильтр по комнатам убран." ;;
+        [1-5]|[1-5],[1-5]|[1-5],[1-5],[1-5])
+           filter_set rooms "$val"; reply "Комнат: $val
+Сейчас отбор: $(filter_human)" ;;
+        *) reply "Комнатность — числа от 1 до 5 через запятую. Например: /filter комнаты 1,2" ;;
+      esac ;;
+    животные|pets)
+      case "$val" in
+        -)        filter_set pets ""; reply "Фильтр по животным убран." ;;
+        можно)    filter_set pets allowed;    reply "Животные: можно
+Сейчас отбор: $(filter_human)" ;;
+        договор)  filter_set pets negotiable; reply "Животные: по договорённости
+Сейчас отбор: $(filter_human)" ;;
+        нельзя)   filter_set pets forbidden;  reply "Животные: нельзя
+Сейчас отбор: $(filter_human)" ;;
+        *) reply "Животные: можно, договор или нельзя. Например: /filter животные можно" ;;
+      esac ;;
+    парк|park)
+      case "$val" in
+        -|нет) filter_set park ""; reply "Фильтр по парку убран." ;;
+        да)    filter_set park 1;  reply "Парк: в пределах километра
+Сейчас отбор: $(filter_human)" ;;
+        *) reply "Парк: да или нет. Рабочий порог — парк от 10 га в километре." ;;
+      esac ;;
+    мкад|mkad)
+      case "$val" in
+        -|нет) filter_set mkad ""; reply "Фильтр по МКАД убран." ;;
+        да)    filter_set mkad 1;  reply "Только внутри МКАД
+Сейчас отбор: $(filter_human)" ;;
+        *) reply "МКАД: да или нет." ;;
+      esac ;;
+    район|district)
+      if [ "$val" = "-" ]; then filter_set district ""; reply "Фильтр по району убран."; return; fi
+      # Район не подставляется как пришёл: он сверяется со справочником в
+      # базе, и в запрос идёт только то, что в нём нашлось.
+      districts="$(q "select district from core.offer where source='cian' and district is not null group by 1 having count(*) >= 3;")"
+      if printf '%s\n' "$districts" | grep -qxF "$val"; then
+        filter_set district "$val"
+        reply "Район: $val
+Сейчас отбор: $(filter_human)"
+      else
+        reply "Района «${val}» не знаю. Названия как на ЦИАНе, например: Хамовники,
+Раменки, Южнопортовый. Убрать фильтр: /filter район -"
+      fi ;;
+    *) reply "Такого фильтра нет. Список — /filter" ;;
+  esac
+}
+
+# Числовой фильтр: значение проверяется образцом и границами, и только
+# потом попадает в файл. В SQL оно идёт уже числом.
+filter_num() {
+  local key="$1" val="$2" help="$3" lo="$4" hi="$5"
+  case "$val" in
+    -) filter_set "$key" ""; reply "Фильтр «$key» убран.
+Сейчас отбор: $(filter_human)"; return ;;
+    ''|*[!0-9]*) reply "Нужно число: $help"; return ;;
+  esac
+  if [ "$val" -lt "$lo" ] || [ "$val" -gt "$hi" ]; then
+    reply "Не похоже на правду: $help"
+    return
+  fi
+  filter_set "$key" "$val"
+  reply "Принято: $key = $val
+Сейчас отбор: $(filter_human)"
+}
+
 cmd_flats() {
-  local n="$1" rows
+  local n="$1" rows where human found
+  where="$(filter_where)"
+  human="$(filter_human)"
+  found="$(q "select count(*) from marts.offer_pick where true $where;" | tr -d '[:space:]')"
   rows="$(q "select round(score)::int || ' | ' || district || ' | ' ||
                     rooms_count || 'к ' || round(total_area)::int || ' м2 | ' ||
                     round(price / 1000.0)::int || ' тыс | метро ' ||
-                    coalesce(metro_walk_min::text, '?') || ' мин' ||
+                    coalesce(metro_real_walk_min::text, '?') || ' мин' ||
                     E'\n' || url
-               from marts.offer_scored
-              where is_active and seen_in_last_crawl
+               from marts.offer_pick
+              where true $where
               order by score desc limit $n;")"
-  [ -z "$rows" ] && { reply "Верх подбора: пусто
+  if [ -z "$rows" ]; then
+    reply "Подходящего нет
 
-Либо витрины не пересобраны, либо в последнем обходе ничего не нашлось.
-Посмотреть: /status"; return; }
-  reply "Верх подбора, $n лучших по оценке
+Отбор: ${human:-без фильтров}
+Нашлось: ${found:-0}
+
+Ослабить: /filter цена 120, /filter район -, /filter сброс"
+    return
+  fi
+  # Отдельная оговорка, когда цена не задана. Это не придирка: балл за
+  # цену перевёрнут намеренно, и без потолка верх списка — это верх по
+  # дороговизне. Первый же ответ бота выдал квартиры за 175 тысяч и за
+  # три миллиона, и выглядело это как поломка оценки, а не как
+  # отсутствие фильтра.
+  local warn=""
+  [ -z "$(filter_get price)" ] && warn="
+
+Цена не задана, поэтому наверх лезет дорогое: в оценке дороговизна
+читается как признак качества. Задать потолок: /filter цена 90"
+
+  reply "Верх подбора, $n из ${found:-?} подходящих
 
 $rows
 
-Оценка — не модель, а мои предпочтения с весами. Свежесть: только то,
-что встретилось в последнем обходе."
+Отбор: ${human:-без фильтров}
+Поменять: /filter${warn}"
 }
 
 cmd_market() {
@@ -324,6 +507,11 @@ dispatch() {
           [1-9]|10) cmd_flats "$arg" ;;
           *) reply "Сколько вариантов показать — число от 1 до 10. Например: /flats 7" ;;
         esac ;;
+    /filter|/фильтр|/отбор)
+        # Третье слово — значение фильтра, и оно может быть названием
+        # района с пробелом, поэтому берётся хвостом, а не awk-полем.
+        cmd_filter "$(printf '%s' "$text" | awk '{print tolower($2)}')" \
+                   "$(printf '%s' "$text" | cut -s -d' ' -f3-)" ;;
     /market|/рынок) cmd_market ;;
     /log|/журнал)
         case "$arg" in
