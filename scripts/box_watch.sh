@@ -60,6 +60,35 @@ note() { echo "$(date '+%d.%m %H:%M') $*" >>"$WATCH_LOG"; }
 # единственный след того, в какие часы площадка была жива.
 find "$LOG_DIR" -name 'box_watch.log' -mtime +365 -delete 2>/dev/null
 
+# Доклад наружу. Каждая строка ВНИМАНИЕ и ОСТАНОВКА ниже пишется в
+# журнал и тем же вызовом уходит в канал: 21.10.2026 всё было в журнале
+# правильно, и ровно поэтому день почти потерялся — журнал никто не
+# читал. Отправщик сам молчит, если канал не настроен, сам не даёт одной
+# беде улететь семьдесят два раза за сутки и сам не падает, поэтому
+# вызов ничем не обёрнут и код его не проверяется.
+notify() { bash "$REPO/scripts/box_notify.sh" "$@" >/dev/null 2>&1; }
+
+# Норма искомого сегмента за день, замер 13-21.10.2026: 16-17 тысяч
+# одно- и двухкомнатных. Нужна только в сообщениях — чтобы число
+# «собрано 3080» сразу читалось как беда, а не как число. Порог самого
+# сторожа ниже и живёт в ENOUGH, это разные величины: ENOUGH говорит,
+# когда перестать трогать площадку, NORM — насколько день полон.
+# Та же величина в box_report.sh.
+NORM=16500
+
+# Сколько собрано по искомому сегменту за сегодня. Вынесено в функцию,
+# потому что спросить это нужно и в сообщении о заклинившем замке, то
+# есть до обычного места подсчёта.
+collected_today() {
+  timeout 60 docker exec -i "$PG_CONTAINER" psql -qtA -U rent -d rent -c \
+    "select count(distinct s.offer_id)
+       from raw.offer_snapshot s
+       join core.offer o using (source, offer_id)
+      where s.snapshot_date = '$(date +%F)'
+        and o.rooms_count in (1, 2);" \
+    2>/dev/null | tr -d '[:space:]'
+}
+
 # Диск. У соседнего бокса он кончался трижды за сентябрь, и каждый раз
 # молча: `setup` печатал «No space left on device» и выходил с кодом 0.
 # База при кончившемся диске рискует больше всех, поэтому ниже двух
@@ -70,10 +99,12 @@ find "$LOG_DIR" -name 'box_watch.log' -mtime +365 -delete 2>/dev/null
 FREE_MB=$(df -Pm "$REPO" | awk 'NR==2 {print $4}')
 if [ "${FREE_MB:-0}" -lt 2048 ]; then
   note "ОСТАНОВКА: свободно ${FREE_MB} МБ, это меньше двух гигабайт. Обход не запускаю, база дороже"
+  notify disk-stop "$(date '+%d.%m %H:%M') ОСТАНОВКА: на боксе свободно ${FREE_MB} МБ из нужных 2048. Обход не запускается вовсе, день теряется. Лечить: ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST}, затем rm -rf ~/rent_msk/data/browser_profile/Default/Cache (куки не трогать)"
   exit 1
 fi
 if [ "${FREE_MB:-0}" -lt 5120 ]; then
   note "ВНИМАНИЕ: свободно всего ${FREE_MB} МБ"
+  notify disk-low "$(date '+%d.%m %H:%M') ВНИМАНИЕ: на боксе свободно ${FREE_MB} МБ. Ниже 2048 обход встанет. Лечить: rm -rf ~/rent_msk/data/browser_profile/Default/Cache"
 fi
 
 # Идёт обход — сторожу делать нечего. Проверка по замку, а не по
@@ -157,9 +188,14 @@ if [ -d "$LOCK" ]; then
     # не замок, и сносить его сторожу нельзя.
     if [ -d "$LOCK" ] && ! rmdir "$LOCK" 2>/dev/null; then
       note "ОСТАНОВКА: замок снять не удалось, обход не запускаю"
+      notify lock-stuck "$(date '+%d.%m %H:%M') ОСТАНОВКА: замок держится $((LOCK_AGE_MIN / 60)) ч и снять его не удалось — каталог не пуст. Обход не запускается, день теряется. Лечить руками: ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST}, ls -la ~/rent_msk/data/box.lock"
       exit 1
     fi
     note "  замок снят, заклинивший обход остановлен — иду пробовать выдачу"
+    # Сообщение одно и по итогу, а не по началу разбора: беда тут одна,
+    # и важно в ней не «разбираю», а сколько дня осталось несобранным.
+    STALE_COLLECTED="$(collected_today)"
+    notify lock-stale "$(date '+%d.%m %H:%M') обход заклинил, замок снят сторожем (держался $((LOCK_AGE_MIN / 60)) ч, журнал молчал $QUIET мин). Собрано ${STALE_COLLECTED:-?} из $NORM по сегменту. Сторож добирает сам; если к вечеру не добрал: box_daily.sh narrow $(date +%F)"
   else
     exit 0
   fi
@@ -173,14 +209,7 @@ if ! timeout 60 docker exec "$PG_CONTAINER" pg_isready -U rent -d rent >/dev/nul
   exit 0
 fi
 
-TODAY="$(date +%F)"
-COLLECTED="$(timeout 60 docker exec -i "$PG_CONTAINER" psql -qtA -U rent -d rent -c \
-  "select count(distinct s.offer_id)
-     from raw.offer_snapshot s
-     join core.offer o using (source, offer_id)
-    where s.snapshot_date = '$TODAY'
-      and o.rooms_count in (1, 2);" \
-  2>/dev/null | tr -d '[:space:]')"
+COLLECTED="$(collected_today)"
 COLLECTED="${COLLECTED:-0}"
 
 if [ "$COLLECTED" -ge "$ENOUGH" ]; then
@@ -229,6 +258,7 @@ if [ "$PROBE_CODE" = 124 ]; then
   # площадки, а наша беда: проба не уложилась в срок, и это признак
   # того, что боксу нехорошо.
   note "1-2 комнаты: собрано $COLLECTED из $ENOUGH; проба не уложилась в 5 минут, боксу нехорошо"
+  notify probe-timeout "$(date '+%d.%m %H:%M') ВНИМАНИЕ: проба сторожа не уложилась в 5 минут (код 124) — боксу нехорошо. Собрано $COLLECTED из $NORM по сегменту. Лечить: ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST}, затем free -m и docker ps"
   exit 0
 fi
 
