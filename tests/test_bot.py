@@ -363,10 +363,13 @@ def test_клавиатура_собирается(box):
 
 
 def test_выбранное_помечено_в_надписи(box):
+    """У кнопок-наборов выбранное помечено точкой, у переключателей —
+    самой надписью: «Животные: по договорённости» уже говорит состояние,
+    и точка была бы лишней."""
     kb = keyboard(rooms="1,2", pets="allowed")
     texts = [b["text"] for row in kb["inline_keyboard"] for b in row]
     assert any(t.startswith("●") and "1-2" in t for t in texts)
-    assert any(t.startswith("●") and "питомцы" in t for t in texts)
+    assert "Животные: можно" in texts
 
 
 @pytest.mark.parametrize("data", ["rm -rf /", "p-10; id", "x;reset", "' or 1=1", "эксплойт"])
@@ -397,7 +400,7 @@ def test_разметка_одинакова_в_отправщике_и_в_тр�
     Разъехавшись, они дали бы сообщения, которые выглядят по-разному в
     одном и том же чате.
     """
-    sample = "Заголовок\nвторая строка\n$ команда"
+    sample = "Заголовок\nвторая строка\n$ команда\nhttps://www.cian.ru/rent/flat/1/"
     out = subprocess.run(
         ["python3", "-c",
          "import sys; sys.path.insert(0, %r); "
@@ -410,6 +413,7 @@ def test_разметка_одинакова_в_отправщике_и_в_тр�
     rendered = out.stdout.strip()
     assert rendered.startswith("<b>Заголовок</b>")
     assert "<code>команда</code>" in rendered
+    assert '<a href="https://www.cian.ru/rent/flat/1/">Открыть объявление</a>' in rendered
 
     body = (ROOT / "scripts" / "box_notify.sh").read_text()
     notify_body = body.split("to_html() {\n  python3 -c '")[1].split("'\n}")[0]
@@ -552,3 +556,75 @@ def test_в_подборе_есть_фотография():
     assert 'вариант без фото' in src
     assert 'reply "$line"' in src
     assert "sendPhoto" in TG.read_text()
+
+
+def test_надписи_кнопок_по_русски_и_без_внутренних_слов():
+    """«животные allowed» и «договор» — не ответы, а утечка словаря.
+
+    В базе состояние лежит словами платформы (allowed, negotiable), а
+    на экране должно быть по-русски и целиком: «договор» читается как
+    договор аренды, хотя речь о состоянии «по договорённости».
+    """
+    src = BOT.read_text()
+    for raw in ("allowed", "negotiable", "forbidden"):
+        # Сырые слова допустимы только в SQL и в разборе, но не в том,
+        # что видит человек.
+        assert f'echo "$out, животные $v"' not in src
+    assert "pets_human()" in src
+    assert "по договорённости" in src
+
+    kb = keyboard(pets="negotiable")
+    labels = [b["text"] for row in kb["inline_keyboard"] for b in row]
+    assert "Животные: по договорённости" in labels
+    assert "договор" not in labels
+
+
+def test_состояние_животных_переключается_по_кругу():
+    handler = BOT.read_text().split("filter_button() {")[1].split("\n}")[0]
+    assert '"")           filter_set pets allowed' in handler
+    assert "allowed)      filter_set pets negotiable" in handler
+    # «Нельзя» в круг не входит: отбирать квартиры с запретом незачем.
+    assert "filter_set pets forbidden" not in handler
+
+
+def test_подбор_листается():
+    """Смотрят подбор подряд, а «покажи ещё» не должно быть набором
+    команды."""
+    src = BOT.read_text()
+    assert "page_file()" in src
+    assert "limit $n offset $off" in src
+    handler = src.split("filter_button() {")[1].split("\n}")[0]
+    assert "next)" in handler and "first)" in handler
+    # Конец списка — это не «ничего не подходит», и путать их нельзя:
+    # иначе человек решит, что сломались фильтры.
+    assert "Дальше ничего нет" in src
+
+
+def test_страница_своя_у_каждого_чата():
+    assert 'page_file() { echo "$STATE_DIR/page.${TARGET_CHAT:-$OWNER}"; }' in BOT.read_text()
+
+
+def test_новому_чату_ставится_начальный_отбор():
+    """Пустой отбор — это не «показать всё», а «показать самое дорогое».
+
+    Балл за цену перевёрнут намеренно, поэтому без потолка наверх лезут
+    квартиры за три миллиона. Владелица увидела это первой командой, а
+    потом ровно то же получил гость, когда у него завёлся собственный
+    пустой набор фильтров.
+    """
+    src = BOT.read_text()
+    assert "filter_defaults()" in src
+    # Потолок берётся из данных, а не выдумывается.
+    assert "percentile_cont(0.5)" in src.split("filter_defaults()")[1][:900]
+    assert 'filter_set rooms "1,2"' in src
+    # И ставится в обоих путях показа: подбор и экран фильтров.
+    assert 'started="$(filter_defaults)"' in src
+    assert "filter_defaults >/dev/null" in src
+
+
+def test_начальный_отбор_назван_в_ответе():
+    """Молча подставленный фильтр — это обман: человек думает, что видит
+    весь рынок."""
+    src = BOT.read_text()
+    assert "Фильтров у вас ещё не было, поставил начальные" in src
+    assert "медиана по таким квартирам" in src

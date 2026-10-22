@@ -238,6 +238,12 @@ filter_set() {
   mv "$tmp" "$f"
 }
 
+# На какой странице подбора остановились. Своя у каждого чата, как и
+# фильтры: иначе «следующие пять» у гостя листали бы список владелицы.
+page_file() { echo "$STATE_DIR/page.${TARGET_CHAT:-$OWNER}"; }
+page_get() { cat "$(page_file)" 2>/dev/null || echo 0; }
+page_set() { echo "${1:-0}" >"$(page_file)"; }
+
 # Фильтры, заданные до разделения по чатам, достаются владелице: они её
 # и были.
 if [ -f "$STATE_DIR/filters" ] && [ ! -f "$STATE_DIR/filters.$OWNER" ]; then
@@ -264,19 +270,50 @@ filter_where() {
   echo "$w and is_active"
 }
 
+# Состояние животных по-русски. В базе оно лежит словами платформы
+# (allowed, negotiable, forbidden), и показывать их человеку нельзя:
+# «животные allowed» — это не ответ, а утечка внутреннего словаря.
+pets_human() {
+  case "$1" in
+    allowed)    echo "можно" ;;
+    negotiable) echo "по договорённости" ;;
+    forbidden)  echo "нельзя" ;;
+    unknown)    echo "не указано" ;;
+    *)          echo "$1" ;;
+  esac
+}
+
 filter_human() {
   local out="" v
   v="$(filter_get price)";    [ -n "$v" ] && out="$out, цена до $v тыс"
   v="$(filter_get area)";     [ -n "$v" ] && out="$out, площадь от $v м2"
-  v="$(filter_get rooms)";    [ -n "$v" ] && out="$out, комнат $v"
+  v="$(filter_get rooms)";    [ -n "$v" ] && out="$out, комнаты $v"
   v="$(filter_get metro)";    [ -n "$v" ] && out="$out, метро до $v мин"
   v="$(filter_get entry)";    [ -n "$v" ] && out="$out, сразу до $v тыс"
-  v="$(filter_get pets)";     [ -n "$v" ] && out="$out, животные $v"
+  v="$(filter_get pets)";     [ -n "$v" ] && out="$out, животные $(pets_human "$v")"
   v="$(filter_get park)";     [ -n "$v" ] && out="$out, парк в километре"
   v="$(filter_get mkad)";     [ -n "$v" ] && out="$out, внутри МКАД"
   v="$(filter_get district)"; [ -n "$v" ] && out="$out, район $v"
   v="$(filter_get seen)";     [ -n "$v" ] && out="$out, пропущено обходов до $v"
   echo "${out#, }"
+}
+
+# То же самое списком — для экрана фильтров. Строка через запятую годится
+# как приписка под вариантами, но как главное содержимое экрана читается
+# плохо: глазу не за что зацепиться.
+filter_lines() {
+  local v
+  v="$(filter_get price)";    [ -n "$v" ] && echo "Цена: до $v тыс"
+  v="$(filter_get area)";     [ -n "$v" ] && echo "Площадь: от $v м2"
+  v="$(filter_get rooms)";    [ -n "$v" ] && echo "Комнаты: $v"
+  v="$(filter_get metro)";    [ -n "$v" ] && echo "Метро: до $v мин пешком"
+  v="$(filter_get entry)";    [ -n "$v" ] && echo "Нужно сразу: до $v тыс"
+  v="$(filter_get pets)";     [ -n "$v" ] && echo "Животные: $(pets_human "$v")"
+  v="$(filter_get park)";     [ -n "$v" ] && echo "Парк: в пределах километра"
+  v="$(filter_get mkad)";     [ -n "$v" ] && echo "МКАД: только внутри"
+  v="$(filter_get district)"; [ -n "$v" ] && echo "Район: $v"
+  v="$(filter_get seen)";     [ -n "$v" ] && echo "Пропущено обходов: до $v"
+  return 0
 }
 
 # Клавиатура экрана фильтров. Собирается питоном, а не склейкой строк в
@@ -298,6 +335,8 @@ def mark(flag, label):
 
 price_label = "цена: " + (price + " тыс" if price else "любая")
 area_label = "от " + (area + " м2" if area else "любой")
+pets_label = {"allowed": "можно", "negotiable": "по договорённости",
+              "forbidden": "нельзя"}.get(pets, "не важно")
 
 rows = [
     [("Цена -10", "p-10"), (price_label, "noop"), ("+10", "p+10")],
@@ -306,9 +345,10 @@ rows = [
      (mark(rooms == "1,2", "1-2к"), "r12"), (mark(not rooms, "любая"), "r0")],
     [(mark(metro == "10", "метро 10"), "m10"), (mark(metro == "15", "15"), "m15"),
      (mark(metro == "20", "20"), "m20"), (mark(not metro, "любое"), "m0")],
-    [(mark(pets == "allowed", "питомцы можно"), "ea"),
-     (mark(pets == "negotiable", "договор"), "en"),
-     (mark(not pets, "не важно"), "e0")],
+    # Животные — одна кнопка по кругу, а не три подряд. Тремя кнопками
+    # надпись приходилось резать до «договор», а это читается как
+    # «договор аренды», хотя речь о состоянии «по договорённости».
+    [("Животные: " + pets_label, "e")],
     [(mark(bool(park), "парк в км"), "k"), (mark(bool(mkad), "внутри МКАД"), "d")],
     [("Сбросить всё", "x"), ("Показать 5 вариантов", "s")],
 ]
@@ -320,20 +360,29 @@ print(json.dumps({"inline_keyboard": [
 }
 
 filter_screen_text() {
-  local human found
-  human="$(filter_human)"
+  local lines found
+  lines="$(filter_lines)"
   found="$(q "select count(*) from marts.offer_pick where true $(filter_where);" | tr -d '[:space:]')"
   printf '%s' "Фильтры подбора
 
-Сейчас: ${human:-не заданы, поэтому наверх лезет дорогое}
-Подходит вариантов: ${found:-?}
+${lines:-Пока ничего не задано, поэтому наверх лезет дорогое: в оценке
+дороговизна читается как признак качества.}
 
-Кнопками ниже или текстом: /filter цена 90"
+Подходит: ${found:-?} вариантов
+
+Меняйте кнопками под этим сообщением — оно обновится на месте.
+Точные числа и район удобнее текстом, например:
+\$ /filter цена 90
+Весь список текстовых команд: /filter текстом"
 }
 
 # Экран фильтров: отправить новый или поправить на месте после нажатия.
 filter_screen() {
   local msg_id="${1:-}" kb
+  # Начальный отбор ставится и здесь: экран фильтров открывают раньше,
+  # чем подбор, и увидеть на нём «ничего не задано» — то же самое, что
+  # получить список квартир за три миллиона.
+  filter_defaults >/dev/null || true
   kb="$(filter_keyboard)"
   if [ -n "$msg_id" ]; then
     python3 "$REPO/scripts/box_tg.py" edit "$msg_id" "$(filter_screen_text)" "$kb"
@@ -367,16 +416,32 @@ filter_button() {
     m15) filter_set metro 15;  toast="метро до 15 минут" ;;
     m20) filter_set metro 20;  toast="метро до 20 минут" ;;
     m0)  filter_set metro "";  toast="метро не важно" ;;
-    ea)  filter_set pets allowed;    toast="животные можно" ;;
-    en)  filter_set pets negotiable; toast="животные по договорённости" ;;
-    e0)  filter_set pets "";         toast="животные не важны" ;;
+    e)
+      # По кругу: не важно -> можно -> по договорённости -> не важно.
+      # «Нельзя» в круг не входит намеренно: отбирать квартиры, где
+      # животных запрещают, незачем. Текстом такое всё ещё можно
+      # задать — для проверок рынка, не для подбора.
+      case "$(filter_get pets)" in
+        "")           filter_set pets allowed;    toast="животные: можно" ;;
+        allowed)      filter_set pets negotiable; toast="животные: по договорённости" ;;
+        *)            filter_set pets "";         toast="животные: не важно" ;;
+      esac ;;
     k)   [ -n "$(filter_get park)" ] && { filter_set park ""; toast="парк не важен"; } \
                                      || { filter_set park 1;  toast="парк в пределах километра"; } ;;
     d)   [ -n "$(filter_get mkad)" ] && { filter_set mkad ""; toast="МКАД не важен"; } \
                                      || { filter_set mkad 1;  toast="только внутри МКАД"; } ;;
     x)   rm -f "$(filter_file)"; toast="фильтры сброшены" ;;
-    s)   python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "ищу"
-         cmd_flats 5
+    s|first)
+         python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "ищу"
+         cmd_flats 5 0
+         return ;;
+    next)
+         python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "дальше"
+         cmd_flats 5 "$(( $(page_get) + 5 ))"
+         return ;;
+    filters)
+         python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "фильтры"
+         filter_screen
          return ;;
     noop) python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "это просто надпись"
          return ;;
@@ -386,6 +451,30 @@ filter_button() {
   esac
   python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "$toast"
   filter_screen "$msg_id"
+}
+
+# Начальный отбор для чата, у которого фильтров ещё нет.
+#
+# Пустой отбор — это не «показать всё», а «показать самое дорогое»: балл
+# за цену в проекте перевёрнут намеренно, дешевизна на данных оказалась
+# признаком беды. Владелица увидела это первой же командой (квартиры за
+# 175 тысяч и за три миллиона), а потом ровно то же получил гость, когда
+# у него завёлся собственный пустой набор.
+#
+# Потолок берётся из данных, а не выдумывается: медиана цены по
+# однушкам и двушкам, которые сейчас в выдаче. Это не предпочтение, а
+# точка отсчёта, и она честно называется в ответе.
+filter_defaults() {
+  local med
+  [ -f "$(filter_file)" ] && return 1
+  med="$(q "select round(percentile_cont(0.5) within group (order by price) / 1000.0)::int
+              from marts.offer_pick
+             where is_active and crawls_missed <= 0 and rooms_count in (1, 2);" | tr -d '[:space:]')"
+  [ -z "$med" ] && med=100
+  filter_set rooms "1,2"
+  filter_set price "$med"
+  echo "$med"
+  return 0
 }
 
 cmd_filter() {
@@ -437,7 +526,8 @@ cmd_filter() {
         -)        filter_set pets ""; reply "Фильтр по животным убран." ;;
         можно)    filter_set pets allowed;    reply "Животные: можно
 Сейчас отбор: $(filter_human)" ;;
-        договор)  filter_set pets negotiable; reply "Животные: по договорённости
+        договор|договорённость|по\ договорённости)
+                  filter_set pets negotiable; reply "Животные: по договорённости
 Сейчас отбор: $(filter_human)" ;;
         нельзя)   filter_set pets forbidden;  reply "Животные: нельзя
 Сейчас отбор: $(filter_human)" ;;
@@ -493,7 +583,9 @@ filter_num() {
 }
 
 cmd_flats() {
-  local n="$1" where human found rows line score district rooms area price metro url photo sent
+  local n="$1" off="${2:-0}" where human found rows line score district rooms area price metro url photo sent shown kb started
+  started="$(filter_defaults)" || started=""
+  page_set "$off"
   where="$(filter_where)"
   human="$(filter_human)"
   found="$(q "select count(*) from marts.offer_pick where true $where;" | tr -d '[:space:]')"
@@ -503,15 +595,30 @@ cmd_flats() {
   # склейку было бы глупо.
   rows="$(q "select round(score)::int, district, rooms_count, round(total_area)::int,
                     round(price / 1000.0)::int, coalesce(metro_real_walk_min::text, '?'),
-                    url,
+                    -- Адрес без хвоста: в нём context и
+                    -- mlSearchSessionGuid, то есть метки показа — вдвое
+                    -- длиннее самой ссылки и ничего не значащие для
+                    -- человека. Объявление открывается и без них.
+                    split_part(url, '?', 1),
                     coalesce((select p.url from core.offer_photo p
                                where p.source = o.source and p.offer_id = o.offer_id
                                order by p.photo_pos limit 1), '')
                from marts.offer_pick o
               where true $where
-              order by score desc limit $n;")"
+              order by score desc limit $n offset $off;")"
 
   if [ -z "$rows" ]; then
+    if [ "$off" -gt 0 ]; then
+      # Не «ничего не подходит», а «дальше кончилось»: разница важная,
+      # иначе человек решит, что сломались фильтры.
+      page_set 0
+      reply "Дальше ничего нет
+
+Показано всё, что подошло: ${found:-0} вариантов.
+Начать сначала: /flats
+Ослабить отбор: /filter"
+      return
+    fi
     reply "Подходящего нет
 
 Отбор: ${human:-без фильтров}
@@ -527,10 +634,17 @@ cmd_flats() {
 Цена не задана, поэтому наверх лезет дорогое: в оценке дороговизна
 читается как признак качества. Задать потолок: /filter цена 90"
 
-  reply "Верх подбора, $n из ${found:-?} подходящих
+  local start_note=""
+  [ -n "$started" ] && start_note="
+
+Фильтров у вас ещё не было, поставил начальные: 1-2 комнаты и цена до
+$started тыс. Это медиана по таким квартирам в сегодняшней выдаче, а не
+чьё-то мнение. Меняйте под себя: /filter"
+
+  reply "Подбор: $(( off + 1 ))-$(( off + n )) из ${found:-?} подходящих
 
 Отбор: ${human:-без фильтров}
-Поменять: /filter${warn}"
+Поменять: /filter${start_note}${warn}"
 
   # Каждый вариант отдельным сообщением с фотографией: список ссылок
   # глазами не просматривается, а квартиру выбирают всё-таки глазами.
@@ -554,6 +668,15 @@ $url"
   done <<EOF
 $rows
 EOF
+
+  # Кнопка листания под последним вариантом. Без неё «покажи ещё» —
+  # это набрать команду, а смотрят подбор обычно подряд.
+  shown=$(printf '%s\n' "$rows" | grep -c . || true)
+  if [ "$(( off + shown ))" -lt "${found:-0}" ]; then
+    kb='{"inline_keyboard":[[{"text":"Следующие '"$n"'","callback_data":"next"},{"text":"Сначала","callback_data":"first"},{"text":"Фильтры","callback_data":"filters"}]]}'
+    python3 "$REPO/scripts/box_tg.py" send \
+      "Показано $(( off + shown )) из ${found}" "$kb" "$TARGET_CHAT" >/dev/null 2>&1
+  fi
 }
 
 cmd_market() {

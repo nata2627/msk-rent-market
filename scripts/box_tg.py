@@ -99,6 +99,11 @@ def render(text: str) -> str:
             out.append(f"<b>{safe}</b>")
         elif line.startswith("$ "):
             out.append(f"<code>{html.escape(line[2:])}</code>")
+        elif line.startswith(("http://", "https://")):
+            # Голая ссылка на объявление занимает четыре строки и ничего
+            # не говорит: в ней хвост с трекингом длиннее самого адреса.
+            # Показываем словом, адрес остаётся внутри.
+            out.append(f'<a href="{html.escape(line, quote=True)}">Открыть объявление</a>')
         else:
             out.append(safe)
     return "\n".join(out)
