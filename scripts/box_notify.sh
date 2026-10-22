@@ -144,6 +144,40 @@ if [ "$ALWAYS" = 0 ] && [ -f "$STAMP" ]; then
   fi
 fi
 
+# Разметка сообщения. Договор простой, чтобы места вызова читались
+# глазами как обычный текст:
+#   первая строка         — заголовок, в телеграме уходит жирным;
+#   строка, начатая «$ »  — команда, уходит моноширинной;
+#   остальное             — как есть.
+#
+# Зачем вообще. Первые сообщения были одной длинной строкой: дата,
+# беда, числа и команда лечения подряд. На телефоне это читается
+# предложением, а не сводкой, и главное — что именно случилось —
+# тонет в середине. Беду надо понимать за секунду, иначе уведомление
+# не лучше журнала, который никто не открывает.
+#
+# Журнал и ntfy остаются простым текстом: разметка телеграма в них
+# показалась бы сырыми тегами.
+to_html() {
+  python3 -c '
+import html, sys
+lines = sys.stdin.read().rstrip("\n").split("\n")
+out = []
+for i, line in enumerate(lines):
+    safe = html.escape(line)
+    if i == 0:
+        out.append(f"<b>{safe}</b>")
+    elif line.startswith("$ "):
+        out.append(f"<code>{html.escape(line[2:])}</code>")
+    else:
+        out.append(safe)
+print("\n".join(out))
+'
+}
+
+# Для ntfy и журнала — тот же текст без служебного «$ » у команд.
+to_plain() { sed 's/^\$ //'; }
+
 # Сроки жёсткие и маленькие: сеть в боксе бывает мертва, а прогон ждать
 # уведомления не должен. Худший случай — около двадцати секунд на канал.
 ERR_FILE="$(mktemp 2>/dev/null || echo "/tmp/box_notify.$$.err")"
@@ -156,7 +190,7 @@ for TRANSPORT in $TRANSPORTS; do
       CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
         --connect-timeout 5 --max-time 10 --retry 1 --retry-delay 3 \
         -H 'Title: rent_msk' -H 'Priority: high' -H 'Tags: house' \
-        --data-binary "$TEXT" "$NTFY_URL" 2>"$ERR_FILE")"
+        --data-binary "$(printf '%s' "$TEXT" | to_plain)" "$NTFY_URL" 2>"$ERR_FILE")"
       # Цель печатается урезанной: у ntfy секрет — само имя топика.
       TARGET="ntfy, топик $(printf '%s' "${NTFY_URL##*/}" | cut -c1-3)***"
       ;;
@@ -164,7 +198,8 @@ for TRANSPORT in $TRANSPORTS; do
       CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
         --connect-timeout 5 --max-time 10 --retry 1 --retry-delay 3 \
         -d "chat_id=$TG_CHAT" -d 'disable_web_page_preview=true' \
-        --data-urlencode "text=$TEXT" \
+        -d 'parse_mode=HTML' \
+        --data-urlencode "text=$(printf '%s' "$TEXT" | to_html)" \
         "https://api.telegram.org/bot$TG_TOKEN/sendMessage" 2>"$ERR_FILE")"
       # У телеграма секрет — всё после двоеточия в токене.
       TARGET="телеграм, чат $TG_CHAT, бот ${TG_TOKEN%%:*}:***"
@@ -181,7 +216,7 @@ for TRANSPORT in $TRANSPORTS; do
 
   case "$CODE" in
     2??) DELIVERED=$(( DELIVERED + 1 ))
-         note "отправлено ($TRANSPORT, код $CODE, «${KEY}»): $TEXT" ;;
+         note "отправлено ($TRANSPORT, код $CODE, «${KEY}»): $(printf '%s' "$TEXT" | to_plain | tr '\n' ' ')" ;;
     *)   note "НЕ отправлено ($TRANSPORT, код $CODE${ERR:+, $ERR}), «${KEY}»: $TEXT" ;;
   esac
   REPORT="${REPORT}${TARGET}|${CODE}|${ERR}

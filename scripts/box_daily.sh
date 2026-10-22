@@ -93,7 +93,13 @@ if ! docker exec "$PG_CONTAINER" pg_isready -U rent -d rent >/dev/null 2>&1; the
     docker exec "$PG_CONTAINER" pg_isready -U rent -d rent >/dev/null 2>&1 && break
     [ "$i" = 24 ] && {
       say "ОШИБКА: база так и не поднялась. Прогон отменён."
-      notify db-down "$(date '+%d.%m %H:%M') ОСТАНОВКА: база rent_pg не поднялась за две минуты, прогон ($MODE, $SNAPSHOT_DATE) отменён — день не собирается вовсе. Лечить: ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST}, затем cd ~/rent_data && docker compose up -d"
+      notify db-down "База не поднялась — день не собирается
+$(date '+%d.%m, %H:%M')
+
+Прогон $MODE за $SNAPSHOT_DATE отменён: rent_pg не ответил за две минуты.
+
+Поднять базу:
+$ cd ~/rent_data && docker compose up -d"
       exit 1
     }
   done
@@ -223,9 +229,23 @@ say "Конец, сбоев: $FAILS"
 if [ "$FAILS" != 0 ]; then
   COL="$(collected)"
   if tail -n "+$((LOG_MARK + 1))" "$LOG" | grep -q 'Сбор — СБОЙ'; then
-    notify collect-fail "$(date '+%d.%m %H:%M') ОСТАНОВКА: сбор упал ($MODE, $SNAPSHOT_DATE), всего сбоев $FAILS. Собрано ${COL:-?} из $NORM по сегменту — несобранный день не вернуть. Догнать: ~/rent_msk/scripts/box_daily.sh narrow $SNAPSHOT_DATE"
+    notify collect-fail "Сбор упал — день под угрозой
+$(date '+%d.%m, %H:%M')
+
+Режим $MODE, дата $SNAPSHOT_DATE, сбоев $FAILS.
+Собрано ${COL:-?} из $NORM по сегменту.
+
+Несобранный день не вернуть. Догнать:
+$ ~/rent_msk/scripts/box_daily.sh narrow $SNAPSHOT_DATE"
   else
-    notify run-fails "$(date '+%d.%m %H:%M') ВНИМАНИЕ: прогон ($MODE, $SNAPSHOT_DATE) кончился с ненулевым кодом, сбоев $FAILS, но сбор прошёл: собрано ${COL:-?} из $NORM по сегменту. Пересчёт из raw не срочен. Смотреть: tail ~/rent_msk/data/logs/$(basename "$LOG")"
+    notify run-fails "Шаг после сбора упал
+$(date '+%d.%m, %H:%M')
+
+Сам сбор прошёл: ${COL:-?} из $NORM по сегменту.
+Сбоев в прогоне $MODE за $SNAPSHOT_DATE: $FAILS.
+
+Данные целы, пересчёт из raw не срочен. Посмотреть:
+$ tail ~/rent_msk/data/logs/$(basename "$LOG")"
   fi
 fi
 
