@@ -142,16 +142,27 @@ DAY_SHORT="${DAY:8:2}.${DAY:5:2}"
 if [ -z "$SEG" ]; then
   # База не ответила — пульс всё равно уходит. Молчание читалось бы как
   # беда с боксом, а беда тут другая и называть её надо своим именем.
-  PULSE="$DAY_SHORT: база не ответила, числа дня неизвестны. Смотреть: ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST}, docker ps"
+  PULSE="Итог дня $DAY_SHORT: база не ответила
+
+Числа дня неизвестны — сам сбор мог при этом пройти.
+
+Посмотреть машину:
+\$ ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST} 'docker ps'"
 else
-  if [ "${COVERED:-0}" -gt 0 ]; then COVER="день покрыт"; else COVER="день НЕ ПОКРЫТ"; fi
   PCT=$(( SEG * 100 / NORM ))
-  PULSE="$DAY_SHORT: $COVER, 1-2 комнаты $SEG из $NORM ($PCT%), снятий ${GONE:-0}"
+  if [ "${COVERED:-0}" -gt 0 ]; then COVER="день покрыт"; else COVER="день НЕ ПОКРЫТ"; fi
+  PULSE="Итог дня $DAY_SHORT: $COVER
+
+1-2 комнаты: $SEG из $NORM ($PCT%)
+Снятий за день: ${GONE:-0}"
   # Семьдесят процентов нормы — рядом с порогом самого сторожа (12 000,
   # то есть 73%): ниже этого день стоит догонять руками, выше он
   # содержателен и гонять обход ради последних процентов незачем.
   if [ "${COVERED:-0}" = 0 ] || [ "$PCT" -lt 70 ]; then
-    PULSE="$PULSE. Догнать: ~/rent_msk/scripts/box_daily.sh narrow $DAY"
+    PULSE="$PULSE
+
+Догнать:
+\$ ~/rent_msk/scripts/box_daily.sh narrow $DAY"
   fi
 fi
 
