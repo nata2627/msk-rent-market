@@ -59,7 +59,10 @@ OWNER="${NOTIFY_TG_CHAT:-$(from_env NOTIFY_TG_CHAT)}"
 # принадлежат владелице, поэтому гость видит ровно тот список, который
 # увидела бы она.
 GUESTS="${NOTIFY_TG_GUESTS:-$(from_env NOTIFY_TG_GUESTS)}"
-GUEST_COMMANDS="/help /start /status /flats /market /log /статус /подбор /рынок /журнал"
+# Что доступно гостю. Журнала здесь намеренно нет: в нём пути, ошибки и
+# устройство машины — внутренняя кухня, которая гостю ничего не даёт, а
+# показывает лишнее.
+GUEST_COMMANDS="/help /start /status /flats /market /filter /статус /подбор /рынок /фильтр /отбор"
 
 # Кто спрашивает. Чужой — это не ошибка и не враг: бота находят поиском,
 # и чужому по-прежнему не уходит ничего.
@@ -84,6 +87,7 @@ guest_allowed() {
 # Кому уходит ответ. По умолчанию владелице — так отвечают проверки
 # вроде --run; в опросе значение меняется на чат спросившего.
 TARGET_CHAT="$OWNER"
+ROLE="owner"
 
 # Ответ отправляется напрямую, а не через box_notify.sh: тот всегда шлёт
 # владелице, а ответ обязан прийти тому, кто спросил. Разметка одна и та
@@ -113,6 +117,18 @@ collected_today() {
 # ---------------------------------------------------------------------
 
 cmd_help() {
+  if [ "$ROLE" != "owner" ]; then
+    reply "Что я умею
+
+/flats — верх подбора под фильтрами
+/filter — ваши фильтры подбора, с кнопками
+/market — числа рынка за сегодня
+/status — собрано ли сегодня и насколько свежи данные
+
+Фильтры у вас свои: что ни выставите, у владелицы ничего не изменится.
+Команды, которые что-то делают на машине сбора, мне недоступны."
+    return
+  fi
   reply "Что я умею
 посмотреть
 
@@ -150,10 +166,27 @@ cmd_status() {
   mem="$(free -m | awk 'NR==2 {print $7}')"
   if crawl_running; then
     last="$(ls -t "$LOG_DIR"/box_2*.log 2>/dev/null | head -1)"
-    lock="идёт обход, последняя строка журнала: $(tail -1 "$last" 2>/dev/null | cut -c1-80)"
+    if [ "$ROLE" = "owner" ]; then
+      lock="идёт обход, последняя строка журнала: $(tail -1 "$last" 2>/dev/null | cut -c1-80)"
+    else
+      lock="сбор сейчас идёт"
+    fi
   else
     lock="обход не идёт"
   fi
+  # Гостю — про данные, а не про машину. Диск, память и номера прогонов
+  # ему ничего не говорят, а показывают устройство чужой машины.
+  if [ "$ROLE" != "owner" ]; then
+    reply "Состояние на $(date '+%d.%m, %H:%M')
+
+Собрано за сегодня: $seg объявлений 1-2 комнаты ($pct% от обычного дня)
+Покрытые комнатности: $covered
+Свежесть витрин: ${fresh:-неизвестна}
+
+$lock"
+    return
+  fi
+
   reply "Состояние на $(date '+%d.%m, %H:%M')
 
 Сегмент за сегодня: $seg из $NORM ($pct%)
@@ -183,20 +216,33 @@ $lock
 # Значения хранятся строками ключ=значение в data/bot/filters и живут
 # между запусками: фильтр, который надо задавать заново каждый раз, в
 # дороге бесполезен.
-FILTER_FILE="$STATE_DIR/filters"
+# Фильтры — СВОИ У КАЖДОГО ЧАТА. Сначала файл был один на бота, и из-за
+# этого гостю запрещалось их трогать: он менял бы список владелицы. Но
+# фильтр ничего не делает на машине, это настройка показа — и запрет
+# выглядел дикостью, справедливо. Свой файл на чат снимает причину
+# запрета, а не прикрывает её.
+filter_file() { echo "$STATE_DIR/filters.${TARGET_CHAT:-$OWNER}"; }
 
 filter_get() {
-  [ -f "$FILTER_FILE" ] || return 0
-  sed -n "s/^$1=//p" "$FILTER_FILE" | tail -n 1
+  local f; f="$(filter_file)"
+  [ -f "$f" ] || return 0
+  sed -n "s/^$1=//p" "$f" | tail -n 1
 }
 
 filter_set() {
-  local key="$1" val="$2" tmp
+  local key="$1" val="$2" tmp f
+  f="$(filter_file)"
   tmp="$(mktemp)"
-  grep -v "^$key=" "$FILTER_FILE" 2>/dev/null >"$tmp"
+  grep -v "^$key=" "$f" 2>/dev/null >"$tmp"
   [ -n "$val" ] && echo "$key=$val" >>"$tmp"
-  mv "$tmp" "$FILTER_FILE"
+  mv "$tmp" "$f"
 }
+
+# Фильтры, заданные до разделения по чатам, достаются владелице: они её
+# и были.
+if [ -f "$STATE_DIR/filters" ] && [ ! -f "$STATE_DIR/filters.$OWNER" ]; then
+  mv "$STATE_DIR/filters" "$STATE_DIR/filters.$OWNER" 2>/dev/null
+fi
 
 # Условие для SQL собирается ТОЛЬКО из проверенных значений: всё, что
 # пришло из чата, уже прошло через образец в filter_apply. Подстановки
@@ -328,7 +374,7 @@ filter_button() {
                                      || { filter_set park 1;  toast="парк в пределах километра"; } ;;
     d)   [ -n "$(filter_get mkad)" ] && { filter_set mkad ""; toast="МКАД не важен"; } \
                                      || { filter_set mkad 1;  toast="только внутри МКАД"; } ;;
-    x)   rm -f "$FILTER_FILE"; toast="фильтры сброшены" ;;
+    x)   rm -f "$(filter_file)"; toast="фильтры сброшены" ;;
     s)   python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "ищу"
          cmd_flats 5
          return ;;
@@ -369,7 +415,7 @@ cmd_filter() {
 Кнопками: /filter
 Колонки и смысл те же, что у фильтров дашборда." ;;
     сброс|reset)
-      rm -f "$FILTER_FILE"
+      rm -f "$(filter_file)"
       reply "Фильтры сброшены. Остался только один, несбрасываемый:
 показываются объявления, встреченные в последнем обходе — иначе каждое
 восьмое ведёт на снятую публикацию." ;;
@@ -447,32 +493,34 @@ filter_num() {
 }
 
 cmd_flats() {
-  local n="$1" rows where human found
+  local n="$1" where human found rows line score district rooms area price metro url photo sent
   where="$(filter_where)"
   human="$(filter_human)"
   found="$(q "select count(*) from marts.offer_pick where true $where;" | tr -d '[:space:]')"
-  rows="$(q "select round(score)::int || ' | ' || district || ' | ' ||
-                    rooms_count || 'к ' || round(total_area)::int || ' м2 | ' ||
-                    round(price / 1000.0)::int || ' тыс | метро ' ||
-                    coalesce(metro_real_walk_min::text, '?') || ' мин' ||
-                    E'\n' || url
-               from marts.offer_pick
+
+  # Поля идут отдельными колонками, а не одной склеенной строкой: из них
+  # собирается подпись к фотографии, и разбирать потом собственную
+  # склейку было бы глупо.
+  rows="$(q "select round(score)::int, district, rooms_count, round(total_area)::int,
+                    round(price / 1000.0)::int, coalesce(metro_real_walk_min::text, '?'),
+                    url,
+                    coalesce((select p.url from core.offer_photo p
+                               where p.source = o.source and p.offer_id = o.offer_id
+                               order by p.photo_pos limit 1), '')
+               from marts.offer_pick o
               where true $where
               order by score desc limit $n;")"
+
   if [ -z "$rows" ]; then
     reply "Подходящего нет
 
 Отбор: ${human:-без фильтров}
 Нашлось: ${found:-0}
 
-Ослабить: /filter цена 120, /filter район -, /filter сброс"
+Ослабить: /filter"
     return
   fi
-  # Отдельная оговорка, когда цена не задана. Это не придирка: балл за
-  # цену перевёрнут намеренно, и без потолка верх списка — это верх по
-  # дороговизне. Первый же ответ бота выдал квартиры за 175 тысяч и за
-  # три миллиона, и выглядело это как поломка оценки, а не как
-  # отсутствие фильтра.
+
   local warn=""
   [ -z "$(filter_get price)" ] && warn="
 
@@ -481,10 +529,31 @@ cmd_flats() {
 
   reply "Верх подбора, $n из ${found:-?} подходящих
 
-$rows
-
 Отбор: ${human:-без фильтров}
 Поменять: /filter${warn}"
+
+  # Каждый вариант отдельным сообщением с фотографией: список ссылок
+  # глазами не просматривается, а квартиру выбирают всё-таки глазами.
+  while IFS='|' read -r score district rooms area price metro url photo; do
+    [ -z "$url" ] && continue
+    line="$score баллов · $district
+$rooms комнаты, $area м2, $price тыс/мес, метро $metro мин
+
+$url"
+    sent=""
+    [ -n "$photo" ] && sent="$(python3 "$REPO/scripts/box_tg.py" photo "$photo" "$line" "$TARGET_CHAT" 2>/dev/null)"
+    if [ "$sent" = "ok" ]; then
+      note "вариант с фото: $district, $price тыс"
+    else
+      # Вариант важнее фотографии: не вышло с картинкой — шлём текстом.
+      # В журнал это пишется отдельно, иначе «почему без картинок»
+      # выяснялось бы догадками.
+      note "вариант без фото ($([ -n "$photo" ] && echo "картинка не отдалась" || echo "картинки нет в базе")): $district"
+      reply "$line"
+    fi
+  done <<EOF
+$rows
+EOF
 }
 
 cmd_market() {
@@ -789,13 +858,6 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
     fi
     TARGET_CHAT="$CHAT"
 
-    if [ "$ROLE" = guest ] && [ "$KIND" = "cb" ]; then
-      # Кнопки меняют фильтры, а фильтры общие и принадлежат владелице.
-      note "гость $CHAT жал кнопку, отказано: $TEXT"
-      python3 "$REPO/scripts/box_tg.py" answer "${EXTRA%%:*}" "фильтры меняет только владелица"
-      continue
-    fi
-
     if [ "$KIND" = "cb" ]; then
       # Нажатие кнопки. В EXTRA лежит id нажатия и id сообщения через
       # двоеточие: первое нужно, чтобы погасить индикатор, второе —
@@ -819,8 +881,8 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
       note "гость $CHAT просил «$TEXT», отказано"
       reply "Это команда владелицы
 
-Мне можно показывать, но не трогать машину сбора. Доступно:
-/status, /flats, /market, /log"
+Показывать можно всё, а трогать машину сбора — нет. Доступно:
+/status, /flats, /market, /log, /filter со своими фильтрами"
       continue
     fi
 

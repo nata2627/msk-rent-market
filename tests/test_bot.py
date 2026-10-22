@@ -261,14 +261,14 @@ def test_числовой_фильтр_не_принимает_мусор(box, v
     """
     r = run(box, "--run", f"/filter цена {value}")
     assert r.returncode == 0
-    saved = box["repo"] / "data" / "bot" / "filters"
+    saved = box["repo"] / "data" / "bot" / "filters.42"
     assert not saved.exists() or "цена" not in saved.read_text()
     assert "drop" not in calls(box).lower()
 
 
 def test_число_в_границах_сохраняется(box):
     run(box, "--run", "/filter цена 90")
-    saved = (box["repo"] / "data" / "bot" / "filters").read_text()
+    saved = (box["repo"] / "data" / "bot" / "filters.42").read_text()
     assert "price=90" in saved
 
 
@@ -276,7 +276,7 @@ def test_число_вне_границ_отвергается(box):
     """Цена в рублях вместо тысяч — обычная опечатка, и она бы молча
     показала пустой список вместо отбора."""
     run(box, "--run", "/filter цена 90000")
-    saved = box["repo"] / "data" / "bot" / "filters"
+    saved = box["repo"] / "data" / "bot" / "filters.42"
     assert not saved.exists() or "price=" not in saved.read_text()
 
 
@@ -284,21 +284,21 @@ def test_район_сверяется_со_справочником(box):
     """Название района идёт в запрос только если нашлось в базе."""
     r = run(box, "--run", "/filter район Выдуманный'; drop table x; --")
     assert r.returncode == 0
-    saved = box["repo"] / "data" / "bot" / "filters"
+    saved = box["repo"] / "data" / "bot" / "filters.42"
     assert not saved.exists() or "district=" not in saved.read_text()
 
 
 def test_фильтр_переживает_перезапуск(box):
     run(box, "--run", "/filter комнаты 1,2")
     run(box, "--run", "/filter площадь 40")
-    saved = (box["repo"] / "data" / "bot" / "filters").read_text()
+    saved = (box["repo"] / "data" / "bot" / "filters.42").read_text()
     assert "rooms=1,2" in saved and "area=40" in saved
 
 
 def test_сброс_убирает_всё(box):
     run(box, "--run", "/filter цена 90")
     run(box, "--run", "/filter сброс")
-    saved = box["repo"] / "data" / "bot" / "filters"
+    saved = box["repo"] / "data" / "bot" / "filters.42"
     assert not saved.exists() or saved.read_text().strip() == ""
 
 
@@ -373,7 +373,7 @@ def test_выбранное_помечено_в_надписи(box):
 def test_неизвестная_кнопка_ничего_не_меняет(box, data):
     """callback_data приходит из интернета — это такой же недоверенный
     ввод, как и текст команды."""
-    filters = box["repo"] / "data" / "bot" / "filters"
+    filters = box["repo"] / "data" / "bot" / "filters.42"
     filters.write_text("price=90\n")
     src = BOT.read_text()
     # Обработчик кнопок — case по известным меткам, конец списка — отказ.
@@ -478,21 +478,36 @@ def test_заход_опрашивает_по_кругу_но_не_вечно():
 # Гости
 # ---------------------------------------------------------------------
 
-def test_гость_может_только_смотреть():
-    """Чистка диска и запуск обхода — не то, что дают «посмотреть»."""
+def test_гостю_доступен_показ_но_не_машина():
+    """Граница проходит по «трогает машину», а не по «вдруг чего».
+
+    Фильтры гостю открыты: они ничего не делают на машине, это настройка
+    показа, и у каждого чата они свои. Журнала нет намеренно — в нём
+    пути, ошибки и устройство машины.
+    """
     src = BOT.read_text()
     allowed = src.split("GUEST_COMMANDS=\"")[1].split("\"")[0].split()
-    for c in ("/status", "/flats", "/market", "/log", "/help"):
+    for c in ("/status", "/flats", "/market", "/filter", "/help"):
         assert c in allowed, f"гость не может {c}, а должен"
-    for c in ("/clean", "/unlock", "/catchup", "/dbup", "/filter"):
+    for c in ("/clean", "/unlock", "/catchup", "/dbup", "/log", "/журнал"):
         assert c not in allowed, f"гостю досталась {c}, а не должна"
 
 
-def test_гость_не_жмёт_кнопки():
-    """Фильтры общие и принадлежат владелице."""
+def test_фильтры_у_каждого_чата_свои():
+    """Иначе гость менял бы список владелицы, и запрет был бы
+    единственным выходом."""
     src = BOT.read_text()
-    assert 'if [ "$ROLE" = guest ] && [ "$KIND" = "cb" ]' in src
-    assert "фильтры меняет только владелица" in src
+    assert 'filter_file() { echo "$STATE_DIR/filters.${TARGET_CHAT:-$OWNER}"; }' in src
+    assert 'FILTER_FILE=' not in src
+
+
+def test_гостю_не_показывают_машину():
+    """Диск, память и номера прогонов гостю ничего не говорят, а
+    показывают устройство чужой машины."""
+    src = BOT.read_text()
+    guest_status = src.split('if [ "$ROLE" != "owner" ]; then')[1].split("return")[0]
+    for leak in ("Диск:", "Память:", "Последний прогон"):
+        assert leak not in guest_status, f"гостю видно «{leak}»"
 
 
 def test_чужому_по_прежнему_ничего():
@@ -522,3 +537,14 @@ def test_роль_определяется_по_списку(box, chat, role):
     script = f'OWNER="42"; GUESTS="777, 888"; who() {{{body}\n}}; who {chat}'
     out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
     assert out.stdout.strip() == role
+
+
+def test_в_подборе_есть_фотография():
+    """Квартиру выбирают глазами, а список ссылок глазами не
+    просматривается. Если площадка не отдала картинку телеграму, вариант
+    всё равно приходит — текстом."""
+    src = BOT.read_text()
+    assert "core.offer_photo" in src
+    assert "box_tg.py\" photo" in src
+    assert '[ "$sent" = "ok" ] || reply "$line"' in src
+    assert "sendPhoto" in TG.read_text()
