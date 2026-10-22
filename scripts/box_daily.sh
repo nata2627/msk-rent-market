@@ -41,6 +41,28 @@ exec >>"$LOG" 2>&1
 
 say() { echo "$(date +%H:%M:%S) === $*"; }
 
+# Доклад наружу о сбое прогона. Отправщик сам молчит, если канал не
+# настроен, и сам не падает — поэтому вызов ничем не обёрнут. Вывод
+# глушится: он и так шёл бы в журнал прогона, а отправщик пишет свой.
+notify() { bash "$REPO/scripts/box_notify.sh" "$@" >/dev/null 2>&1; }
+
+# Сколько собрано по искомому сегменту за дату снимка. Нужно только в
+# сообщении о сбое: «сбой на шаге сбора» без числа не говорит, потерян
+# день целиком или только его хвост.
+collected() {
+  docker exec -i "$PG_CONTAINER" psql -qtA -U rent -d rent -c \
+    "select count(distinct s.offer_id)
+       from raw.offer_snapshot s
+       join core.offer o using (source, offer_id)
+      where s.snapshot_date = '$SNAPSHOT_DATE'
+        and o.rooms_count in (1, 2);" \
+    2>/dev/null | tr -d '[:space:]'
+}
+
+# Норма искомого сегмента за день, замер 13-21.10.2026. Та же величина в
+# box_watch.sh и box_report.sh.
+NORM=16500
+
 # Удаляются только файлы журналов прогона (data/logs/box_*.log), и
 # никогда данные: база живёт в отдельном томе Docker, а raw вообще только
 # пополняется. Срок 60 дней — как на макбуке. Здесь это не опрятность, а
@@ -69,7 +91,11 @@ if ! docker exec "$PG_CONTAINER" pg_isready -U rent -d rent >/dev/null 2>&1; the
   for i in $(seq 1 24); do
     sleep 5
     docker exec "$PG_CONTAINER" pg_isready -U rent -d rent >/dev/null 2>&1 && break
-    [ "$i" = 24 ] && { say "ОШИБКА: база так и не поднялась. Прогон отменён."; exit 1; }
+    [ "$i" = 24 ] && {
+      say "ОШИБКА: база так и не поднялась. Прогон отменён."
+      notify db-down "$(date '+%d.%m %H:%M') ОСТАНОВКА: база rent_pg не поднялась за две минуты, прогон ($MODE, $SNAPSHOT_DATE) отменён — день не собирается вовсе. Лечить: ssh -p ${BOX_SSH_PORT} ${BOX_SSH_USER}@${BOX_SSH_HOST}, затем cd ~/rent_data && docker compose up -d"
+      exit 1
+    }
   done
 fi
 say "База отвечает"
@@ -122,6 +148,13 @@ COLLECT_ARGS="$COLLECT_ARGS --transport browser --resume --snapshot-date $SNAPSH
 # около 900 МБ на базу и систему.
 # --memory-swap равен --memory: свопа в боксе нет вовсе, и это просто
 # запрещает контейнеру рассчитывать на него.
+#
+# Отметка на журнале снимается до запуска, чтобы потом искать сбойный шаг
+# только в строках этого прогона. Имя журнала содержит минуту, а не
+# секунду, и два прогона, начатых в одну минуту, пишут в один файл: без
+# отметки сбой сбора в первом из них приписался бы и второму.
+LOG_MARK=$(wc -l <"$LOG")
+
 docker run --rm \
   --name rent_collect \
   --network host \
@@ -179,6 +212,22 @@ print('витрины пересобраны')
 
 FAILS=$?
 say "Конец, сбоев: $FAILS"
+
+# Доклад наружу. Сбой сбора отделён от всех прочих намеренно: сбор
+# незаменим, несобранный день не вернуть, а справочник, парки,
+# дедупликация и витрины пересчитываются из raw когда угодно — об этом
+# стоит знать, но это не беда одного дня.
+#
+# Шаг сбора опознаётся по журналу, а не по коду: код у прогона один на
+# все пять шагов, а имя сбойного шага пишет сам контейнер.
+if [ "$FAILS" != 0 ]; then
+  COL="$(collected)"
+  if tail -n "+$((LOG_MARK + 1))" "$LOG" | grep -q 'Сбор — СБОЙ'; then
+    notify collect-fail "$(date '+%d.%m %H:%M') ОСТАНОВКА: сбор упал ($MODE, $SNAPSHOT_DATE), всего сбоев $FAILS. Собрано ${COL:-?} из $NORM по сегменту — несобранный день не вернуть. Догнать: ~/rent_msk/scripts/box_daily.sh narrow $SNAPSHOT_DATE"
+  else
+    notify run-fails "$(date '+%d.%m %H:%M') ВНИМАНИЕ: прогон ($MODE, $SNAPSHOT_DATE) кончился с ненулевым кодом, сбоев $FAILS, но сбор прошёл: собрано ${COL:-?} из $NORM по сегменту. Пересчёт из raw не срочен. Смотреть: tail ~/rent_msk/data/logs/$(basename "$LOG")"
+  fi
+fi
 
 # Код возврата честный: он отражает число сбойных шагов, и таймер покажет
 # его в journalctl.
