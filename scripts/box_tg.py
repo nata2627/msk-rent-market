@@ -16,7 +16,7 @@ scripts/box_bot.sh — вся работа с базой и машиной ос�
 
     box_tg.py poll <offset>            строка на событие, поля через \x1f
     box_tg.py send <текст> [клавиатура]
-    box_tg.py edit <msg_id> <текст> [клавиатура]
+    box_tg.py edit <msg_id> <текст> [клавиатура] [чат]
     box_tg.py photo <url> <подпись> [чат]
     box_tg.py answer <callback_id> [всплывающая подсказка]
     box_tg.py commands                 меню команд в телеграме
@@ -263,7 +263,14 @@ def main() -> int:
     elif what == "edit":
         # Правка на месте, а не новое сообщение: иначе экран фильтров
         # после пяти нажатий превращается в пять одинаковых сообщений.
-        call("editMessageText", chat_id=CHAT, message_id=sys.argv[2],
+        #
+        # Чат обязателен пятым доводом. Пока он брался из .env, правка
+        # уходила в чат владелицы: у неё совпадало и всё работало, а у
+        # гостя телеграм не находил сообщение — кнопки не менялись, и
+        # приходилось заново звать /filter.
+        call("editMessageText",
+             chat_id=sys.argv[5] if len(sys.argv) > 5 else CHAT,
+             message_id=sys.argv[2],
              text=render(sys.argv[3]), parse_mode="HTML",
              disable_web_page_preview="true",
              reply_markup=keyboard_arg(sys.argv[4] if len(sys.argv) > 4 else None))
