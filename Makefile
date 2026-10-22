@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box notify-test notify-tg dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -43,6 +43,7 @@ help:
 	@echo "make dashboard — собрать дашборд в Metabase (подбор + рынок)"
 	@echo "make pull-box  — перелить живую базу с Mac mini в копию для дашборда"
 	@echo "make notify-tg — подключить бота телеграма как канал доклада"
+	@echo "make bot-run CMD=/status — выполнить команду бота руками"
 	@echo "make psql    — консоль базы"
 	@echo "make notify-test — проверить канал уведомлений: дойдёт ли сообщение"
 	@echo "make test    — прогнать тесты"
@@ -336,6 +337,10 @@ notify-test:
 # аккаунтом. Всё остальное скрипт делает сам, включая поиск id чата.
 notify-tg:
 	bash scripts/notify_tg_setup.sh
+
+# Команда бота без телефона: проверить ответ или починить с ноутбука.
+bot-run:
+	bash scripts/box_bot.sh --run $(CMD)
 
 test:
 	$(VENV)/bin/pytest -q tests

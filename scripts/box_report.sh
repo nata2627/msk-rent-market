@@ -146,8 +146,7 @@ if [ -z "$SEG" ]; then
 
 Числа дня неизвестны — сам сбор мог при этом пройти.
 
-Посмотреть на машине сбора:
-\$ docker ps"
+Посмотреть: /status, поднять базу: /dbup"
 else
   PCT=$(( SEG * 100 / NORM ))
   if [ "${COVERED:-0}" -gt 0 ]; then COVER="день покрыт"; else COVER="день НЕ ПОКРЫТ"; fi
@@ -161,8 +160,7 @@ else
   if [ "${COVERED:-0}" = 0 ] || [ "$PCT" -lt 70 ]; then
     PULSE="$PULSE
 
-Догнать:
-\$ ~/rent_msk/scripts/box_daily.sh narrow $DAY"
+Догнать: /catchup $DAY"
   fi
 fi
 

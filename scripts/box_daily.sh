@@ -98,8 +98,7 @@ $(date '+%d.%m, %H:%M')
 
 Прогон $MODE за $SNAPSHOT_DATE отменён: rent_pg не ответил за две минуты.
 
-Поднять базу:
-$ cd ~/rent_data && docker compose up -d"
+Поднять базу отсюда: /dbup"
       exit 1
     }
   done
@@ -235,8 +234,7 @@ $(date '+%d.%m, %H:%M')
 Режим $MODE, дата $SNAPSHOT_DATE, сбоев $FAILS.
 Собрано ${COL:-?} из $NORM по сегменту.
 
-Несобранный день не вернуть. Догнать:
-$ ~/rent_msk/scripts/box_daily.sh narrow $SNAPSHOT_DATE"
+Несобранный день не вернуть. Догнать: /catchup $SNAPSHOT_DATE"
   else
     notify run-fails "Шаг после сбора упал
 $(date '+%d.%m, %H:%M')
@@ -244,8 +242,7 @@ $(date '+%d.%m, %H:%M')
 Сам сбор прошёл: ${COL:-?} из $NORM по сегменту.
 Сбоев в прогоне $MODE за $SNAPSHOT_DATE: $FAILS.
 
-Данные целы, пересчёт из raw не срочен. Посмотреть:
-$ tail ~/rent_msk/data/logs/$(basename "$LOG")"
+Данные целы, пересчёт из raw не срочен. Посмотреть: /log"
   fi
 fi
 
