@@ -628,3 +628,12 @@ def test_начальный_отбор_назван_в_ответе():
     src = BOT.read_text()
     assert "Фильтров у вас ещё не было, поставил начальные" in src
     assert "медиана по таким квартирам" in src
+
+
+def test_правка_экрана_уходит_в_чат_спросившего():
+    """Пока чат брался из .env, у владелицы всё работало, а у гостя
+    кнопки не менялись: телеграм не находил сообщение в чужом чате."""
+    assert '"$kb" "$TARGET_CHAT"' in BOT.read_text()
+    tg = TG.read_text()
+    edit = tg.split('elif what == "edit":')[1].split("elif what")[0]
+    assert "sys.argv[5] if len(sys.argv) > 5 else CHAT" in edit

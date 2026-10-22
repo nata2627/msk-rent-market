@@ -349,7 +349,7 @@ rows = [
     # надпись приходилось резать до «договор», а это читается как
     # «договор аренды», хотя речь о состоянии «по договорённости».
     [("Животные: " + pets_label, "e")],
-    [(mark(bool(park), "парк в км"), "k"), (mark(bool(mkad), "внутри МКАД"), "d")],
+    [(mark(bool(park), "парк в 1 км"), "k"), (mark(bool(mkad), "внутри МКАД"), "d")],
     [("Сбросить всё", "x"), ("Показать 5 вариантов", "s")],
 ]
 print(json.dumps({"inline_keyboard": [
@@ -385,7 +385,7 @@ filter_screen() {
   filter_defaults >/dev/null || true
   kb="$(filter_keyboard)"
   if [ -n "$msg_id" ]; then
-    python3 "$REPO/scripts/box_tg.py" edit "$msg_id" "$(filter_screen_text)" "$kb"
+    python3 "$REPO/scripts/box_tg.py" edit "$msg_id" "$(filter_screen_text)" "$kb" "$TARGET_CHAT"
   else
     python3 "$REPO/scripts/box_tg.py" send "$(filter_screen_text)" "$kb" "$TARGET_CHAT"
   fi
@@ -888,6 +888,9 @@ dispatch() {
 #   box_bot.sh --button r12 <id сообщения> <id нажатия>
 if [ "${1:-}" = "--button" ]; then
   [ -n "$TOKEN" ] && [ -n "$OWNER" ] || { echo "канал не настроен, см. .env"; exit 1; }
+  # Пятым доводом — чат: без него проверка нажатия всегда шла бы от
+  # имени владелицы, и ошибка с чужим чатом снова осталась бы незамеченной.
+  TARGET_CHAT="${5:-$OWNER}"
   filter_button "${2:-}" "${3:-}" "${4:-проверка}"
   echo "кнопка «${2:-}» обработана"
   exit 0
