@@ -357,7 +357,34 @@ def market_card(name, sql, display="table", viz=None, size=None, description=Non
 
 
 # ---------------------------------------------------------------------
+# Свежесть данных: отдельной карточкой на каждой вкладке
+# ---------------------------------------------------------------------
+# Дашборд читает КОПИЮ базы на макбуке, а сбор с 12.10.2026 живёт на Mac
+# mini. Копия обновляется руками (`make pull-box`), и десять дней никто
+# не замечал, что дашборд рисует данные дня переезда: ни одна карточка не
+# говорила, на какой день она смотрит. Заметили только вопросом.
+#
+# Считает не эта карточка, а представление marts.data_freshness: оно
+# живёт в схеме и приезжает вместе с дампом, тогда как логика, оставленная
+# в Metabase, при переливе разъехалась бы с данными. Там же объяснено,
+# почему мер две — возраст витрины и её отставание от сбора.
+FRESH_HELP = ("Дашборд читает копию базы на макбуке, сбор живёт на Mac mini. "
+              "Копия обновляется командой make pull-box. Вторая половина строки "
+              "появляется, когда витрины отстали от собранного — это лечится "
+              "пересборкой витрин, переливом не лечится.")
+
+
+def fresh_card(tab, column="verdict", help_extra=""):
+    return market_card(
+        f"Свежесть данных · {tab}",
+        f'select {column} as "Данные по состоянию на" from marts.data_freshness',
+        display="scalar", size=(24, 3),
+        description=FRESH_HELP + help_extra)
+
+
+# ---------------------------------------------------------------------
 SEARCH = [
+    fresh_card("Подбор"),
     search_card("Найдено", 'count(*) as "Найдено"', "scalar", order=""),
 
     # Медиана отдаётся в тысячах и БЕЗ ОКРУГЛЕНИЯ.
@@ -735,6 +762,7 @@ LATEST = ("(select max(snapshot_date) from raw.collection_run "
           "where source='cian' and status='ok')")
 
 MARKET = [
+    fresh_card("Рынок"),
     market_card("Карта рынка: медиана аренды по районам, тыс. руб./мес", f"""
         select o.district as "Район", count(*) as "Объявлений",
                (percentile_cont(0.5) within group (order by ob.price) / 1000)::int
@@ -1013,6 +1041,7 @@ def weekly_cte(by_rooms=False):
 
 
 EXITS = [
+    fresh_card("Ушедшие", help_extra=" Сами снятия к этому дню ещё не посчитаны: порог — три дня без объявления, поэтому последние три дня панели цензурированы справа."),
     market_card("Ушло за один обход", """
         select count(*) as v from marts.offer_exit
         where exclude_reason is null and exit_observable and has_left and crawls = 1
@@ -1701,6 +1730,7 @@ with cpi as (
 """
 
 HISTORY = [
+    fresh_card("История", column="rosstat_verdict", help_extra=" Росстат публикует аренду с задержкой в один-два месяца, поэтому такое отставание — норма. Тревожно от четырёх месяцев: значит ряд не подгружали, лечится python -m etl.rosstat."),
     # Три числа, ради которых люди вообще смотрят на исторический ряд.
     # Отдельными плитками, а не строкой таблицы: заголовок дашборда должен
     # отвечать на вопрос до того, как читатель дойдёт до графиков.
@@ -1913,6 +1943,19 @@ def _mappings(spec, card_id, slug_to_id):
             for slug, _, _, _, _, column in which]
 
 
+def freshness_line() -> tuple[str, str]:
+    """Свежесть данных словами — для вывода сборки.
+
+    Карточка на дашборде скажет это тому, кто его откроет, а сборка —
+    тому, кто её запустил. Второе важно не меньше: `make dashboard`
+    запускают как раз тогда, когда что-то меняют, и собирать дашборд
+    поверх мёртвой копии незачем.
+    """
+    with psycopg.connect(**DB) as c, c.cursor() as cur:
+        cur.execute("select verdict, rosstat_verdict from marts.data_freshness")
+        return cur.fetchone()
+
+
 def size_for(spec):
     # Явный размер у карточки сильнее умолчания по типу: подпись под
     # графиком — та же таблица, но в три строки, а не в тринадцать.
@@ -1972,7 +2015,16 @@ def main() -> None:
             c = api("/api/card", "POST", payload)
             w, h = size_for(spec)
             # Плитки KPI выкладываются в одну строку, остальное — в столбец.
-            if spec["display"] == "scalar" and kpi_col + w <= 24:
+            #
+            # Плитка, не влезшая в остаток строки, начинает НОВУЮ строку, а
+            # не падает в общий поток. Прежде падала — и ложилась ровно на
+            # то место, куда потом вставала следующая плитка: две карточки
+            # накрывали друг друга. Пока плиток было не больше трёх, это не
+            # выстреливало; выстрелило на карточке свежести во всю ширину.
+            if spec["display"] == "scalar":
+                if kpi_col + w > 24:
+                    row += 3
+                    kpi_col = 0
                 col_pos, row_pos = kpi_col, row
                 kpi_col += w
             else:
@@ -2032,6 +2084,13 @@ def main() -> None:
         api(f"/api/card/{c['id']}", "PUT", {"archived": True})
     if orphans:
         print(f"Убрано в архив неиспользуемых карточек: {len(orphans)}")
+
+    verdict, rosstat = freshness_line()
+    print(f"\nДанные в копии: {verdict}")
+    print(f"Ряд Росстата:   {rosstat}")
+    if "УСТАРЕЛИ" in verdict or "НЕ ПЕРЕСОБРАНЫ" in verdict:
+        print("  ВНИМАНИЕ: дашборд покажет ровно это. Перелить копию — "
+              "make pull-box, пересобрать витрины — make marts")
 
     print(f"\nГотово: {MB}/dashboard/{dash['id']}")
 
