@@ -108,9 +108,9 @@ def calls(box):
 def test_чужой_чат_не_получает_ответа(box):
     """Чужому не отвечаем вовсе: ответ подтвердил бы, что бот живой."""
     src = BOT.read_text()
-    assert 'if [ "$CHAT" != "$OWNER" ]' in src
+    assert 'ROLE="$(who "$CHAT")"' in src
     # В ветке чужого чата нет вызова reply — только запись в журнал.
-    foreign = src.split('if [ "$CHAT" != "$OWNER" ]')[1].split("fi")[0]
+    foreign = src.split('if [ "$ROLE" = stranger ]')[1].split("fi")[0]
     assert "reply" not in foreign
     assert "note" in foreign
 
@@ -133,9 +133,16 @@ def test_аргумент_команды_проверяется_образцом
 
 
 def test_дата_правильного_вида_принимается(box):
+    """Проверка по журналу, а не по фоновому вызову.
+
+    Обход запускается отсоединённым процессом, и ловить его в журнале
+    заглушек — гонка: процесс мог не успеть записаться к моменту, когда
+    тест смотрит. Запись в журнал бота делается синхронно.
+    """
     r = run(box, "--run", "/catchup 2026-10-22")
     assert r.returncode == 0
-    assert "setsid" in calls(box) or "box_daily.sh" in calls(box)
+    log = box["repo"] / "data" / "logs" / "box_bot.log"
+    assert "catchup: запущен обход за 2026-10-22" in log.read_text()
 
 
 def test_неизвестная_команда_не_исполняется(box):
@@ -465,3 +472,53 @@ def test_заход_опрашивает_по_кругу_но_не_вечно():
     # Пустой ответ без паузы при недоступном телеграме дал бы цикл в
     # тысячу запросов в минуту.
     assert "sleep 3" in src
+
+
+# ---------------------------------------------------------------------
+# Гости
+# ---------------------------------------------------------------------
+
+def test_гость_может_только_смотреть():
+    """Чистка диска и запуск обхода — не то, что дают «посмотреть»."""
+    src = BOT.read_text()
+    allowed = src.split("GUEST_COMMANDS=\"")[1].split("\"")[0].split()
+    for c in ("/status", "/flats", "/market", "/log", "/help"):
+        assert c in allowed, f"гость не может {c}, а должен"
+    for c in ("/clean", "/unlock", "/catchup", "/dbup", "/filter"):
+        assert c not in allowed, f"гостю досталась {c}, а не должна"
+
+
+def test_гость_не_жмёт_кнопки():
+    """Фильтры общие и принадлежат владелице."""
+    src = BOT.read_text()
+    assert 'if [ "$ROLE" = guest ] && [ "$KIND" = "cb" ]' in src
+    assert "фильтры меняет только владелица" in src
+
+
+def test_чужому_по_прежнему_ничего():
+    src = BOT.read_text()
+    branch = src.split('if [ "$ROLE" = stranger ]')[1].split("fi")[0]
+    assert "reply" not in branch
+    assert "note" in branch
+
+
+def test_ответ_уходит_тому_кто_спросил():
+    """Иначе гость пишет боту, а ответ приходит владелице — и выглядит
+    это как молчание."""
+    src = BOT.read_text()
+    assert 'TARGET_CHAT="$CHAT"' in src
+    assert '"$TARGET_CHAT"' in src.split("reply() {")[1].split("}")[0]
+
+
+@pytest.mark.parametrize("chat,role", [
+    ("42", "owner"),          # NOTIFY_TG_CHAT в песочнице
+    ("777", "guest"),
+    ("999", "stranger"),
+])
+def test_роль_определяется_по_списку(box, chat, role):
+    env = dict(box["env"], NOTIFY_TG_CHAT="42", NOTIFY_TG_GUESTS="777, 888")
+    src = BOT.read_text()
+    body = src.split("who() {")[1].split("\n}")[0]
+    script = f'OWNER="42"; GUESTS="777, 888"; who() {{{body}\n}}; who {chat}'
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+    assert out.stdout.strip() == role

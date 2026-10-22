@@ -50,10 +50,48 @@ from_env() {
 TOKEN="${NOTIFY_TG_TOKEN:-$(from_env NOTIFY_TG_TOKEN)}"
 OWNER="${NOTIFY_TG_CHAT:-$(from_env NOTIFY_TG_CHAT)}"
 
-# Ответы уходят через общий отправщик: там уже есть разметка, маскировка
-# секретов в журнале и жёсткие сроки. Ключ «bot» с --always, потому что
-# ответ на вопрос глушить ограничением частоты нельзя.
-reply() { bash "$REPO/scripts/box_notify.sh" --always bot "$1" >/dev/null 2>&1; }
+# Гости. Чат владелицы один, но посмотреть панель может быть позволено и
+# кому-то ещё: несколько id через запятую в NOTIFY_TG_GUESTS.
+#
+# Гостю доступно только смотреть. Всё остальное — чистка диска, снятие
+# замка, запуск обхода — делает что-то на чужой машине, и такое не дают
+# «посмотреть вместе». Фильтры подбора тоже не его: они одни на бота и
+# принадлежат владелице, поэтому гость видит ровно тот список, который
+# увидела бы она.
+GUESTS="${NOTIFY_TG_GUESTS:-$(from_env NOTIFY_TG_GUESTS)}"
+GUEST_COMMANDS="/help /start /status /flats /market /log /статус /подбор /рынок /журнал"
+
+# Кто спрашивает. Чужой — это не ошибка и не враг: бота находят поиском,
+# и чужому по-прежнему не уходит ничего.
+who() {
+  case "$1" in
+    "$OWNER") echo owner; return ;;
+  esac
+  case ",$(printf '%s' "$GUESTS" | tr -d '[:space:]')," in
+    *",$1,"*) echo guest; return ;;
+  esac
+  echo stranger
+}
+
+guest_allowed() {
+  local cmd
+  cmd="$(printf '%s' "$1" | awk '{print tolower($1)}')"
+  cmd="${cmd%%@*}"
+  case " $GUEST_COMMANDS " in *" $cmd "*) return 0 ;; esac
+  return 1
+}
+
+# Кому уходит ответ. По умолчанию владелице — так отвечают проверки
+# вроде --run; в опросе значение меняется на чат спросившего.
+TARGET_CHAT="$OWNER"
+
+# Ответ отправляется напрямую, а не через box_notify.sh: тот всегда шлёт
+# владелице, а ответ обязан прийти тому, кто спросил. Разметка одна и та
+# же, она живёт в box_tg.py.
+reply() {
+  python3 "$REPO/scripts/box_tg.py" send "$1" "" "$TARGET_CHAT" >/dev/null 2>&1
+  note "ответ в чат $TARGET_CHAT: $(printf '%s' "$1" | head -1)"
+}
 
 # Запрос к базе под таймаутом: при голоде по памяти демон Docker перестаёт
 # отвечать вовсе, и бот не имеет права повиснуть вместе с ним.
@@ -254,7 +292,7 @@ filter_screen() {
   if [ -n "$msg_id" ]; then
     python3 "$REPO/scripts/box_tg.py" edit "$msg_id" "$(filter_screen_text)" "$kb"
   else
-    python3 "$REPO/scripts/box_tg.py" send "$(filter_screen_text)" "$kb"
+    python3 "$REPO/scripts/box_tg.py" send "$(filter_screen_text)" "$kb" "$TARGET_CHAT"
   fi
 }
 
@@ -742,10 +780,19 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
     # команды недельной давности. Отметку сдвигаем, сообщения пропускаем.
     [ "$FIRST_RUN" = 1 ] && { note "первый запуск, пропускаю старое: $TEXT"; continue; }
 
-    if [ "$CHAT" != "$OWNER" ]; then
+    ROLE="$(who "$CHAT")"
+    if [ "$ROLE" = stranger ]; then
       # Чужому не отвечаем вовсе: ответ подтвердил бы, что бот живой и
       # что-то умеет. В журнал — да, чтобы знать, что стучались.
       note "чужой чат $CHAT, пропускаю: $TEXT"
+      continue
+    fi
+    TARGET_CHAT="$CHAT"
+
+    if [ "$ROLE" = guest ] && [ "$KIND" = "cb" ]; then
+      # Кнопки меняют фильтры, а фильтры общие и принадлежат владелице.
+      note "гость $CHAT жал кнопку, отказано: $TEXT"
+      python3 "$REPO/scripts/box_tg.py" answer "${EXTRA%%:*}" "фильтры меняет только владелица"
       continue
     fi
 
@@ -768,7 +815,16 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
       continue
     fi
 
-    note "команда: $TEXT"
+    if [ "$ROLE" = guest ] && ! guest_allowed "$TEXT"; then
+      note "гость $CHAT просил «$TEXT», отказано"
+      reply "Это команда владелицы
+
+Мне можно показывать, но не трогать машину сбора. Доступно:
+/status, /flats, /market, /log"
+      continue
+    fi
+
+    note "команда от ${ROLE}: $TEXT"
     dispatch "$TEXT"
   done <<EOF
 $PARSED
