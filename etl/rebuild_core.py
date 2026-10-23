@@ -89,6 +89,8 @@ def main(argv=None) -> int:
             log.info("--dry-run: ничего не изменено")
             return 0
 
+        # Читаем из raw.offer_snapshot_full, а не из таблицы: с 23.10.2026
+        # неизменная карточка хранится ссылкой на прежнюю (etl/snapshot_store.py).
         # Идём по (объявление, дата) и берём ПОСЛЕДНИЙ снимок этого дня —
         # ровно так же, как это делает сбор: наблюдение панели равно
         # последнему чтению суток.
@@ -99,7 +101,7 @@ def main(argv=None) -> int:
                 cur.execute("""
                     select distinct on (offer_id, snapshot_date)
                            payload, snapshot_date, run_id
-                    from raw.offer_snapshot
+                    from raw.offer_snapshot_full
                     where source = %s
                     order by offer_id, snapshot_date, snapshot_id desc
                     limit %s offset %s""", (args.source, BATCH, offset))
