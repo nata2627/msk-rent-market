@@ -1,0 +1,11 @@
+# Модель справедливой цены (src/price_model.py). Отдельно от общего
+# requirements.txt: сбору и CI эти пакеты не нужны, а CatBoost весит под
+# сотню мегабайт. На боксе ставятся в отдельный образ rent-price
+# (docker/price/Dockerfile) поверх образа сбора.
+catboost==1.2.10
+# MLflow без сервера, хранилище одним файлом SQLite. Каталог mlruns в
+# MLflow 3 переведен в режим поддержки, SQLite это рекомендованная замена,
+# для нее и нужны sqlalchemy с alembic.
+mlflow-skinny==3.17.2
+sqlalchemy==2.1.6
+alembic==1.20.1

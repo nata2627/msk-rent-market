@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -36,6 +36,7 @@ help:
 	@echo "make rebuild — пересобрать панель из сырых снимков"
 	@echo "make marts   — пересобрать материализованные витрины"
 	@echo "make index  — индекс аренды по панели: results/panel_index.json и график"
+	@echo "make price-model — модель справедливой цены: метрики, дрейф, оценки для /price"
 	@echo "make cut-effect — ускоряет ли снижение цены уход: results/cut_effect.json"
 	@echo "make forecast — бэктест и прогноз по Росстату: results/forecast.json и график"
 	@echo "make dbt-build — собрать витрины dbt в схеме dbt_marts и прогнать их тесты"
@@ -279,6 +280,9 @@ figures:       ## перерисовать графики для README из т�
 
 index: ## индекс по панели, цепной и гедонический
 	$(PY) -m src.panel_index
+
+price-model: ## обучение, проверка, конформный интервал, дрейф, таблицы ml для бота
+	MLFLOW_DISABLE_AGENT_HINT=1 $(PY) -m src.price_model
 
 cut-effect: ## модель риска, сопоставление и плацебо по панели объявление-день
 	$(PY) -m src.cut_effect

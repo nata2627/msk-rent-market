@@ -387,6 +387,52 @@ def results_facts() -> dict[str, str]:
         f["ix_mde"] = pct(det["mde_pct"], 2)
         f["ix_rosstat_mom"] = pct(det["rosstat_median_abs_mom_pct"], 2)
         f["ix_sd_day"] = pct(det["sd_day_pct"], 2)
+    pm_path = RESULTS / "price_model.json"
+    if pm_path.exists():
+        d = json.loads(pm_path.read_text())
+        names = {"hedonic": "гедоническая регрессия", "catboost": "CatBoost"}
+        tbl = ["| модель | MAE, руб. | MAPE, % | медиана APE, % | покрытие 80% | полуширина интервала, % |",
+               "|---|---:|---:|---:|---:|---:|"]
+        for k in ("hedonic", "catboost"):
+            m = d["models"][k]
+            tbl.append(f"| {names[k]} | {thousands(m['test']['mae_rub'])} | "
+                       f"{pct(m['test']['mape_pct'], 1)} | {pct(m['test']['median_ape_pct'], 1)} | "
+                       f"{pct(m['coverage80'], 2)} | {pct(m['interval_halfwidth_pct'], 0)} |")
+        f["pm_table"] = block(tbl)
+        rooms_lbl = {"0": "студия", "1": "1", "2": "2", "3": "3", "4": "4"}
+        cb, hd = d["models"]["catboost"], d["models"]["hedonic"]
+        tbl = ["| комнат | объявлений | MAPE регрессии, % | MAPE CatBoost, % | покрытие 80% |",
+               "|---|---:|---:|---:|---:|"]
+        for k, m in cb["by_rooms"].items():
+            tbl.append(f"| {rooms_lbl.get(k, k)} | {thousands(m['n'])} | "
+                       f"{pct(hd['by_rooms'][k]['mape_pct'], 1)} | {pct(m['mape_pct'], 1)} | "
+                       f"{pct(cb['coverage80_by_rooms'][k], 2)} |")
+        f["pm_rooms_table"] = block(tbl)
+        f["pm_split"] = (f"{thousands(d['split']['train'])} в обучении, "
+                         f"{thousands(d['split']['calib'])} в калибровке, "
+                         f"{thousands(d['split']['test'])} в проверке")
+        c = d["cian"]
+        f["pm_cian_cov"] = pct(c["coverage_share_pct"], 0)
+        f["pm_cian_ask_inside"] = pct(c["ask_inside_cian_range_pct"], 1)
+        f["pm_cian_ours_inside"] = pct(c["ours_inside_cian_range_pct"], 0)
+        f["pm_cian_mid"] = pct(c["ours_vs_cian_mid_median_pct"], 1, sign=True)
+        e = d["exit"]
+        f["pm_exit_vs_ask"] = pct(e["exit_model_vs_ask_model_median_pct"], 1, sign=True)
+        f["pm_exit_cut_share"] = pct(e["share_with_cut_pct"], 0)
+        f["pm_exit_n"] = thousands(e["exited_offers"])
+        td = d["typical_days"]
+        tbl = ["| комнат | дешевле оценки | в рынке | дороже оценки |", "|---|---:|---:|---:|"]
+        for k in ("0", "1", "2", "3"):
+            cells = [str(td.get(f"{k}|{b}", "—")) for b in ("дешевле", "в рынке", "дороже")]
+            tbl.append(f"| {rooms_lbl[k]} | " + " | ".join(cells) + " |")
+        f["pm_days_table"] = block(tbl)
+        tbl = ["| неделя с | обучение | новых объявлений | MAPE, % |", "|---|---:|---:|---:|"]
+        for w in d["drift"]["weeks"]:
+            tbl.append(f"| {w['week_start'][8:10]}.{w['week_start'][5:7]} | {thousands(w['train'])} | "
+                       f"{thousands(w['n'])} | {pct(w['mape_pct'], 1)} |")
+        f["pm_drift_table"] = block(tbl)
+        f["pm_estimates"] = thousands(d["serving"]["estimates"])
+
     ce_path = RESULTS / "cut_effect.json"
     if ce_path.exists():
         d = json.loads(ce_path.read_text())
