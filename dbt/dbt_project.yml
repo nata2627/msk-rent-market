@@ -1,0 +1,28 @@
+# Витрины панели в dbt. Та же логика, что в sql/schema/03_marts.sql, но с
+# тестами рядом с моделью, документацией и графом зависимостей.
+#
+# Пока новые витрины не сошлись со старыми числом, они строятся в
+# отдельной схеме dbt_marts и старых marts не касаются. Сверка по каждой
+# витрине: make dbt-reconcile.
+name: rent_msk
+version: "1.0.0"
+profile: rent_msk
+config-version: 2
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: target
+clean-targets: [target, logs]
+
+models:
+  rent_msk:
+    marts:
+      # Таблица dbt пересоздаётся каждым запуском и рождается без
+      # статистики: планировщик считает её пустой и выбирает вложенные
+      # циклы. offer_exit поверх такой offer_scored строился больше
+      # четверти часа против минуты у старой витрины. Поэтому у каждой
+      # таблицы analyze сразу после сборки (post_hook в её config).
+      +persist_docs:
+        relation: true
+        columns: true
