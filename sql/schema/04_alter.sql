@@ -376,3 +376,57 @@ select *
 
 comment on view marts.offer_pick is
     'Что считается вариантом подбора: без дублей, комнат, посуточной и короткой аренды. Общее определение для дашборда и бота';
+
+-- ---------------------------------------------------------------------
+-- 2026-10-23. Снимок без повторов: полная карточка пишется, только если
+-- она изменилась (etl/snapshot_store.py).
+--
+-- На машине сбора кончался диск: 12,9 ГБ свободно, raw.offer_snapshot
+-- 6,9 ГБ и около 0,33 ГБ прироста в сутки. После вычистки служебного шума
+-- 75,6% карточек совпадают со вчерашними. Строка снимка пишется
+-- по-прежнему каждый день, на ней держатся счетчики собранного, покрытие и
+-- снятия; меняется только то, что в ней лежит.
+--
+-- Все операции быстрые на таблице любого размера: колонки без значения по
+-- умолчанию, снятие not null, ограничения NOT VALID проверяют только новые
+-- строки. Старые строки не переписываются и не проверяются: у них у всех
+-- payload есть.
+-- ---------------------------------------------------------------------
+alter table raw.offer_snapshot alter column payload drop not null;
+alter table raw.offer_snapshot
+    add column if not exists payload_hash text,
+    add column if not exists same_as bigint,
+    -- Время подъема объявления: меняется почти каждый день, а сведение
+    -- (агентство подняло объявление), поэтому хранится отдельно и
+    -- восстанавливается точно. jsonb, чтобы вернуть ровно то значение,
+    -- которое отдала площадка.
+    add column if not exists added_ts jsonb;
+
+do $$
+begin
+    if not exists (select 1 from pg_constraint where conname = 'offer_snapshot_same_as_fkey') then
+        alter table raw.offer_snapshot add constraint offer_snapshot_same_as_fkey
+            foreign key (same_as) references raw.offer_snapshot(snapshot_id) not valid;
+    end if;
+    if not exists (select 1 from pg_constraint where conname = 'offer_snapshot_payload_or_ref') then
+        alter table raw.offer_snapshot add constraint offer_snapshot_payload_or_ref
+            check (payload is not null or same_as is not null) not valid;
+    end if;
+end $$;
+
+-- Карточка дня целиком, как если бы ее записали полностью. Все, кто
+-- читает payload (пересборка core, справочник районов, условия платежа),
+-- читают отсюда. Шумовые поля у восстановленной карточки из базового
+-- снимка, см. etl/snapshot_store.py.
+create or replace view raw.offer_snapshot_full as
+select s.snapshot_id, s.run_id, s.bucket_id, s.source, s.offer_id,
+       s.snapshot_date, s.fetched_at, s.page,
+       coalesce(s.payload,
+                case when s.added_ts is null then b.payload - 'addedTimestamp'
+                     else jsonb_set(b.payload, '{addedTimestamp}', s.added_ts) end)
+           as payload
+  from raw.offer_snapshot s
+  left join raw.offer_snapshot b on b.snapshot_id = s.same_as;
+
+comment on view raw.offer_snapshot_full is
+    'Снимки с восстановленной карточкой: для строк-ссылок payload собирается из базового снимка и added_ts';

@@ -53,13 +53,15 @@ OKRUG_TYPE = "okrug"
 # заметить, если справочник вдруг собрался наполовину.
 EXPECTED_LEAVES = 140
 
+# Из raw.offer_snapshot_full: с 23.10.2026 неизменные карточки хранятся
+# ссылкой на прежнюю, и в таблице у них payload пустой.
 SQL = """
 select d->>'id'       as id,
        d->>'name'     as name,
        d->>'type'     as type,
        d->>'parentId' as parent_id,
        count(*)       as offers
-from raw.offer_snapshot,
+from raw.offer_snapshot_full,
      lateral jsonb_array_elements(payload->'geo'->'districts') d
 where d ? 'id' and d ? 'name'
 group by 1, 2, 3, 4

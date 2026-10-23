@@ -104,6 +104,14 @@ def main() -> int:
             check(scalar(conn, "select count(*) from raw.offer_snapshot where source=%s",
                          (SOURCE,)) == 2,
                   "а сырой слой при этом пополнился — он только добавляет")
+            check(scalar(conn, """select count(*) from raw.offer_snapshot
+                                  where source=%s and payload is null and same_as is not null""",
+                         (SOURCE,)) == 1,
+                  "повторная карточка без изменений легла ссылкой, без второй копии payload")
+            check(scalar(conn, """select count(distinct payload - 'addedTimestamp')
+                                  from raw.offer_snapshot_full where source=%s""",
+                         (SOURCE,)) == 1,
+                  "и представление восстанавливает ее той же карточкой")
             check(scalar(conn, "select count(*) from core.price_change where source=%s",
                          (SOURCE,)) == 0,
                   "и ложного изменения цены между двумя чтениями одних суток нет")

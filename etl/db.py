@@ -9,6 +9,7 @@ from psycopg.types.json import Jsonb
 
 from etl.config import DB
 from etl.privacy import scrub_payload
+from etl.snapshot_store import payload_hash
 
 
 @contextmanager
@@ -136,6 +137,10 @@ def close_bucket(conn, bucket_id: int, *, claimed=None, collected=None,
 # Сырые снимки
 # ---------------------------------------------------------------------
 def save_snapshots(conn, run_id, bucket_id, snapshot_date, offers, page, source="cian") -> int:
+    """Записать снимки страницы. Строка на каждое объявление пишется
+    всегда, а полная карточка только если она изменилась с последней
+    полной карточки этого объявления (etl/snapshot_store.py). Иначе в
+    строке ссылка same_as и время подъема added_ts."""
     rows = []
     for payload in offers:
         offer_id = payload.get("id") or payload.get("cianId")
@@ -145,17 +150,37 @@ def save_snapshots(conn, run_id, bucket_id, snapshot_date, offers, page, source=
         # прячутся при показе: проект идёт в публичный репозиторий, и
         # любой скриншот или выгрузка иначе становятся распространением
         # чужих телефонов. Ни для одного вопроса исследования они не нужны.
-        rows.append((run_id, bucket_id, source, str(offer_id),
-                     snapshot_date, page, Jsonb(scrub_payload(payload))))
+        clean = scrub_payload(payload)
+        rows.append((str(offer_id), clean, payload_hash(clean)))
     if not rows:
         return 0
     with conn.cursor() as cur:
-        cur.executemany(
-            """insert into raw.offer_snapshot
-                   (run_id, bucket_id, source, offer_id, snapshot_date, page, payload)
-               values (%s, %s, %s, %s, %s, %s, %s)""",
-            rows,
-        )
+        cur.execute(
+            """select distinct on (offer_id) offer_id, snapshot_id, payload_hash
+                 from raw.offer_snapshot
+                where source = %s and offer_id = any(%s) and payload is not null
+                order by offer_id, snapshot_id desc""",
+            (source, [r[0] for r in rows]))
+        last = {oid: (sid, h) for oid, sid, h in cur.fetchall()}
+        for offer_id, clean, h in rows:
+            prev = last.get(offer_id)
+            if prev is not None and prev[1] == h:
+                cur.execute(
+                    """insert into raw.offer_snapshot
+                           (run_id, bucket_id, source, offer_id, snapshot_date, page,
+                            payload, payload_hash, same_as, added_ts)
+                       values (%s, %s, %s, %s, %s, %s, null, %s, %s, %s)""",
+                    (run_id, bucket_id, source, offer_id, snapshot_date, page, h, prev[0],
+                     Jsonb(clean["addedTimestamp"]) if "addedTimestamp" in clean else None))
+            else:
+                cur.execute(
+                    """insert into raw.offer_snapshot
+                           (run_id, bucket_id, source, offer_id, snapshot_date, page,
+                            payload, payload_hash)
+                       values (%s, %s, %s, %s, %s, %s, %s, %s)
+                       returning snapshot_id""",
+                    (run_id, bucket_id, source, offer_id, snapshot_date, page, Jsonb(clean), h))
+                last[offer_id] = (cur.fetchone()[0], h)
     conn.commit()
     return len(rows)
 

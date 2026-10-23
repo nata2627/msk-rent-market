@@ -39,12 +39,14 @@ log = logging.getLogger("terms_backfill")
 # Строка условий лежит в сыром снимке, а не в панели, поэтому
 # присоединяем raw. LEFT JOIN: у наблюдений из веб-архива и ручной
 # выгрузки своего снимка в raw нет, и терять их нельзя.
+# Карточка из raw.offer_snapshot_full: с 23.10.2026 неизменные карточки
+# хранятся ссылкой на прежнюю (etl/snapshot_store.py).
 SELECT_SQL = """
 select ob.source, ob.offer_id, ob.snapshot_date, ob.description,
        ob.prepay_months, ob.deposit_months,
        s.payload->>'formattedAdditionalInfo' as terms_info
 from core.offer_observation ob
-left join raw.offer_snapshot s
+left join raw.offer_snapshot_full s
        on s.source = ob.source and s.offer_id = ob.offer_id
       and s.snapshot_date = ob.snapshot_date
 where (%(date)s::date is null or ob.snapshot_date = %(date)s::date)
