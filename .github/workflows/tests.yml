@@ -1,0 +1,27 @@
+# Тесты на каждый push. В сеть они не ходят и базы не требуют: площадка,
+# телеграм, docker и curl подменяются заглушками.
+#
+# Ubuntu выбрана не по умолчанию, а потому что на ней живёт машина сбора.
+# Скрипты бокса написаны под GNU (stat -c, timeout, date -d), и на макбуке
+# часть их тестов проходила случайно: нужной утилиты нет, ветка не
+# выполняется, проверка молчит. Здесь они проверяются на той же системе,
+# где работают.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Та же версия, что в образе сбора rent-collector на боксе.
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q

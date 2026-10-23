@@ -1,0 +1,106 @@
+version: 2
+
+# Ключи взяты из уникальных индексов sql/schema/03_marts.sql. Индекс
+# ловил дубль при пересборке, тест ловит его и тогда, когда витрина
+# собрана таблицей без индекса.
+models:
+  - name: offer_latest
+    description: Последнее наблюдение по каждому объявлению вместе с карточкой.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [source, offer_id]
+
+  - name: room_coverage
+    description: Последний и предпоследний успешный обход по каждой комнатности.
+    columns:
+      - name: room_code
+        data_tests: [unique, not_null]
+
+  - name: room_crawl_day
+    description: Дни успешных обходов по комнатностям. Свежесть меряется обходами, а не днями.
+
+  - name: offer_segment
+    description: Разметка над полными данными, без фильтров. Дубли и выбросы помечены, а не удалены.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [source, offer_id]
+    columns:
+      - name: is_price_outlier
+        description: Цена вне 10 тыс. и 5 млн или цена за метр вне 400 и 15 000 руб.
+      - name: is_duplicate
+        description: Не представитель своей группы дублей.
+      - name: entry_cost
+        description: Сумма на входе, руб. Аренда вперёд, залог, комиссия. Неуказанный залог берётся равным месяцу.
+      - name: crawls_missed
+        description: Сколько успешных обходов своей комнатности объявление пропустило.
+
+  - name: district_level
+    description: Медиана цены за метр по району относительно города, однушки и двушки.
+    columns:
+      - name: district
+        data_tests: [unique, not_null]
+      - name: offers
+        data_tests:
+          - min_value:
+              arguments:
+                value: 10
+
+  - name: comparable_median
+    description: Медиана цены и площади похожих объявлений, район и комнатность.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [district, rooms_count]
+    columns:
+      - name: comparable_offers
+        description: Ячейка меньше пяти объявлений не публикуется и не считается, это правило всех агрегатов наружу.
+        data_tests:
+          - min_value:
+              arguments:
+                value: 5
+
+  - name: offer_scored
+    description: Оценка варианта. Предпочтения владелицы, а не модель рынка.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [source, offer_id]
+
+  - name: median_price_by_district
+    description: Квартили цены по дню, округу, району и комнатности.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [snapshot_date, okrug, district, rooms_count]
+
+  - name: price_drops
+    description: Снижения цены с карточкой объявления.
+
+  - name: offer_exit
+    description: Ушедшие с рынка. Уход объявления не равен сдаче квартиры.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [source, offer_id]
+
+  - name: panel_day
+    description: Суммы по дню и комнатности для индекса по панели.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [snapshot_date, rooms_count]
+
+  - name: exit_day
+    description: Уходы по дням и комнатности.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [exit_date, rooms_count]
+
+  - name: data_freshness
+    description: На какой день смотрят витрины, одной строкой.
+
+  - name: offer_pick
+    description: Подбор одним определением для дашборда и бота.

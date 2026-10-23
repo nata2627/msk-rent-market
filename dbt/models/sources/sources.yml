@@ -1,0 +1,59 @@
+version: 2
+
+# Слои raw и core наполняет сбор (etl/), dbt их только читает. Тесты
+# здесь те же, что в sql/checks: проверка стоит рядом с тем, что
+# проверяет, а не отдельным файлом, который можно забыть запустить.
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: collection_run
+        description: Журнал прогонов сбора, по строке на прогон. Покрытие дня считается только по status = 'ok'.
+        columns:
+          - name: run_id
+            data_tests: [unique, not_null]
+          - name: status
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: [running, ok, failed, aborted]
+      - name: bucket
+        description: Корзины обхода. claimed_count это сколько обещала площадка, сравнивается с собранным.
+      - name: offer_snapshot
+        description: Сырые снимки карточек. Только пополняется.
+
+  - name: core
+    schema: core
+    tables:
+      - name: offer
+        description: Объявление, по строке на (source, offer_id).
+        data_tests:
+          - unique_key:
+              arguments:
+                columns: [source, offer_id]
+        columns:
+          - name: offer_id
+            data_tests: [not_null]
+      - name: offer_observation
+        description: Панель, по строке на объявление и день снимка.
+        data_tests:
+          - unique_key:
+              arguments:
+                columns: [source, offer_id, snapshot_date]
+        columns:
+          - name: pets_state
+            description: Четыре состояния и никогда булев флаг. «Запрещено» и «не указано» разные вещи.
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: [allowed, forbidden, negotiable, unknown]
+          - name: offer_id
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('core', 'offer')
+                    field: offer_id
+      - name: offer_duplicate
+        description: Группы дублей. canonical_id это представитель группы, остальные помечаются, а не удаляются.
+      - name: price_change
+      - name: rosstat_rent

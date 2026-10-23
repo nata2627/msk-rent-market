@@ -1,5 +1,7 @@
 # Рынок аренды квартир в Москве: панель объявлений
 
+[![tests](https://github.com/nata2627/msk-rent-market/actions/workflows/tests.yml/badge.svg)](https://github.com/nata2627/msk-rent-market/actions/workflows/tests.yml)
+
 Самостоятельно собираемая панель объявлений о длительной аренде в Москве.
 Цель — измерить, сколько стоит разрешение держать животных, сколько
 объявление живёт до снятия с публикации и кто снижает цену.
@@ -892,7 +894,7 @@ cp .env.example .env
 make up            # PostgreSQL 16 в Docker, порт 5433
 make schema        # DDL, идемпотентно
 
-make test          # тесты, без сети и без базы
+make test          # тесты, без сети и без базы; они же в CI на каждый push
 make selftest      # сквозная проверка панели в настоящей базе
 
 make access-browser    # отдаёт ли площадка данные прямо сейчас
@@ -913,6 +915,11 @@ make drops-analysis  # третий: кто снижает цену и чере�
 make figures         # перерисовать графики README из текущих данных
 make readme-numbers  # подставить в README свежие числа из базы
 
+# Витрины в dbt: те же, что в sql/schema/03_marts.sql, с тестами рядом.
+make dbt-venv        # отдельное окружение под dbt
+make dbt-build       # собрать в схеме dbt_marts и прогнать тесты
+make dbt-reconcile   # сверить со старыми витринами построчно
+make dbt-docs        # документация и граф зависимостей
 ```
 
 Числа и таблицы в разделах 6-8 — это вывод команд, а не переписанные

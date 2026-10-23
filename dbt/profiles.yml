@@ -1,0 +1,14 @@
+# Подключение берётся из того же .env, что у сбора: make dbt-* выгружает
+# его в окружение. Значений в файле нет намеренно.
+rent_msk:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_PORT', '5433') | int }}"
+      user: "{{ env_var('POSTGRES_USER', 'rent') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'rent') }}"
+      schema: dbt_marts
+      threads: 2
