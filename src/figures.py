@@ -61,7 +61,7 @@ def canvas(width=9.0, height=4.6):
 
 
 def titles(ax, title, subtitle=None):
-    ax.set_title(title, color=INK, fontsize=13, loc="left", pad=16 if subtitle else 10)
+    ax.set_title(title, color=INK, fontsize=13, loc="left", pad=22 if subtitle else 10)
     if subtitle:
         ax.text(0, 1.02, subtitle, transform=ax.transAxes, color=INK_2,
                 fontsize=10, va="bottom")

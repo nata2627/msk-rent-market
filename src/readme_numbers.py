@@ -46,6 +46,10 @@ MONTHS = ("января февраля марта апреля мая июня �
           "октября ноября декабря").split()
 
 
+MONTHS_NOM = ("январь февраль март апрель май июнь июль август сентябрь "
+              "октябрь ноябрь декабрь").split()
+
+
 def ru_date(d) -> str:
     return f"{d.day} {MONTHS[d.month - 1]} {d.year}"
 
@@ -196,6 +200,7 @@ def collect(conn) -> dict[str, str]:
     f["live_buckets"] = thousands(buckets)
 
     f.update(operations(rows))
+    f.update(results_facts())
 
     # Тесты считаются сбором pytest, а не записываются руками: число
     # меняется почти каждым коммитом.
@@ -319,6 +324,69 @@ def operations(rows) -> dict[str, str]:
     for label, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         tbl.append(f"| {label} | {n} |")
     f["ops_fail_table"] = block(tbl)
+    return f
+
+
+# ---------------------------------------------------------------------
+# Индекс и прогноз. Числа берутся из файлов results/, которые пишут
+# make index и make forecast, а не из базы: результат модели проверяется
+# по репозиторию без базы, и README обязан совпадать именно с файлом.
+RESULTS = README.parent / "results"
+MODEL_NAMES = {"rw": "случайное блуждание", "snaive": "сезонный наивный",
+               "ets": "ETS", "sarima": "SARIMA"}
+
+
+def pct(v, digits=1, sign=False) -> str:
+    s = f"{v:+.{digits}f}" if sign else f"{v:.{digits}f}"
+    return s.replace(".", ",").replace("-", "−")
+
+
+def results_facts() -> dict[str, str]:
+    import json
+    f: dict[str, str] = {}
+    fc_path, ix_path = RESULTS / "forecast.json", RESULTS / "panel_index.json"
+    if fc_path.exists():
+        d = json.loads(fc_path.read_text())
+        dec = d["decision"]
+        f["fc_months"] = str(d["months"])
+        f["fc_chosen"] = MODEL_NAMES[dec["chosen"]]
+        tbl = ["| модель | MAPE, % | покрытие 80%, доля | покрытие 95%, доля |",
+               "|---|---:|---:|---:|"]
+        for m in ("rw", "snaive", "ets", "sarima"):
+            cov95 = sum(d["backtest"][s][m]["cov95"] for s in ("nominal_1", "nominal_2")) / 2
+            tbl.append(f"| {MODEL_NAMES[m]} | {pct(dec['mape'][m], 2)} | "
+                       f"{pct(dec['cov80'][m], 2)} | {pct(cov95, 2)} |")
+        f["fc_backtest_table"] = block(tbl)
+        def month_name(ym):
+            y, m = ym.split("-")
+            return f"{MONTHS_NOM[int(m) - 1]} {y}"
+        horizon = d["forecast"]["nominal_1"][-1]["month"]
+        rows = [f"| комнат | {month_name(d['last_month'])}, руб. | "
+                f"прогноз на {month_name(horizon)}, руб. | 80% | 95% |",
+                "|---|---:|---:|---|---|"]
+        for r in (1, 2):
+            last = d["forecast"][f"nominal_{r}"][-1]
+            rows.append(f"| {r} | {thousands(d['last_level'][f'nominal_{r}'])} | "
+                        f"{thousands(last['forecast'])} | {thousands(last['lo80'])} - "
+                        f"{thousands(last['hi80'])} | {thousands(last['lo95'])} - "
+                        f"{thousands(last['hi95'])} |")
+        f["fc_forecast_table"] = block(rows)
+        dc = d["decomposition"]
+        f["fc_season_amp"] = pct((dc["nominal_1"]["amplitude_pct"]
+                                  + dc["nominal_2"]["amplitude_pct"]) / 2)
+        f["fc_yoy_1"] = pct(dc["nominal_1"]["yoy_last_pct"])
+        f["fc_yoy_real_1"] = pct(dc["real_1"]["yoy_last_pct"])
+    if ix_path.exists():
+        d = json.loads(ix_path.read_text())
+        t, det = d["hedonic_total"], d["detectability"]
+        f["ix_days"] = str(d["covered_days"])
+        f["ix_rows"] = thousands(d["sample"]["rows"])
+        f["ix_hed"] = pct(t["change_pct"], 2, sign=True)
+        f["ix_hed_ci"] = f"{pct(t['lo95_pct'], 2, sign=True)}; {pct(t['hi95_pct'], 2, sign=True)}"
+        f["ix_chain"] = pct(d["chain_total_pct"], 1, sign=True)
+        f["ix_mde"] = pct(det["mde_pct"], 2)
+        f["ix_rosstat_mom"] = pct(det["rosstat_median_abs_mom_pct"], 2)
+        f["ix_sd_day"] = pct(det["sd_day_pct"], 2)
     return f
 
 
