@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Аренда в Москве: панель</title>
+<meta name="description" content="Индекс, прогноз, карта районов и срок жизни объявлений по самостоятельно собранной панели аренды в Москве. Только агрегаты.">
+<style>
+:root {
+  --bg: #fcfcfb; --surface: #ffffff; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --axis: #c3c2b7; --grid: #e6e5df; --s1: #2a78d6; --s2: #eb6834; --warn: #b4540c;
+  --seq0: #dbe8f8; --seq1: #1a4f91; --none: #ecebe6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --surface: #1c1c1b; --ink: #f2f1ec; --ink2: #c3c2b7; --muted: #8f8e88;
+    --axis: #4a4945; --grid: #2c2c2a; --s1: #5b9cf0; --s2: #f08a5d; --warn: #f0a35d;
+    --seq0: #1f3350; --seq1: #9cc6ff; --none: #2a2a28;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --surface: #1c1c1b; --ink: #f2f1ec; --ink2: #c3c2b7; --muted: #8f8e88;
+  --axis: #4a4945; --grid: #2c2c2a; --s1: #5b9cf0; --s2: #f08a5d; --warn: #f0a35d;
+  --seq0: #1f3350; --seq1: #9cc6ff; --none: #2a2a28;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
+h2 { font-size: 20px; margin: 40px 0 4px; }
+p { margin: 8px 0; color: var(--ink2); }
+.lead { font-size: 17px; }
+.date { display: inline-flex; gap: 8px; align-items: center; margin: 8px 0 0;
+  padding: 6px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--grid);
+  color: var(--ink2); font-size: 14px; }
+.date.stale { border-color: var(--warn); color: var(--warn); }
+.chart { width: 100%; margin-top: 12px; position: relative; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.note { font-size: 13px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--ink2); margin-top: 8px; }
+.legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--axis); border-radius: 8px; padding: 6px 10px; font-size: 13px;
+  white-space: nowrap; opacity: 0; transition: opacity .1s; box-shadow: 0 2px 8px rgba(0,0,0,.12); z-index: 2; }
+.tick text { fill: var(--muted); font-size: 11px; }
+.tick line { stroke: var(--grid); }
+.domain { stroke: var(--axis); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 12px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+footer { margin-top: 48px; font-size: 13px; color: var(--muted); }
+a { color: var(--s1); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Аренда в Москве: что показывает панель</h1>
+  <p class="lead">Панель объявлений о длительной аренде, собранная самостоятельно с сентября 2026 года.
+    Здесь только агрегаты, объявления целиком не публикуются. Цены запрашиваемые, уход объявления с
+    рынка не равен сдаче квартиры.</p>
+  <div id="date" class="date">Загружаю данные…</div>
+
+  <h2>Ставка по Росстату и прогноз на полгода</h2>
+  <p>Средняя плата за аренду у частных лиц, тысяч рублей в месяц. Метод прогноза выбран правилом,
+    записанным до расчета. Полосы показывают интервалы 80% и 95%.</p>
+  <div class="chart" id="forecast"></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>однокомнатная</span>
+    <span><i style="background:var(--s2)"></i>двухкомнатная</span></div>
+
+  <h2>Индекс запрашиваемой ставки по панели</h2>
+  <p>Первый день равен 100. Гедонический индекс по всем объявлениям с полосой 95%, цепной по одним и
+    тем же объявлениям. Цепной падает, потому что оставшимся снижают цену. Рынок в целом почти стоит.</p>
+  <div class="chart" id="pindex"></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>все объявления, гедонический</span>
+    <span><i style="background:var(--s2)"></i>одни и те же объявления, цепной</span></div>
+
+  <h2>Медиана цены за метр по районам</h2>
+  <p>Однушки и двушки, рублей за квадратный метр в месяц. Район показан, если в нем не меньше десяти объявлений.</p>
+  <div class="chart" id="map"></div>
+  <p class="note" id="mapnote"></p>
+
+  <h2>Сколько живет объявление</h2>
+  <p>Доля объявлений, еще висящих к данному возрасту. Каплан-Мейер с поздним вхождением, однушки и двушки.</p>
+  <div class="chart" id="surv"></div>
+
+  <h2>Кто снижает цену</h2>
+  <p>Доля объявлений, хотя бы раз снизивших цену за время наблюдения.</p>
+  <div class="chart" id="drops"></div>
+
+  <h2>Ошибка модели цены по неделям</h2>
+  <p>Модель, обученная на всем, что было раньше, проверяется на объявлениях, впервые увиденных за
+    неделю. Порог тревоги выводится из первых четырех недель.</p>
+  <div class="chart" id="drift"></div>
+  <p class="note" id="driftnote"></p>
+
+  <footer>
+    <p>Данные собирает отдельная машина раз в день. Если она остановится, страница покажет последнюю дату
+      данных. Код, методика и оговорки в
+      <a href="https://github.com/nata2627/msk-rent-market">репозитории</a>.</p>
+  </footer>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = d3.format(",.0f");
+const ru = s => fmt(s).replace(/,/g, " ");
+const MONTHS = ["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
+const parseM = d3.timeParse("%Y-%m"), parseD = d3.timeParse("%Y-%m-%d");
+
+function frame(id, h) {
+  const el = document.getElementById(id);
+  const w = Math.max(320, el.clientWidth);
+  const m = {t: 12, r: w < 520 ? 12 : 120, b: 28, l: 44};
+  const svg = d3.select(el).append("svg").attr("viewBox", `0 0 ${w} ${h}`);
+  const tip = d3.select(el).append("div").attr("class", "tip");
+  return {el, svg, tip, w, h, m, iw: w - m.l - m.r, ih: h - m.t - m.b,
+          g: svg.append("g").attr("transform", `translate(${m.l},${m.t})`)};
+}
+
+function axes(f, x, y, xfmt, yfmt) {
+  f.g.append("g").attr("transform", `translate(0,${f.ih})`)
+    .call(d3.axisBottom(x).ticks(f.w < 520 ? 4 : 7).tickFormat(xfmt).tickSizeOuter(0));
+  f.g.append("g").call(d3.axisLeft(y).ticks(5).tickFormat(yfmt).tickSize(-f.iw))
+    .call(g => g.select(".domain").remove());
+}
+
+function showTip(f, html, px, py) {
+  f.tip.html(html).style("opacity", 1);
+  const tw = f.tip.node().offsetWidth;
+  const left = Math.min(px + 12, f.el.clientWidth - tw - 4);
+  f.tip.style("left", left + "px").style("top", (py - 10) + "px");
+}
+
+function crosshair(f, x, dates, render) {
+  const line = f.g.append("line").attr("y1", 0).attr("y2", f.ih)
+    .attr("stroke", css("--axis")).style("opacity", 0);
+  f.g.append("rect").attr("width", f.iw).attr("height", f.ih).attr("fill", "transparent")
+    .on("mousemove touchmove", ev => {
+      const [mx] = d3.pointer(ev);
+      const t = x.invert(mx);
+      const i = d3.bisector(d => d).center(dates, t);
+      const d = dates[i];
+      line.attr("x1", x(d)).attr("x2", x(d)).style("opacity", 1);
+      const scale = f.el.clientWidth / f.w;
+      showTip(f, render(i), (x(d) + f.m.l) * scale, f.m.t * scale);
+    })
+    .on("mouseleave", () => { line.style("opacity", 0); f.tip.style("opacity", 0); });
+}
+
+function endLabel(f, x, y, d, v, text) {
+  if (f.w < 520) return;
+  f.g.append("text").attr("x", x(d) + 6).attr("y", y(v)).attr("dy", "0.35em")
+    .attr("fill", css("--ink2")).attr("font-size", 12).text(text);
+}
+
+function forecastChart(data) {
+  const f = frame("forecast", 340);
+  const colors = {"1": css("--s1"), "2": css("--s2")};
+  const hist = {}, fc = {};
+  for (const k of ["1", "2"]) {
+    hist[k] = data.rosstat[k].map(([m, v]) => [parseM(m), v / 1000]);
+    const last = hist[k][hist[k].length - 1];
+    fc[k] = [[last[0], last[1], last[1], last[1], last[1], last[1]]].concat(
+      data.forecast.series[k].map(r => [parseM(r.month), r.forecast / 1000, r.lo80 / 1000,
+                                          r.hi80 / 1000, r.lo95 / 1000, r.hi95 / 1000]));
+  }
+  const all = [...hist["1"], ...hist["2"], ...fc["1"].map(r => [r[0], r[5]]), ...fc["2"].map(r => [r[0], r[4]])];
+  const x = d3.scaleTime().domain(d3.extent(all, d => d[0])).range([0, f.iw]);
+  const y = d3.scaleLinear().domain([d3.min(all, d => d[1]) * 0.95, d3.max(all, d => d[1]) * 1.03]).nice().range([f.ih, 0]);
+  axes(f, x, y, d3.timeFormat("%Y"), d => d);
+  for (const k of ["1", "2"]) {
+    for (const [lo, hi, op] of [[4, 5, 0.12], [2, 3, 0.24]])
+      f.g.append("path").datum(fc[k]).attr("fill", colors[k]).attr("opacity", op)
+        .attr("d", d3.area().x(d => x(d[0])).y0(d => y(d[lo])).y1(d => y(d[hi])));
+    f.g.append("path").datum(hist[k]).attr("fill", "none").attr("stroke", colors[k]).attr("stroke-width", 2)
+      .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
+    f.g.append("path").datum(fc[k]).attr("fill", "none").attr("stroke", colors[k]).attr("stroke-width", 2)
+      .attr("stroke-dasharray", "4 3").attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
+    const e = fc[k][fc[k].length - 1];
+    endLabel(f, x, y, e[0], e[1], (k === "1" ? "1к " : "2к ") + e[1].toFixed(1));
+  }
+  const dates = [...hist["1"].map(d => d[0]), ...fc["1"].slice(1).map(d => d[0])];
+  const series = k => [...hist[k].map(d => [d[1]]), ...fc[k].slice(1).map(d => [d[1], d[2], d[3]])];
+  const s1 = series("1"), s2 = series("2");
+  crosshair(f, x, dates, i => {
+    const d = dates[i], future = s1[i].length > 1;
+    const row = (lab, s) => future ? `${lab}: ${s[0].toFixed(1)} (80%: ${s[1].toFixed(1)}-${s[2].toFixed(1)})` : `${lab}: ${s[0].toFixed(1)}`;
+    return `<b>${MONTHS[d.getMonth()]} ${d.getFullYear()}${future ? ", прогноз" : ""}</b><br>${row("1к", s1[i])}<br>${row("2к", s2[i])}`;
+  });
+}
+
+function indexChart(data) {
+  const f = frame("pindex", 300);
+  const hed = data.panel_index.hedonic.map(([d, v, lo, hi]) => [parseD(d), v, lo, hi]);
+  const ch = data.panel_index.chain.map(([d, v]) => [parseD(d), v]);
+  const x = d3.scaleTime().domain(d3.extent(hed, d => d[0])).range([0, f.iw]);
+  const y = d3.scaleLinear().domain([d3.min(ch, d => d[1]) - 0.5, 100.6]).range([f.ih, 0]);
+  axes(f, x, y, d3.timeFormat("%d.%m"), d => d);
+  f.g.append("line").attr("x1", 0).attr("x2", f.iw).attr("y1", y(100)).attr("y2", y(100)).attr("stroke", css("--muted"));
+  f.g.append("path").datum(hed).attr("fill", css("--s1")).attr("opacity", 0.2)
+    .attr("d", d3.area().x(d => x(d[0])).y0(d => y(d[2])).y1(d => y(d[3])));
+  f.g.append("path").datum(hed).attr("fill", "none").attr("stroke", css("--s1")).attr("stroke-width", 2)
+    .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
+  f.g.append("path").datum(ch).attr("fill", "none").attr("stroke", css("--s2")).attr("stroke-width", 2)
+    .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
+  const hl = hed[hed.length - 1], cl = ch[ch.length - 1];
+  endLabel(f, x, y, hl[0], hl[1], "гедонический " + hl[1].toFixed(1));
+  endLabel(f, x, y, cl[0], cl[1], "цепной " + cl[1].toFixed(1));
+  const chainBy = new Map(ch.map(d => [+d[0], d[1]]));
+  crosshair(f, x, hed.map(d => d[0]), i => {
+    const d = hed[i];
+    const c = chainBy.get(+d[0]);
+    return `<b>${d3.timeFormat("%d.%m.%Y")(d[0])}</b><br>гедонический: ${d[1].toFixed(2)} [${d[2].toFixed(2)}; ${d[3].toFixed(2)}]` +
+      (c !== undefined ? `<br>цепной: ${c.toFixed(2)}` : "");
+  });
+}
+
+async function mapChart(data) {
+  const el = document.getElementById("map");
+  const w = Math.max(320, el.clientWidth), h = Math.round(w * 0.9);
+  let geo;
+  try { geo = await (await fetch("data/moscow_districts.geojson")).json(); }
+  catch (e) { el.textContent = "Контуры районов не загрузились."; return; }
+  const byName = new Map(data.districts.map(d => [d.district, d]));
+  geo.features = geo.features.filter(ft => ft.properties.name);
+  // Контуры из OpenStreetMap обходят кольца против часовой стрелки, а D3
+  // на сфере читает такое кольцо как «весь мир, кроме района», и карта
+  // заливается сплошным цветом. Кольцо с площадью больше полусферы
+  // переворачивается.
+  for (const ft of geo.features) {
+    if (d3.geoArea(ft) > 2 * Math.PI) {
+      const polys = ft.geometry.type === "Polygon" ? [ft.geometry.coordinates] : ft.geometry.coordinates;
+      for (const poly of polys) for (const ring of poly) ring.reverse();
+    }
+  }
+  const proj = d3.geoMercator().fitSize([w, h - 40], geo);
+  const path = d3.geoPath(proj);
+  const vals = data.districts.map(d => d.ppm);
+  const color = d3.scaleSequential(d3.interpolateRgb(css("--seq0"), css("--seq1")))
+    .domain([d3.quantile(vals.sort(d3.ascending), 0.05), d3.quantile(vals, 0.95)]).clamp(true);
+  const svg = d3.select(el).append("svg").attr("viewBox", `0 0 ${w} ${h}`);
+  const tip = d3.select(el).append("div").attr("class", "tip");
+  svg.append("g").selectAll("path").data(geo.features).join("path")
+    .attr("d", path).attr("stroke", css("--bg")).attr("stroke-width", 0.8)
+    .attr("fill", ft => byName.has(ft.properties.name) ? color(byName.get(ft.properties.name).ppm) : css("--none"))
+    .on("mousemove", (ev, ft) => {
+      const d = byName.get(ft.properties.name);
+      const [px, py] = d3.pointer(ev, el);
+      tip.html(d ? `<b>${d.district}</b><br>${ru(d.ppm)} руб./м² в месяц<br>${Math.round((d.vs_city - 1) * 100)}% к городу, ${d.offers} объявл.`
+                 : `<b>${ft.properties.name}</b><br>нет данных по этому контуру`)
+        .style("opacity", 1);
+      const tw = tip.node().offsetWidth;
+      tip.style("left", Math.min(px + 12, el.clientWidth - tw - 4) + "px").style("top", (py - 10) + "px");
+    })
+    .on("mouseleave", () => tip.style("opacity", 0));
+  // Легенда шкалой: где светлее, там дешевле.
+  const lw = Math.min(260, w - 32), lx = 8, ly = h - 30;
+  const grad = svg.append("defs").append("linearGradient").attr("id", "lg");
+  for (let i = 0; i <= 10; i++) grad.append("stop").attr("offset", `${i * 10}%`)
+    .attr("stop-color", color(color.domain()[0] + (color.domain()[1] - color.domain()[0]) * i / 10));
+  svg.append("rect").attr("x", lx).attr("y", ly).attr("width", lw).attr("height", 8).attr("rx", 4).attr("fill", "url(#lg)");
+  svg.append("text").attr("x", lx).attr("y", ly + 22).attr("fill", css("--muted")).attr("font-size", 11).text(ru(color.domain()[0]) + " руб./м²");
+  svg.append("text").attr("x", lx + lw).attr("y", ly + 22).attr("text-anchor", "end").attr("fill", css("--muted")).attr("font-size", 11).text(ru(color.domain()[1]));
+  const names = new Set(geo.features.map(ft => ft.properties.name));
+  const nogeo = data.districts.filter(d => !names.has(d.district)).map(d => d.district);
+  document.getElementById("mapnote").textContent = nogeo.length
+    ? `Без контура на карте, но с данными: ${nogeo.join(", ")}.` : "";
+}
+
+function survChart(data) {
+  const f = frame("surv", 280);
+  const s = data.survival;
+  const x = d3.scaleLinear().domain([0, d3.max(s, d => d.age)]).range([0, f.iw]);
+  const y = d3.scaleLinear().domain([0, 1]).range([f.ih, 0]);
+  axes(f, x, y, d => d + " дн.", d3.format(".0%"));
+  f.g.append("path").datum(s).attr("fill", "none").attr("stroke", css("--s1")).attr("stroke-width", 2)
+    .attr("d", d3.line().curve(d3.curveStepAfter).x(d => x(d.age)).y(d => y(d.surv)));
+  const med = s.find(d => d.surv <= 0.5);
+  if (med) {
+    f.g.append("line").attr("x1", x(med.age)).attr("x2", x(med.age)).attr("y1", y(0.5)).attr("y2", f.ih)
+      .attr("stroke", css("--muted")).attr("stroke-dasharray", "3 3");
+    f.g.append("text").attr("x", x(med.age) + 6).attr("y", y(0.5) - 6).attr("fill", css("--ink2"))
+      .attr("font-size", 12).text(`медиана ${med.age} дн.`);
+  }
+  crosshair(f, x, s.map(d => d.age), i => `<b>${s[i].age} дн.</b><br>висит ${(s[i].surv * 100).toFixed(1)}%<br>в группе риска ${ru(s[i].at_risk)}`);
+}
+
+function barsChart(id, rows, label, value, fmtV, h) {
+  const f = frame(id, h || (rows.length * 36 + 36));
+  f.m.l = 0;
+  const lw = 120;
+  const x = d3.scaleLinear().domain([0, d3.max(rows, value) * 1.15]).range([0, f.iw - lw]);
+  const y = d3.scaleBand().domain(rows.map(label)).range([0, f.ih]).padding(0.35);
+  const g = f.g.append("g").attr("transform", `translate(${lw},0)`);
+  g.selectAll("rect").data(rows).join("rect").attr("x", 0).attr("y", d => y(label(d)))
+    .attr("height", y.bandwidth()).attr("width", d => x(value(d))).attr("rx", 4).attr("fill", css("--s1"))
+    .on("mousemove", (ev, d) => {
+      const [px, py] = d3.pointer(ev, f.el);
+      showTip(f, `<b>${label(d)}</b><br>${fmtV(d)}`, px, py);
+    })
+    .on("mouseleave", () => f.tip.style("opacity", 0));
+  g.selectAll("text.v").data(rows).join("text").attr("class", "v")
+    .attr("x", d => x(value(d)) + 6).attr("y", d => y(label(d)) + y.bandwidth() / 2).attr("dy", "0.35em")
+    .attr("fill", css("--ink2")).attr("font-size", 12).text(d => fmtV(d).split(",")[0]);
+  f.g.selectAll("text.l").data(rows).join("text").attr("class", "l")
+    .attr("x", lw - 8).attr("y", d => y(label(d)) + y.bandwidth() / 2).attr("dy", "0.35em")
+    .attr("text-anchor", "end").attr("fill", css("--ink")).attr("font-size", 13).text(label);
+}
+
+function render(data) {
+  const dd = parseD(data.data_date);
+  const age = Math.floor((Date.now() - dd) / 86400000);
+  const el = document.getElementById("date");
+  const when = d3.timeFormat("%d.%m.%Y")(dd);
+  el.textContent = `Данные на ${when}, панель из ${data.panel_days} дней сбора`;
+  if (age > 3) {
+    el.classList.add("stale");
+    el.textContent = `Данные на ${when}: выгрузка не обновлялась ${age} дн., показаны последние собранные числа`;
+  }
+  forecastChart(data);
+  indexChart(data);
+  mapChart(data);
+  survChart(data);
+  barsChart("drops", data.drops.filter(d => d.seller !== "не указан"), d => d.seller, d => d.share_pct,
+            d => `${d.share_pct.toFixed(1)}%, из ${ru(d.offers)} объявлений`);
+  barsChart("drift", data.model_drift, d => "с " + d3.timeFormat("%d.%m")(parseD(d.week)), d => d.mape_pct,
+            d => `MAPE ${d.mape_pct.toFixed(1)}%, ${ru(d.n)} новых объявлений`);
+  document.getElementById("driftnote").textContent = data.model.threshold_pct
+    ? `Порог тревоги ${data.model.threshold_pct}%.`
+    : `Порог появится с четвертой неделей. Модель ${data.model.version}, ошибка на проверке ${data.model.mape_pct}%, покрытие интервала 80% равно ${data.model.coverage80}.`;
+}
+
+fetch("data/site.json").then(r => r.json()).then(render).catch(() => {
+  document.getElementById("date").textContent = "Данные не загрузились. Попробуйте обновить страницу.";
+});
+</script>
+</body>
+</html>

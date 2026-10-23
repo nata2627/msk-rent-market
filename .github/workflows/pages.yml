@@ -1,0 +1,38 @@
+# Публичная витрина на GitHub Pages. Собирается из файлов репозитория:
+# site/index.html, агрегаты site/data/site.json и контуры районов. Базы и
+# машины сбора сборке не нужно, поэтому витрина переживает их остановку и
+# показывает последнюю дату данных.
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "sql/geo/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      # Контуры лежат в sql/geo ради карты Metabase. Копия в site/data
+      # делается здесь, чтобы не хранить в репозитории второй экземпляр.
+      - run: cp sql/geo/moscow_districts.geojson site/data/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
