@@ -387,6 +387,38 @@ def results_facts() -> dict[str, str]:
         f["ix_mde"] = pct(det["mde_pct"], 2)
         f["ix_rosstat_mom"] = pct(det["rosstat_median_abs_mom_pct"], 2)
         f["ix_sd_day"] = pct(det["sd_day_pct"], 2)
+    ce_path = RESULTS / "cut_effect.json"
+    if ce_path.exists():
+        d = json.loads(ce_path.read_text())
+        h, m = d["hazard"], d["matching"]
+        f["ce_rows"] = thousands(h["rows"])
+        f["ce_offers"] = thousands(h["offers"])
+        f["ce_events"] = thousands(h["events"])
+        f["ce_base"] = pct(h["base_daily_pct"], 2)
+        f["ce_eff"] = pct(h["effect_pp"], 2, sign=True)
+        f["ce_ci"] = f"{pct(h['lo95_pp'], 2, sign=True)}; {pct(h['hi95_pp'], 2, sign=True)}"
+        f["ce_ratio"] = pct(h["ratio"], 2)
+        rows = ["| оценка | прибавка, п.п. | 95% интервал | база |", "|---|---:|---|---:|"]
+        for key, name in (("hazard", "модель риска, все"),
+                          ("hazard_born_cohort", "модель риска, видели с рождения"),
+                          ("hazard_extra_controls", "модель риска, больше признаков")):
+            r = d[key]
+            rows.append(f"| {name} | {pct(r['effect_pp'], 2, sign=True)} в день | "
+                        f"{pct(r['lo95_pp'], 2, sign=True)}; {pct(r['hi95_pp'], 2, sign=True)} | "
+                        f"{pct(r['base_daily_pct'], 2)}% в день |")
+        rows.append(f"| сопоставление, уход за 7 дней | {pct(m['att_pp'], 1, sign=True)} | "
+                    f"{pct(m['lo95_pp'], 1, sign=True)}; {pct(m['hi95_pp'], 1, sign=True)} | "
+                    f"{pct(m['treated_exit7_pct'] - m['att_pp'], 1)}% за 7 дней |")
+        f["ce_table"] = block(rows)
+        f["ce_treated"] = thousands(m["treated"])
+        rel = [100 * (d[k]["ratio"] - 1) for k in
+               ("hazard", "hazard_born_cohort", "hazard_extra_controls")]
+        f["ce_rel_range"] = f"{round(min(rel))}-{round(max(rel))}"
+        pr, pa = d["placebo_preregistered"], d["placebo_age_amended"]
+        f["ce_plc_pre"] = pct(pr["mean_effect_pp"], 1, sign=True)
+        f["ce_plc_age"] = pct(pa["mean_effect_pp"], 2, sign=True)
+        f["ce_plc_age_cover"] = str(round(100 * pa["share_ci_covering_zero"]))
+        f["ce_plc_reps"] = str(pa["reps"])
     return f
 
 

@@ -1,0 +1,56 @@
+{
+ "last_day": "2026-10-22",
+ "cutoff": "2026-10-19",
+ "hazard": {
+  "rows": 341002,
+  "offers": 36001,
+  "events": 19797,
+  "base_daily_pct": 5.729,
+  "effect_pp": 0.631,
+  "lo95_pp": 0.441,
+  "hi95_pp": 0.822,
+  "ratio": 1.11
+ },
+ "hazard_born_cohort": {
+  "rows": 114548,
+  "offers": 15814,
+  "events": 7537,
+  "base_daily_pct": 6.72,
+  "effect_pp": 0.387,
+  "lo95_pp": 0.031,
+  "hi95_pp": 0.743,
+  "ratio": 1.058
+ },
+ "hazard_extra_controls": {
+  "rows": 341002,
+  "offers": 36001,
+  "events": 19797,
+  "base_daily_pct": 5.729,
+  "effect_pp": 0.638,
+  "lo95_pp": 0.447,
+  "hi95_pp": 0.829,
+  "ratio": 1.111
+ },
+ "stable": false,
+ "matching": {
+  "treated": 8588,
+  "controls_used": 2077815,
+  "treated_exit7_pct": 30.78,
+  "att_pp": 2.03,
+  "lo95_pp": 1.1,
+  "hi95_pp": 3.02
+ },
+ "placebo_preregistered": {
+  "reps": 200,
+  "mean_effect_pp": 17.633,
+  "sd_effect_pp": 0.083,
+  "share_ci_covering_zero": 0.0
+ },
+ "placebo_preregistered_note": "негодно: случайный день внутри известного отрезка всегда ставит день ухода после ложного снижения",
+ "placebo_age_amended": {
+  "reps": 200,
+  "mean_effect_pp": -0.051,
+  "sd_effect_pp": 0.157,
+  "share_ci_covering_zero": 0.92
+ }
+}
