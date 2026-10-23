@@ -51,3 +51,40 @@ def test_one_mark_appearing_twice_is_updated_in_both_places():
     text = "<!--n:m-->1<!--/n--> ... <!--n:m-->2<!--/n-->"
     out, changed, _ = apply(text, {"m": "65 000"})
     assert out.count("65 000") == 2 and changed == 2
+
+
+# --- раздел «Эксплуатация» -------------------------------------------
+from datetime import date
+
+from src.readme_numbers import day_kind, failure_reason, short_dates
+
+
+def test_signal_beats_page_timeout():
+    """Обход, убитый сигналом посреди таймаутов, упал от сигнала. Если
+    правило страницы сработает первым, прерывания снаружи исчезнут из
+    таблицы и машина будет выглядеть жертвой площадки."""
+    note = "прогон убит сигналом на 191-й корзине; TimeoutError: Page.goto"
+    assert failure_reason(note).startswith("прерван снаружи")
+
+
+def test_closed_browser_is_not_counted_as_page_failure():
+    note = "PageWithoutData: Страница не далась: Target page, context or browser has been closed"
+    assert failure_reason(note) == "браузер закрылся посреди обхода"
+
+
+def test_unknown_note_is_named_not_dropped():
+    assert failure_reason("что-то новое") == "прочее"
+    assert failure_reason(None) == "прочее"
+
+
+def test_day_with_data_but_no_ok_run_is_partial_not_lost():
+    assert day_kind(True, True) == "full"
+    assert day_kind(False, True) == "partial"
+    assert day_kind(False, False) == "lost"
+
+
+def test_short_dates_one_month_names_it_once():
+    assert short_dates([date(2026, 10, 11), date(2026, 10, 9)]) == "9 и 11 октября"
+    assert short_dates([date(2026, 10, 13)]) == "13 октября"
+    assert short_dates([date(2026, 9, 30), date(2026, 10, 1)]) == "30 сентября и 1 октября"
+    assert short_dates([]) == "—"
