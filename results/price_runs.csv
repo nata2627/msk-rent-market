@@ -1,3 +1,5 @@
 version,model,test_n,mae_rub,mape_pct,coverage80,last_week_mape_pct,drift_threshold_pct
 price-20261022,hedonic,9558,20431,17.66,0.802,13.41,
 price-20261022,catboost,9558,15145,13.1,0.8,13.41,
+price-20261023,hedonic,10318,20644,17.56,0.803,13.4,
+price-20261023,catboost,10318,15103,12.97,0.806,13.4,
