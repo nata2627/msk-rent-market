@@ -54,3 +54,8 @@
 # с согласия владельца. Включить, раскомментировав строку, после
 #   docker build -t rent-price -f docker/price/Dockerfile .
 # 0 13 * * 0 /home/dev2/rent_msk/scripts/box_price_weekly.sh
+
+# Агрегаты публичной витрины, 19:30 по Москве. НЕ ВКЛЮЧЕНО: нужен
+# деплой-ключ на этой машине, а машина чужая. Включить после согласия
+# владельца и выдачи ключа (см. docs/operations.md).
+# 30 16 * * * /home/dev2/rent_msk/scripts/box_site_export.sh
