@@ -1,187 +1,187 @@
 {
  "split": {
-  "train": 38656,
-  "calib": 6974,
-  "test": 9558
+  "train": 39886,
+  "calib": 6376,
+  "test": 10318
  },
- "outliers_excluded": 30,
+ "outliers_excluded": 31,
  "models": {
   "hedonic": {
    "test": {
-    "n": 9558,
-    "mae_rub": 20431,
-    "mape_pct": 17.66,
-    "median_ape_pct": 13.28
+    "n": 10318,
+    "mae_rub": 20644,
+    "mape_pct": 17.56,
+    "median_ape_pct": 13.27
    },
    "by_rooms": {
     "0": {
-     "n": 1123,
-     "mae_rub": 10388,
-     "mape_pct": 16.17,
-     "median_ape_pct": 12.83
+     "n": 1180,
+     "mae_rub": 10358,
+     "mape_pct": 16.04,
+     "median_ape_pct": 12.75
     },
     "1": {
-     "n": 3750,
-     "mae_rub": 10514,
-     "mape_pct": 15.75,
-     "median_ape_pct": 12.19
+     "n": 3994,
+     "mae_rub": 10412,
+     "mape_pct": 15.7,
+     "median_ape_pct": 12.14
     },
     "2": {
-     "n": 3288,
-     "mae_rub": 18499,
-     "mape_pct": 17.66,
-     "median_ape_pct": 13.43
+     "n": 3655,
+     "mae_rub": 18749,
+     "mape_pct": 17.56,
+     "median_ape_pct": 13.29
     },
     "3": {
-     "n": 1186,
-     "mae_rub": 40702,
-     "mape_pct": 22.05,
-     "median_ape_pct": 16.56
+     "n": 1265,
+     "mae_rub": 39933,
+     "mape_pct": 21.69,
+     "median_ape_pct": 16.59
     },
     "4": {
-     "n": 211,
-     "mae_rub": 166301,
-     "mape_pct": 34.82,
-     "median_ape_pct": 29.09
+     "n": 224,
+     "mae_rub": 179245,
+     "mape_pct": 35.45,
+     "median_ape_pct": 31.91
     }
    },
    "by_price_band": {
-    "63-82 тыс": {
-     "n": 2753,
-     "mae_rub": 11295,
-     "mape_pct": 15.71,
-     "median_ape_pct": 12.44
+    "63-79 тыс": {
+     "n": 2466,
+     "mae_rub": 11020,
+     "mape_pct": 15.69,
+     "median_ape_pct": 12.37
     },
-    "82-130 тыс": {
-     "n": 2089,
-     "mae_rub": 17422,
-     "mape_pct": 17.45,
-     "median_ape_pct": 13.81
+    "79-130 тыс": {
+     "n": 2784,
+     "mae_rub": 16517,
+     "mape_pct": 17.15,
+     "median_ape_pct": 13.52
     },
     "до 63 тыс": {
-     "n": 3264,
-     "mae_rub": 8440,
-     "mape_pct": 17.01,
-     "median_ape_pct": 11.84
+     "n": 3504,
+     "mae_rub": 8320,
+     "mape_pct": 16.75,
+     "median_ape_pct": 11.7
     },
     "от 130 тыс": {
-     "n": 1452,
-     "mae_rub": 69036,
-     "mape_pct": 23.11,
-     "median_ape_pct": 19.6
+     "n": 1564,
+     "mae_rub": 70775,
+     "mape_pct": 23.07,
+     "median_ape_pct": 19.86
     }
    },
-   "conformal_q_log": 0.2675,
-   "interval_halfwidth_pct": 30.7,
-   "coverage80": 0.802,
+   "conformal_q_log": 0.2682,
+   "interval_halfwidth_pct": 30.8,
+   "coverage80": 0.803,
    "coverage80_by_rooms": {
-    "0": 0.822,
-    "1": 0.838,
+    "0": 0.831,
+    "1": 0.841,
     "2": 0.805,
-    "3": 0.719,
-    "4": 0.45
+    "3": 0.722,
+    "4": 0.42
    }
   },
   "catboost": {
    "test": {
-    "n": 9558,
-    "mae_rub": 15145,
-    "mape_pct": 13.1,
-    "median_ape_pct": 9.69
+    "n": 10318,
+    "mae_rub": 15103,
+    "mape_pct": 12.97,
+    "median_ape_pct": 9.67
    },
    "by_rooms": {
     "0": {
-     "n": 1123,
-     "mae_rub": 6544,
-     "mape_pct": 10.17,
-     "median_ape_pct": 7.62
+     "n": 1180,
+     "mae_rub": 6570,
+     "mape_pct": 10.15,
+     "median_ape_pct": 7.75
     },
     "1": {
-     "n": 3750,
-     "mae_rub": 7803,
-     "mape_pct": 11.95,
-     "median_ape_pct": 9.18
+     "n": 3994,
+     "mae_rub": 7676,
+     "mape_pct": 11.89,
+     "median_ape_pct": 9.16
     },
     "2": {
-     "n": 3288,
-     "mae_rub": 13830,
-     "mape_pct": 13.36,
-     "median_ape_pct": 10.12
+     "n": 3655,
+     "mae_rub": 13961,
+     "mape_pct": 13.19,
+     "median_ape_pct": 10.03
     },
     "3": {
-     "n": 1186,
-     "mae_rub": 30354,
-     "mape_pct": 16.33,
-     "median_ape_pct": 12.4
+     "n": 1265,
+     "mae_rub": 29796,
+     "mape_pct": 16.07,
+     "median_ape_pct": 11.7
     },
     "4": {
-     "n": 211,
-     "mae_rub": 126435,
-     "mape_pct": 26.6,
-     "median_ape_pct": 18.35
+     "n": 224,
+     "mae_rub": 128135,
+     "mape_pct": 25.93,
+     "median_ape_pct": 18.48
     }
    },
    "by_price_band": {
-    "63-82 тыс": {
-     "n": 2753,
-     "mae_rub": 7589,
-     "mape_pct": 10.54,
+    "63-79 тыс": {
+     "n": 2466,
+     "mae_rub": 7264,
+     "mape_pct": 10.36,
      "median_ape_pct": 8.28
     },
-    "82-130 тыс": {
-     "n": 2089,
-     "mae_rub": 12570,
-     "mape_pct": 12.54,
-     "median_ape_pct": 10.15
+    "79-130 тыс": {
+     "n": 2784,
+     "mae_rub": 11742,
+     "mape_pct": 12.17,
+     "median_ape_pct": 9.84
     },
     "до 63 тыс": {
-     "n": 3264,
-     "mae_rub": 6403,
-     "mape_pct": 13.19,
-     "median_ape_pct": 9.12
+     "n": 3504,
+     "mae_rub": 6321,
+     "mape_pct": 13.02,
+     "median_ape_pct": 9.18
     },
     "от 130 тыс": {
-     "n": 1452,
-     "mae_rub": 52830,
-     "mape_pct": 18.52,
-     "median_ape_pct": 14.24
+     "n": 1564,
+     "mae_rub": 53123,
+     "mape_pct": 18.4,
+     "median_ape_pct": 14.73
     }
    },
-   "conformal_q_log": 0.1962,
-   "interval_halfwidth_pct": 21.7,
-   "coverage80": 0.8,
+   "conformal_q_log": 0.1978,
+   "interval_halfwidth_pct": 21.9,
+   "coverage80": 0.806,
    "coverage80_by_rooms": {
-    "0": 0.885,
-    "1": 0.827,
-    "2": 0.786,
-    "3": 0.723,
-    "4": 0.531
+    "0": 0.889,
+    "1": 0.832,
+    "2": 0.796,
+    "3": 0.724,
+    "4": 0.522
    }
   }
  },
  "cian": {
-  "test_offers": 9558,
-  "with_cian_estimate": 4034,
-  "coverage_share_pct": 42.2,
-  "ours_inside_cian_range_pct": 60.4,
+  "test_offers": 10318,
+  "with_cian_estimate": 4334,
+  "coverage_share_pct": 42.0,
+  "ours_inside_cian_range_pct": 60.7,
   "ask_inside_cian_range_pct": 99.8,
-  "ours_vs_cian_mid_median_pct": 0.87,
+  "ours_vs_cian_mid_median_pct": 0.91,
   "by_rooms_ours_vs_cian_mid_pct": {
-   "0": -1.92,
-   "1": 0.11,
-   "2": 1.86,
-   "3": 3.64,
-   "4": 5.55
+   "0": -1.48,
+   "1": 0.35,
+   "2": 1.74,
+   "3": 3.44,
+   "4": 5.26
   }
  },
  "exit": {
-  "exited_offers": 26784,
+  "exited_offers": 27877,
   "last_vs_first_price_median_pct": 0.0,
-  "share_with_cut_pct": 23.2,
-  "test_exited": 2147,
-  "exit_model_vs_ask_model_median_pct": -3.45,
-  "exit_model_vs_ask_model_mean_pct": -3.54,
-  "test_exit_mape_pct": 12.93
+  "share_with_cut_pct": 23.7,
+  "test_exited": 2021,
+  "exit_model_vs_ask_model_median_pct": -3.22,
+  "exit_model_vs_ask_model_mean_pct": -3.33,
+  "test_exit_mape_pct": 13.41
  },
  "drift": {
   "weeks": [
@@ -189,24 +189,24 @@
     "week_start": "2026-09-29",
     "train": 29659,
     "n": 7226,
-    "mae_rub": 15310,
-    "mape_pct": 12.81,
-    "median_ape_pct": 9.64
+    "mae_rub": 15344,
+    "mape_pct": 12.8,
+    "median_ape_pct": 9.67
    },
    {
     "week_start": "2026-10-06",
     "train": 36885,
     "n": 7578,
-    "mae_rub": 17129,
-    "mape_pct": 13.26,
+    "mae_rub": 17086,
+    "mape_pct": 13.27,
     "median_ape_pct": 10.01
    },
    {
     "week_start": "2026-10-13",
     "train": 44463,
     "n": 7379,
-    "mae_rub": 16886,
-    "mape_pct": 13.41,
+    "mae_rub": 16841,
+    "mape_pct": 13.4,
     "median_ape_pct": 10.0
    }
   ],
@@ -215,23 +215,23 @@
  "typical_days": {
   "0|дешевле": 14,
   "0|в рынке": 18,
-  "0|дороже": 27,
+  "0|дороже": 26,
   "1|дешевле": 7,
   "1|в рынке": 12,
-  "1|дороже": 20,
+  "1|дороже": 19,
   "2|дешевле": 12,
   "2|в рынке": 17,
   "2|дороже": 25,
   "3|дешевле": 23,
-  "3|в рынке": 27,
+  "3|в рынке": 26,
   "3|дороже": 31,
   "4|дешевле": 30,
   "4|в рынке": 31,
   "4|дороже": 33
  },
  "serving": {
-  "estimates": 27522,
-  "grid_cells": 6588
+  "estimates": 27319,
+  "grid_cells": 6631
  },
- "version": "price-20261022"
+ "version": "price-20261023"
 }
