@@ -36,7 +36,11 @@ fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/rent_site_deploy -o IdentitiesOnly=yes -o BatchMode=yes"
-if ! timeout 120 git -C "$SITE" pull -q --rebase; then
+# --autostash: сводку модели переобучение пишет прямо в клон, и без него
+# pull отказался бы работать с незакоммиченными файлами (23.10.2026).
+# Сводку results/price_* меняет только машина сбора, с макбука ее не
+# коммитить, иначе здесь будет конфликт.
+if ! timeout 120 git -C "$SITE" pull -q --rebase --autostash; then
   say "Клон сайта не обновился"
   notify site-push "Витрина не обновилась
 $(date '+%d.%m, %H:%M')
