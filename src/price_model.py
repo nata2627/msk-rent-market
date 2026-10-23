@@ -47,6 +47,7 @@ import csv
 import json
 import logging
 import math
+import os
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -55,7 +56,9 @@ import numpy as np
 log = logging.getLogger("price_model")
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "results"
+# На машине сбора результаты пишутся в клон репозитория, откуда уходят на
+# GitHub (scripts/box_site_export.sh).
+RESULTS = Path(os.environ.get("RESULTS_DIR", ROOT / "results"))
 MODELS_DIR = ROOT / "data" / "models"
 MLRUNS = ROOT / "data" / "mlruns"
 

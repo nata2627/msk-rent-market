@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -27,8 +28,10 @@ from src.panel_index import COVERED
 log = logging.getLogger("site_data")
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "site" / "data" / "site.json"
-RESULTS = ROOT / "results"
+# На машине сбора код лежит копией без git, а наружу файлы уходят из
+# отдельного клона репозитория. Поэтому оба пути можно переопределить.
+OUT = Path(os.environ.get("SITE_OUT", ROOT / "site" / "data" / "site.json"))
+RESULTS = Path(os.environ.get("RESULTS_DIR", ROOT / "results"))
 MIN_DISTRICT = 10
 MIN_RISK = 5
 MIN_SHARE = 50
@@ -108,7 +111,7 @@ def main() -> int:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     log.info("%s: данные на %s, районов %d, точек дожития %d",
-             OUT.relative_to(ROOT), data_date, len(payload["districts"]), len(payload["survival"]))
+             OUT, data_date, len(payload["districts"]), len(payload["survival"]))
     return 0
 
 
