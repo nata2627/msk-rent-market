@@ -146,7 +146,7 @@ def keyboard_arg(arg: str | None) -> str | None:
 SEP = "\x1f"
 
 
-def cmd_poll(offset: str) -> None:
+def cmd_poll(offset: str, wait: int = 50) -> None:
     """Длинное ожидание: соединение висит, пока не придёт событие.
 
     Раньше опрос был мгновенным, раз в минуту из cron, и этого хватало
@@ -156,7 +156,7 @@ def cmd_poll(offset: str) -> None:
     то есть ответ приходит мгновенно, а зависнуть процесс всё равно не
     может: дольше семидесяти секунд он не живёт.
     """
-    r = call("getUpdates", offset=offset, timeout=50,
+    r = call("getUpdates", offset=offset, timeout=max(1, min(wait, 50)),
              allowed_updates=json.dumps(["message", "callback_query"]))
     if not r.get("ok"):
         return
@@ -294,7 +294,10 @@ def main() -> int:
     what = sys.argv[1]
 
     if what == "poll":
-        cmd_poll(sys.argv[2] if len(sys.argv) > 2 else "0")
+        # Третий довод, сколько секунд ждать: заход не должен пережить
+        # свою минуту на целое ожидание, иначе следующий упрется в замок.
+        cmd_poll(sys.argv[2] if len(sys.argv) > 2 else "0",
+                 int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3].isdigit() else 50)
     elif what == "send":
         # Четвёртым доводом можно указать чат: ответ уходит тому, кто
         # спросил. Без этого гость писал бы боту, а ответ приходил бы
