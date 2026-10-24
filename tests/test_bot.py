@@ -544,18 +544,19 @@ def test_роль_определяется_по_списку(box, chat, role):
 
 
 def test_в_подборе_есть_фотография():
-    """Квартиру выбирают глазами, а список ссылок глазами не
-    просматривается. Если площадка не отдала картинку телеграму, вариант
-    всё равно приходит — текстом."""
+    """Квартиру выбирают глазами. Фото качает сам бот: по ссылке телеграм
+    его у площадки не получит. Нет фото, карточка приходит текстом."""
     src = BOT.read_text()
     assert "core.offer_photo" in src
-    assert "box_tg.py\" photo" in src
-    # Запасной путь: не вышло картинкой — вариант всё равно уходит
-    # текстом, и в журнале видно, почему.
-    assert 'if [ "$sent" = "ok" ]; then' in src
-    assert 'вариант без фото' in src
-    assert 'reply "$line"' in src
-    assert "sendPhoto" in TG.read_text()
+    assert 'box_tg.py" card' in src
+    tg = TG.read_text()
+    body = tg.split("def card(")[1].split("\ndef ")[0]
+    assert "editMessageMedia" in body
+    assert "fetch_photo(photo)" in body
+    # Без фото карточка уходит текстом, а правка, которая не удалась,
+    # заменяется новым сообщением, а не молчанием.
+    assert '"sendMessage"' in body
+    assert '"deleteMessage"' in body
 
 
 def test_надписи_кнопок_по_русски_и_без_внутренних_слов():
@@ -587,21 +588,39 @@ def test_состояние_животных_переключается_по_к�
     assert "filter_set pets forbidden" not in handler
 
 
-def test_подбор_листается():
-    """Смотрят подбор подряд, а «покажи ещё» не должно быть набором
-    команды."""
+def test_подбор_листается_одной_карточкой():
+    """Подбор это одно сообщение, которое листается на месте: пачка по
+    пять за два листания превращала чат в ленту."""
     src = BOT.read_text()
-    assert "page_file()" in src
-    assert "limit $n offset $off" in src
-    handler = src.split("filter_button() {")[1].split("\n}")[0]
-    assert "next)" in handler and "first)" in handler
-    # Конец списка — это не «ничего не подходит», и путать их нельзя:
-    # иначе человек решит, что сломались фильтры.
-    assert "Дальше ничего нет" in src
+    handler = src.split("card_button() {")[1].split("\n}")[0]
+    for data in ("c\\<", "c\\>", "cs", "cp-", "cr12", "sv", "v\\<", "vs"):
+        assert data in handler, data
+    assert "limit 1 offset $idx" in src
+    # Конец списка это не «ничего не подходит», путать их нельзя.
+    assert "дальше ничего нет" in handler
+    # Нажатие на кнопке старого сообщения не должно молчать.
+    assert "s|first|next)" in src
 
 
-def test_страница_своя_у_каждого_чата():
-    assert 'page_file() { echo "$STATE_DIR/page.${TARGET_CHAT:-$OWNER}"; }' in BOT.read_text()
+def test_состояние_карусели_и_отложенные_свои_у_каждого_чата():
+    src = BOT.read_text()
+    assert 'card_file()  { echo "$STATE_DIR/card.${TARGET_CHAT:-$OWNER}"; }' in src
+    assert 'saved_file() { echo "$STATE_DIR/saved.${TARGET_CHAT:-$OWNER}"; }' in src
+
+
+def test_отложенное_принимает_только_цифры(box):
+    src = BOT.read_text()
+    body = src.split("saved_toggle() {")[1].split("\n}")[0]
+    script = (f'STATE_DIR="{box["repo"]}/data/bot"; TARGET_CHAT=5; '
+              f'saved_file() {{ echo "$STATE_DIR/saved.$TARGET_CHAT"; }}; '
+              'is_saved() { grep -qxF "$1" "$(saved_file)" 2>/dev/null; }; '
+              f'saved_toggle() {{{body}\n}}; '
+              'saved_toggle "1; rm -rf /" || echo refused; saved_toggle 123; saved_toggle 456; '
+              'cat "$(saved_file)"; saved_toggle 123; echo; cat "$(saved_file)"')
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True).stdout
+    assert out.startswith("refused")
+    assert "456\n123" in out
+    assert out.rstrip().endswith("456")
 
 
 def test_новому_чату_ставится_начальный_отбор():

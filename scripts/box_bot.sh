@@ -62,7 +62,7 @@ GUESTS="${NOTIFY_TG_GUESTS:-$(from_env NOTIFY_TG_GUESTS)}"
 # Что доступно гостю. Журнала здесь намеренно нет: в нём пути, ошибки и
 # устройство машины — внутренняя кухня, которая гостю ничего не даёт, а
 # показывает лишнее.
-GUEST_COMMANDS="/help /start /status /flats /market /filter /price /статус /подбор /рынок /фильтр /отбор /цена"
+GUEST_COMMANDS="/help /start /status /flats /saved /market /filter /price /статус /подбор /рынок /фильтр /отбор /цена /отложенные"
 
 # Кто спрашивает. Чужой — это не ошибка и не враг: бота находят поиском,
 # и чужому по-прежнему не уходит ничего.
@@ -120,7 +120,8 @@ cmd_help() {
   if [ "$ROLE" != "owner" ]; then
     reply "Что я умею
 
-/flats — верх подбора под фильтрами
+/flats — подбор карточками, листается кнопками
+/saved — отложенные варианты
 /filter — ваши фильтры подбора, с кнопками
 /market — числа рынка за сегодня
 /price — оценка цены: ссылка на объявление или «2к 45 м2 Хамовники»
@@ -134,7 +135,8 @@ cmd_help() {
 посмотреть
 
 /status — что сейчас с панелью и машиной
-/flats — верх подбора под вашими фильтрами
+/flats — подбор карточками, листается кнопками
+/saved — отложенные варианты
 /filter — посмотреть и поменять фильтры подбора
 /market — числа рынка за сегодня
 /price — оценка цены: ссылка на объявление или «2к 45 м2 Хамовники»
@@ -239,12 +241,6 @@ filter_set() {
   [ -n "$val" ] && echo "$key=$val" >>"$tmp"
   mv "$tmp" "$f"
 }
-
-# На какой странице подбора остановились. Своя у каждого чата, как и
-# фильтры: иначе «следующие пять» у гостя листали бы список владелицы.
-page_file() { echo "$STATE_DIR/page.${TARGET_CHAT:-$OWNER}"; }
-page_get() { cat "$(page_file)" 2>/dev/null || echo 0; }
-page_set() { echo "${1:-0}" >"$(page_file)"; }
 
 # Фильтры, заданные до разделения по чатам, достаются владелице: они её
 # и были.
@@ -352,7 +348,7 @@ rows = [
     # «договор аренды», хотя речь о состоянии «по договорённости».
     [("Животные: " + pets_label, "e")],
     [(mark(bool(park), "парк в 1 км"), "k"), (mark(bool(mkad), "внутри МКАД"), "d")],
-    [("Сбросить всё", "x"), ("Показать 5 вариантов", "s")],
+    [("Сбросить всё", "x"), ("Показать варианты", "s")],
 ]
 print(json.dumps({"inline_keyboard": [
     [{"text": t, "callback_data": d} for t, d in row] for row in rows]},
@@ -397,6 +393,7 @@ filter_screen() {
 # фильтры не попадает, даже если в callback_data пришло что угодно.
 filter_button() {
   local data="$1" msg_id="$2" cb_id="$3" cur toast="готово"
+  card_button "$data" "$msg_id" "$cb_id" && return
   case "$data" in
     p-10|p+10)
       cur="$(filter_get price)"; cur="${cur:-100}"
@@ -433,13 +430,15 @@ filter_button() {
     d)   [ -n "$(filter_get mkad)" ] && { filter_set mkad ""; toast="МКАД не важен"; } \
                                      || { filter_set mkad 1;  toast="только внутри МКАД"; } ;;
     x)   rm -f "$(filter_file)"; toast="фильтры сброшены" ;;
-    s|first)
+    s|first|next)
+         # next и first живут на сообщениях до карусели: нажатие на
+         # старой кнопке открывает карусель, а не молчит.
          python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "ищу"
-         cmd_flats 5 0
-         return ;;
-    next)
-         python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "дальше"
-         cmd_flats 5 "$(( $(page_get) + 5 ))"
+         if [ "$(card_get mode)" = saved ] && [ -n "$msg_id" ] && [ "$data" = s ]; then
+           card_show pick 0 "$msg_id" >/dev/null
+         else
+           cmd_flats
+         fi
          return ;;
     filters)
          python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "фильтры"
@@ -584,101 +583,193 @@ filter_num() {
 Сейчас отбор: $(filter_human)"
 }
 
-cmd_flats() {
-  local n="$1" off="${2:-0}" where human found rows line score district rooms area price metro url photo sent shown kb started
-  started="$(filter_defaults)" || started=""
-  page_set "$off"
-  where="$(filter_where)"
-  human="$(filter_human)"
-  found="$(q "select count(*) from marts.offer_pick where true $where;" | tr -d '[:space:]')"
+# ---------------------------------------------------------------------
+# Подбор карусельной карточкой
+# ---------------------------------------------------------------------
+# Одно сообщение с фото, которое листается кнопками на месте. Раньше
+# подбор приходил пачкой по пять сообщений, и после двух листаний чат
+# превращался в ленту, где уже не найти, что понравилось. Теперь вариант
+# один, понравившийся откладывается звездой и живет в /saved.
+#
+# Состояние карусели свое у каждого чата: режим (подбор или отложенные),
+# номер варианта, id сообщения карточки и id показанного объявления.
+card_file()  { echo "$STATE_DIR/card.${TARGET_CHAT:-$OWNER}"; }
+saved_file() { echo "$STATE_DIR/saved.${TARGET_CHAT:-$OWNER}"; }
+card_get() {
+  local i
+  case "$1" in mode) i=1 ;; idx) i=2 ;; msg) i=3 ;; offer) i=4 ;; esac
+  cut -d'|' -f"$i" "$(card_file)" 2>/dev/null
+}
+card_set() { echo "$1|$2|$3|$4" >"$(card_file)"; }
+is_saved() { grep -qxF "$1" "$(saved_file)" 2>/dev/null; }
+saved_count() { grep -c . "$(saved_file)" 2>/dev/null || echo 0; }
 
-  # Поля идут отдельными колонками, а не одной склеенной строкой: из них
-  # собирается подпись к фотографии, и разбирать потом собственную
-  # склейку было бы глупо.
-  rows="$(q "select round(score)::int, district, rooms_count, round(total_area)::int,
-                    round(price / 1000.0)::int, coalesce(metro_real_walk_min::text, '?'),
-                    -- Адрес без хвоста: в нём context и
-                    -- mlSearchSessionGuid, то есть метки показа — вдвое
-                    -- длиннее самой ссылки и ничего не значащие для
-                    -- человека. Объявление открывается и без них.
-                    split_part(url, '?', 1),
-                    coalesce((select p.url from core.offer_photo p
-                               where p.source = o.source and p.offer_id = o.offer_id
-                               order by p.photo_pos limit 1), '')
-               from marts.offer_pick o
-              where true $where
-              order by score desc limit $n offset $off;")"
-
-  if [ -z "$rows" ]; then
-    if [ "$off" -gt 0 ]; then
-      # Не «ничего не подходит», а «дальше кончилось»: разница важная,
-      # иначе человек решит, что сломались фильтры.
-      page_set 0
-      reply "Дальше ничего нет
-
-Показано всё, что подошло: ${found:-0} вариантов.
-Начать сначала: /flats
-Ослабить отбор: /filter"
-      return
-    fi
-    reply "Подходящего нет
-
-Отбор: ${human:-без фильтров}
-Нашлось: ${found:-0}
-
-Ослабить: /filter"
-    return
+# Отложить или вернуть. Id объявления берется из состояния карточки, а
+# не из кнопки, и все равно проверяется образцом: в файл идут только цифры.
+saved_toggle() {
+  local id="$1" f tmp
+  case "$id" in ''|*[!0-9]*) return 1 ;; esac
+  f="$(saved_file)"
+  if is_saved "$id"; then
+    tmp="$(mktemp)"; grep -vxF "$id" "$f" >"$tmp"; mv "$tmp" "$f"
+    echo "убрано из отложенных"
+  else
+    # Новое сверху: последнее отложенное обычно и нужно первым.
+    tmp="$(mktemp)"; { echo "$id"; cat "$f" 2>/dev/null; } >"$tmp"; mv "$tmp" "$f"
+    echo "отложено, список /saved"
   fi
+}
 
-  local warn=""
-  [ -z "$(filter_get price)" ] && warn="
+CARD_COLS="o.offer_id, round(o.score)::int, o.district, o.rooms_count, round(o.total_area)::int,
+           round(o.price / 1000.0)::int, coalesce(o.metro_real_walk_min::text, '?'), o.pets_state,
+           o.is_active,
+           -- Адрес без хвоста: в нем метки показа, вдвое длиннее самой
+           -- ссылки и ничего не значащие для человека.
+           split_part(o.url, '?', 1),
+           coalesce((select p.url from core.offer_photo p
+                      where p.source = o.source and p.offer_id = o.offer_id
+                      order by p.photo_pos limit 1), '')"
 
-Цена не задана, поэтому наверх лезет дорогое: в оценке дороговизна
-читается как признак качества. Задать потолок: /filter цена 90"
+card_keyboard() {
+  python3 -c '
+import json, sys
+mode, saved, price, rooms = sys.argv[1:5]
+def mark(flag, label):
+    return "● " + label if flag else label
+if mode == "pick":
+    rows = [
+        [("◀", "c<"), ("★ убрать" if saved == "1" else "★ отложить", "cs"), ("▶", "c>")],
+        [("цена -10", "cp-"), ("до " + price + " тыс" if price else "цена любая", "noop"), ("+10", "cp+")],
+        [(mark(rooms == "1", "1к"), "cr1"), (mark(rooms == "2", "2к"), "cr2"),
+         (mark(rooms == "1,2", "1-2к"), "cr12")],
+        [("еще фильтры", "filters"), ("отложенные", "sv")],
+    ]
+else:
+    rows = [
+        [("◀", "v<"), ("★ убрать" if saved == "1" else "★ вернуть", "vs"), ("▶", "v>")],
+        [("к подбору", "s")],
+    ]
+print(json.dumps({"inline_keyboard": [
+    [{"text": t, "callback_data": d} for t, d in row] for row in rows]}, ensure_ascii=False))
+' "$1" "$2" "$(filter_get price)" "$(filter_get rooms)"
+}
 
-  local start_note=""
-  [ -n "$started" ] && start_note="
+# Показать вариант номер idx в режиме mode. msg_id пустой означает новое
+# сообщение. Печатает «end», если варианта с таким номером нет.
+card_show() {
+  local mode="$1" idx="$2" msg_id="${3:-}" total row id score district rooms area price metro pets active url photo
+  local head tail="" saved=0 caption new_id row=""
+  if [ "$mode" = "pick" ]; then
+    total="$(q "select count(*) from marts.offer_pick o where true $(filter_where);" | tr -d '[:space:]')"
+    row="$(q "select $CARD_COLS from marts.offer_pick o where true $(filter_where)
+              order by o.score desc limit 1 offset $idx;")"
+    head="Вариант $(( idx + 1 )) из ${total:-?}"
+    tail="
 
-Фильтров у вас ещё не было, поставил начальные: 1-2 комнаты и цена до
-$started тыс. Это медиана по таким квартирам в сегодняшней выдаче, а не
-чьё-то мнение. Меняйте под себя: /filter"
+Отбор: $(filter_human)"
+  else
+    total="$(saved_count)"
+    id="$(sed -n "$(( idx + 1 ))p" "$(saved_file)" 2>/dev/null)"
+    # Отложенное могло уйти из подбора: снято, подорожало, выпало из
+    # фильтров. Поэтому ищется без фильтров, по одному id.
+    [ -n "$id" ] && row="$(q "select $CARD_COLS from marts.offer_pick o
+                              where o.source = 'cian' and o.offer_id = '$id' limit 1;")"
+    head="Отложенное $(( idx + 1 )) из $total"
+  fi
+  [ -z "$row" ] && { echo end; return 0; }
+  IFS='|' read -r id score district rooms area price metro pets active url photo <<<"$row"
+  is_saved "$id" && saved=1
+  [ "$active" = "t" ] || tail="$tail
 
-  reply "Подбор: $(( off + 1 ))-$(( off + n )) из ${found:-?} подходящих
-
-Отбор: ${human:-без фильтров}
-Поменять: /filter${start_note}${warn}"
-
-  # Каждый вариант отдельным сообщением с фотографией: список ссылок
-  # глазами не просматривается, а квартиру выбирают всё-таки глазами.
-  while IFS='|' read -r score district rooms area price metro url photo; do
-    [ -z "$url" ] && continue
-    line="$score баллов · $district
-$rooms комнаты, $area м2, $price тыс/мес, метро $metro мин
+Снято с публикации, по ссылке может не открыться."
+  caption="$head
+$district · $score баллов
+$rooms комн., $area м2, $price тыс/мес
+метро $metro мин пешком, животные $(pets_human "$pets")$([ "$saved" = 1 ] && printf '\n★ отложено')$tail
 
 $url"
-    sent=""
-    [ -n "$photo" ] && sent="$(python3 "$REPO/scripts/box_tg.py" photo "$photo" "$line" "$TARGET_CHAT" 2>/dev/null)"
-    if [ "$sent" = "ok" ]; then
-      note "вариант с фото: $district, $price тыс"
-    else
-      # Вариант важнее фотографии: не вышло с картинкой — шлём текстом.
-      # В журнал это пишется отдельно, иначе «почему без картинок»
-      # выяснялось бы догадками.
-      note "вариант без фото ($([ -n "$photo" ] && echo "картинка не отдалась" || echo "картинки нет в базе")): $district"
-      reply "$line"
-    fi
-  done <<EOF
-$rows
-EOF
+  new_id="$(python3 "$REPO/scripts/box_tg.py" card "$TARGET_CHAT" "${msg_id:--}" "${photo:--}" \
+             "$caption" "$(card_keyboard "$mode" "$saved")" 2>/dev/null)"
+  card_set "$mode" "$idx" "${new_id:-$msg_id}" "$id"
+  note "карточка $mode $idx: $district, $price тыс"
+}
 
-  # Кнопка листания под последним вариантом. Без неё «покажи ещё» —
-  # это набрать команду, а смотрят подбор обычно подряд.
-  shown=$(printf '%s\n' "$rows" | grep -c . || true)
-  if [ "$(( off + shown ))" -lt "${found:-0}" ]; then
-    kb='{"inline_keyboard":[[{"text":"Следующие '"$n"'","callback_data":"next"},{"text":"Сначала","callback_data":"first"},{"text":"Фильтры","callback_data":"filters"}]]}'
-    python3 "$REPO/scripts/box_tg.py" send \
-      "Показано $(( off + shown )) из ${found}" "$kb" "$TARGET_CHAT" >/dev/null 2>&1
+cmd_flats() {
+  local started
+  started="$(filter_defaults)" || started=""
+  if [ -n "$started" ]; then
+    reply "Фильтров у вас ещё не было, поставил начальные: 1-2 комнаты и цена до
+$started тыс. Это медиана по таким квартирам в сегодняшней выдаче, а не
+чьё-то мнение. Меняйте кнопками под карточкой."
   fi
+  if [ "$(card_show pick 0)" = end ]; then
+    reply "Подходящего нет
+
+Отбор: $(filter_human)
+
+Ослабить: /filter"
+  fi
+}
+
+cmd_saved() {
+  if [ "$(saved_count)" -eq 0 ]; then
+    reply "Отложенных пока нет
+
+Откройте подбор (/flats) и нажмите «★ отложить» под понравившимся."
+    return
+  fi
+  card_show saved 0 >/dev/null
+}
+
+# Нажатие на карточке. Возвращает 1, если кнопка не карусельная.
+card_button() {
+  local data="$1" msg_id="$2" cb_id="$3" mode idx toast cur
+  mode="$(card_get mode)"; idx="$(card_get idx)"; idx="${idx:-0}"
+  case "$data" in
+    c\<|v\<)
+      [ "$idx" -le 0 ] && { python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "это первый"; return 0; }
+      python3 "$REPO/scripts/box_tg.py" answer "$cb_id"
+      card_show "${mode:-pick}" "$(( idx - 1 ))" "$msg_id" >/dev/null ;;
+    c\>|v\>)
+      if [ "$(card_show "${mode:-pick}" "$(( idx + 1 ))" "$msg_id")" = end ]; then
+        python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "дальше ничего нет"
+      else
+        python3 "$REPO/scripts/box_tg.py" answer "$cb_id"
+      fi ;;
+    cs|vs)
+      toast="$(saved_toggle "$(card_get offer)")" || toast="не вышло"
+      python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "$toast"
+      # В отложенных убранный вариант пропадает из списка, поэтому номер
+      # остается, а на его место встает следующий. Убран последний, тогда
+      # шаг назад, а если список опустел, карточка остается как была.
+      if [ "$mode" != saved ]; then
+        card_show pick "$idx" "$msg_id" >/dev/null
+      elif [ "$(card_show saved "$idx" "$msg_id")" = end ] && [ "$idx" -gt 0 ]; then
+        card_show saved "$(( idx - 1 ))" "$msg_id" >/dev/null
+      fi ;;
+    cp-|cp+)
+      cur="$(filter_get price)"; cur="${cur:-100}"
+      [ "$data" = "cp-" ] && cur=$(( cur - 10 )) || cur=$(( cur + 10 ))
+      [ "$cur" -lt 10 ] && cur=10
+      [ "$cur" -gt 999 ] && cur=999
+      filter_set price "$cur"
+      python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "цена до $cur тыс"
+      card_show pick 0 "$msg_id" >/dev/null ;;
+    cr1|cr2|cr12)
+      case "$data" in cr1) cur=1 ;; cr2) cur=2 ;; *) cur=1,2 ;; esac
+      filter_set rooms "$cur"
+      python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "комнат: $cur"
+      card_show pick 0 "$msg_id" >/dev/null ;;
+    sv)
+      python3 "$REPO/scripts/box_tg.py" answer "$cb_id" "отложенные"
+      if [ "$(saved_count)" -eq 0 ]; then
+        reply "Отложенных пока нет. Нажмите «★ отложить» под понравившимся."
+      else
+        card_show saved 0 "$msg_id" >/dev/null
+      fi ;;
+    *) return 1 ;;
+  esac
+  return 0
 }
 
 cmd_market() {
@@ -849,12 +940,8 @@ dispatch() {
   case "$cmd" in
     /start|/help) cmd_help ;;
     /status|/статус) cmd_status ;;
-    /flats|/подбор)
-        case "$arg" in
-          "") cmd_flats 5 ;;
-          [1-9]|10) cmd_flats "$arg" ;;
-          *) reply "Сколько вариантов показать — число от 1 до 10. Например: /flats 7" ;;
-        esac ;;
+    /flats|/подбор) cmd_flats ;;
+    /saved|/отложенные) cmd_saved ;;
     /filter|/фильтр|/отбор)
         # Третье слово — значение фильтра, и оно может быть названием
         # района с пробелом, поэтому берётся хвостом, а не awk-полем.
