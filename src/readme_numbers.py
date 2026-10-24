@@ -34,6 +34,8 @@ from etl import db
 log = logging.getLogger("readme")
 
 README = Path(__file__).resolve().parents[1] / "README.md"
+# Подробности методов вынесены из README в methods/, числа в них живые так же.
+FILES = [README] + sorted((README.parent / "methods").glob("*.md"))
 MARK = re.compile(r"(<!--n:([a-z_0-9]+)-->)(.*?)(<!--/n-->)", re.S)
 
 
@@ -58,8 +60,8 @@ def ru_period(a, b) -> str:
     if a == b:
         return ru_date(a)
     if a.year == b.year and a.month == b.month:
-        return f"{a.day}–{b.day} {MONTHS[a.month - 1]} {a.year}"
-    return f"{ru_date(a)} — {ru_date(b)}"
+        return f"{a.day}-{b.day} {MONTHS[a.month - 1]} {a.year}"
+    return f"с {ru_date(a)} по {ru_date(b)}"
 
 
 def block(lines: list[str]) -> str:
@@ -102,9 +104,9 @@ def collect(conn) -> dict[str, str]:
 
     # Таблица источников целиком: строки появляются и исчезают, поэтому
     # подменяется блок, а не отдельные числа в нём.
-    names = {"cian": "`cian` — собственный сбор",
-             "cian_wayback": "`cian_wayback` — веб-архив",
-             "cian_xlsx": "`cian_xlsx` — ручная выгрузка"}
+    names = {"cian": "`cian`, собственный сбор",
+             "cian_wayback": "`cian_wayback`, веб-архив",
+             "cian_xlsx": "`cian_xlsx`, ручная выгрузка"}
     table = ["| Источник | Объявлений | Наблюдений | Дат | Период |",
              "|---|---:|---:|---:|---|"]
     for src, n_off, n_obs, n_dates, lo, hi in rows("""
@@ -188,7 +190,7 @@ def collect(conn) -> dict[str, str]:
                 where source='cian' and rooms_count = %s and pets_state = %s
                   and not coalesce(is_price_outlier, false)
             """, (rooms, state))
-            cells.append(thousands(m) if m else "—")
+            cells.append(thousands(m) if m else "нет")
         tbl.append(f"| {ru[state]} | {cells[0]} | {cells[1]} |")
     f["pets_raw_table"] = block(tbl)
 
@@ -253,7 +255,7 @@ def short_dates(days) -> str:
     """«9 и 11 октября», «13 октября». Пустой список — тире, а не пустота."""
     days = sorted(days)
     if not days:
-        return "—"
+        return "нет"
     parts = [f"{d.day} {MONTHS[d.month - 1]}" for d in days]
     # Месяц пишется один раз, если все даты в одном месяце.
     if len({d.month for d in days}) == 1:
@@ -423,7 +425,7 @@ def results_facts() -> dict[str, str]:
         td = d["typical_days"]
         tbl = ["| комнат | дешевле оценки | в рынке | дороже оценки |", "|---|---:|---:|---:|"]
         for k in ("0", "1", "2", "3"):
-            cells = [str(td.get(f"{k}|{b}", "—")) for b in ("дешевле", "в рынке", "дороже")]
+            cells = [str(td.get(f"{k}|{b}", "нет")) for b in ("дешевле", "в рынке", "дороже")]
             tbl.append(f"| {rooms_lbl[k]} | " + " | ".join(cells) + " |")
         f["pm_days_table"] = block(tbl)
         tbl = ["| неделя с | обучение | новых объявлений | MAPE, % |", "|---|---:|---:|---:|"]
@@ -478,7 +480,8 @@ def apply(text: str, facts: dict[str, str]) -> tuple[str, int, list[str]]:
         if name not in facts:
             missing.append(name)
             return m.group(0)
-        new = facts[name]
+        # Правила текстов проекта: без буквы ё и без длинного тире.
+        new = facts[name].replace("ё", "е").replace(" — ", ", ")
         if new != old:
             changed += 1
         return f"{open_}{new}{close}"
@@ -491,24 +494,29 @@ def main() -> int:
     with db.connect() as conn:
         facts = collect(conn)
 
-    text = README.read_text()
-    marks = {m.group(2) for m in MARK.finditer(text)}
+    texts = {p: p.read_text() for p in FILES}
+    marks = {m.group(2) for t in texts.values() for m in MARK.finditer(t)}
     if not marks:
-        log.error("В README нет ни одной метки <!--n:...-->. Нечего обновлять.")
+        log.error("Ни в README, ни в methods/ нет ни одной метки <!--n:...-->.")
         return 1
 
-    new_text, changed, missing = apply(text, facts)
+    missing, changed, new_texts = [], 0, {}
+    for path, text in texts.items():
+        new_texts[path], n, miss = apply(text, facts)
+        changed += n
+        missing += miss
     if missing:
         log.error("Метки есть, а фактов нет: %s", ", ".join(sorted(set(missing))))
-        log.error("Либо добавьте факт в FACTS, либо уберите метку — "
+        log.error("Либо добавьте факт в FACTS, либо уберите метку: "
                   "молча пропущенная метка это снова разъехавшееся число.")
         return 1
 
-    README.write_text(new_text)
+    for path, text in new_texts.items():
+        path.write_text(text)
     unused = sorted(set(facts) - marks)
-    log.info("Меток в README: %d, обновлено значений: %d", len(marks), changed)
+    log.info("Файлов %d, меток %d, обновлено значений %d", len(FILES), len(marks), changed)
     if unused:
-        log.info("Посчитано, но в README не вставлено: %s", ", ".join(unused))
+        log.info("Посчитано, но никуда не вставлено: %s", ", ".join(unused))
     return 0
 
 

@@ -87,4 +87,4 @@ def test_short_dates_one_month_names_it_once():
     assert short_dates([date(2026, 10, 11), date(2026, 10, 9)]) == "9 и 11 октября"
     assert short_dates([date(2026, 10, 13)]) == "13 октября"
     assert short_dates([date(2026, 9, 30), date(2026, 10, 1)]) == "30 сентября и 1 октября"
-    assert short_dates([]) == "—"
+    assert short_dates([]) == "нет"
