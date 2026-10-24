@@ -693,8 +693,8 @@ card_show() {
   caption="$head
 $district · $score баллов
 $rooms комн., $area м2
-$price руб/мес$([ -n "$entry" ] && printf ', при заселении %s руб' "${entry%\*}")$([ "${entry: -1}" = "*" ] && printf ', залог не указан, взят за месяц')
-метро $metro мин пешком, животные $(pets_human "$pets")$([ "$saved" = 1 ] && printf '\n★ отложено')$tail
+$price руб/мес
+метро $metro мин пешком, животные $(pets_human "$pets")$([ -n "$entry" ] && printf '\n\nПри заселении %s руб' "${entry%\*}")$([ "${entry: -1}" = "*" ] && printf '\nзалог не указан, взят за месяц')$([ "$saved" = 1 ] && printf '\n★ отложено')$tail
 
 $url"
   new_id="$(python3 "$REPO/scripts/box_tg.py" card "$TARGET_CHAT" "${msg_id:--}" "${photo:--}" \
