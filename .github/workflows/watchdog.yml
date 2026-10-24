@@ -1,0 +1,45 @@
+# Сторож снаружи машины сбора.
+#
+# Все остальные проверки живут на самом Mac mini, и если его выключат или
+# пропадет сеть, тревогу прислать будет некому. Здесь проверка идет на
+# серверах GitHub: машина сбора каждый день в 19:30 по Москве кладет в
+# репозиторий site/data/site.json, и если файл не обновлялся больше 36
+# часов или данные в нем старше двух дней, задание падает. О падении
+# задания по расписанию GitHub сам пишет владелице на почту.
+name: watchdog
+
+on:
+  schedule:
+    # 21:00 по Москве, через полтора часа после выгрузки витрины.
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Свежесть данных витрины
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          from datetime import date, datetime, timedelta, timezone
+          d = json.load(open("site/data/site.json"))
+          now = datetime.now(timezone.utc)
+          made = datetime.fromisoformat(d["generated_at"])
+          data = date.fromisoformat(d["data_date"])
+          today = (now + timedelta(hours=3)).date()
+          print(f"выгрузка {made:%d.%m %H:%M} UTC, данные на {data:%d.%m}")
+          problems = []
+          if now - made > timedelta(hours=36):
+              problems.append(f"витрина не обновлялась {(now - made).days} дн. "
+                              "Машина сбора выключена, без сети или выгрузка падает")
+          if (today - data).days > 2:
+              problems.append(f"последний покрытый день {data:%d.%m}, обход не идет")
+          for p in problems:
+              print(f"::error::{p}")
+          sys.exit(1 if problems else 0)
+          PY
