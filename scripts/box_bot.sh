@@ -627,8 +627,24 @@ CARD_COLS="o.offer_id, round(o.score)::int, o.district, o.rooms_count, round(o.t
            -- это не 90 000. Рядом сумма при заселении (месяц, залог,
            -- комиссия), со звездочкой, если залог не указан и предположен.
            replace(to_char(o.price, 'FM999,999,999'), ',', ' '),
-           coalesce(replace(to_char(o.entry_cost, 'FM999,999,999'), ',', ' ')
-                    || case when o.deposit_assumed then '*' else '' end, ''),
+           coalesce(replace(to_char(o.entry_cost, 'FM999,999,999'), ',', ' '), ''),
+           -- Из чего сложена сумма при заселении, по той же формуле, что
+           -- entry_cost в marts. Части через ~, в подписи это строки:
+           -- поле с переводом строки разорвало бы разбор ответа psql.
+           'оплата за ' || coalesce(o.prepay_months, 1) || ' мес. '
+             || replace(to_char(o.price * coalesce(o.prepay_months, 1), 'FM999,999,999'), ',', ' ')
+           || '~залог ' || replace(to_char(case
+                when o.deposit_rub is not null and o.deposit_rub <= o.price * 6 then o.deposit_rub
+                when o.deposit_months is not null then o.price * o.deposit_months
+                else o.price end, 'FM999,999,999'), ',', ' ')
+             || case when o.deposit_assumed then ' (в объявлении не указан, взят за месяц)' else '' end
+           || '~' || case
+                when coalesce(o.client_fee_pct, 0) > 0
+                  then 'комиссия ' || round(o.client_fee_pct) || '% '
+                       || replace(to_char(o.price * o.client_fee_pct / 100.0, 'FM999,999,999'), ',', ' ')
+                when coalesce(o.commission_rub, 0) > 0
+                  then 'комиссия ' || replace(to_char(o.commission_rub, 'FM999,999,999'), ',', ' ')
+                else 'без комиссии' end,
            coalesce(o.metro_real_walk_min::text, '?'), o.pets_state,
            o.is_active,
            -- Адрес без хвоста: в нем метки показа, вдвое длиннее самой
@@ -665,7 +681,7 @@ print(json.dumps({"inline_keyboard": [
 # Показать вариант номер idx в режиме mode. msg_id пустой означает новое
 # сообщение. Печатает «end», если варианта с таким номером нет.
 card_show() {
-  local mode="$1" idx="$2" msg_id="${3:-}" total row id score district rooms area price entry metro pets active url photo
+  local mode="$1" idx="$2" msg_id="${3:-}" total row id score district rooms area price entry parts metro pets active url photo
   local head tail="" saved=0 caption new_id row=""
   if [ "$mode" = "pick" ]; then
     total="$(q "select count(*) from marts.offer_pick o where true $(filter_where);" | tr -d '[:space:]')"
@@ -685,7 +701,7 @@ card_show() {
     head="Отложенное $(( idx + 1 )) из $total"
   fi
   [ -z "$row" ] && { echo end; return 0; }
-  IFS='|' read -r id score district rooms area price entry metro pets active url photo <<<"$row"
+  IFS='|' read -r id score district rooms area price entry parts metro pets active url photo <<<"$row"
   is_saved "$id" && saved=1
   [ "$active" = "t" ] || tail="$tail
 
@@ -694,7 +710,7 @@ card_show() {
 $district · $score баллов
 $rooms комн., $area м2
 $price руб/мес
-метро $metro мин пешком, животные $(pets_human "$pets")$([ -n "$entry" ] && printf '\n\nПри заселении %s руб' "${entry%\*}")$([ "${entry: -1}" = "*" ] && printf '\nзалог не указан, взят за месяц')$([ "$saved" = 1 ] && printf '\n★ отложено')$tail
+метро $metro мин пешком, животные $(pets_human "$pets")$([ -n "$entry" ] && printf '\n\nПри заселении %s руб\n%s' "$entry" "${parts//\~/$'\n'}")$([ "$saved" = 1 ] && printf '\n★ отложено')$tail
 
 $url"
   new_id="$(python3 "$REPO/scripts/box_tg.py" card "$TARGET_CHAT" "${msg_id:--}" "${photo:--}" \
