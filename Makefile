@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: cover hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: backup-check backup-restore cover hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -278,6 +278,12 @@ drops-analysis: ## кто снижает цену и через сколько �
 
 figures:       ## перерисовать графики для README из текущих данных
 	$(PY) -m src.figures
+
+backup-check: ## прочитать последнюю облачную копию целиком, без записи на диск
+	./scripts/backup_restore.sh check
+
+backup-restore: ## развернуть облачную копию в отдельную базу, DB=rent_restore
+	./scripts/backup_restore.sh restore $(or $(DB),rent_restore)
 
 cover: ## обложка README из site/data и results, без базы
 	$(PY) -m src.cover
