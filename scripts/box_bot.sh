@@ -623,7 +623,13 @@ saved_toggle() {
 }
 
 CARD_COLS="o.offer_id, round(o.score)::int, o.district, o.rooms_count, round(o.total_area)::int,
-           round(o.price / 1000.0)::int, coalesce(o.metro_real_walk_min::text, '?'), o.pets_state,
+           -- Цена точная, в рублях: округление до тысяч прятало, что 89 500
+           -- это не 90 000. Рядом сумма при заселении (месяц, залог,
+           -- комиссия), со звездочкой, если залог не указан и предположен.
+           replace(to_char(o.price, 'FM999,999,999'), ',', ' '),
+           coalesce(replace(to_char(o.entry_cost, 'FM999,999,999'), ',', ' ')
+                    || case when o.deposit_assumed then '*' else '' end, ''),
+           coalesce(o.metro_real_walk_min::text, '?'), o.pets_state,
            o.is_active,
            -- Адрес без хвоста: в нем метки показа, вдвое длиннее самой
            -- ссылки и ничего не значащие для человека.
@@ -659,7 +665,7 @@ print(json.dumps({"inline_keyboard": [
 # Показать вариант номер idx в режиме mode. msg_id пустой означает новое
 # сообщение. Печатает «end», если варианта с таким номером нет.
 card_show() {
-  local mode="$1" idx="$2" msg_id="${3:-}" total row id score district rooms area price metro pets active url photo
+  local mode="$1" idx="$2" msg_id="${3:-}" total row id score district rooms area price entry metro pets active url photo
   local head tail="" saved=0 caption new_id row=""
   if [ "$mode" = "pick" ]; then
     total="$(q "select count(*) from marts.offer_pick o where true $(filter_where);" | tr -d '[:space:]')"
@@ -679,21 +685,32 @@ card_show() {
     head="Отложенное $(( idx + 1 )) из $total"
   fi
   [ -z "$row" ] && { echo end; return 0; }
-  IFS='|' read -r id score district rooms area price metro pets active url photo <<<"$row"
+  IFS='|' read -r id score district rooms area price entry metro pets active url photo <<<"$row"
   is_saved "$id" && saved=1
   [ "$active" = "t" ] || tail="$tail
 
 Снято с публикации, по ссылке может не открыться."
   caption="$head
 $district · $score баллов
-$rooms комн., $area м2, $price тыс/мес
+$rooms комн., $area м2
+$price руб/мес$([ -n "$entry" ] && printf ', при заселении %s руб' "${entry%\*}")$([ "${entry: -1}" = "*" ] && printf ', залог не указан, взят за месяц')
 метро $metro мин пешком, животные $(pets_human "$pets")$([ "$saved" = 1 ] && printf '\n★ отложено')$tail
 
 $url"
   new_id="$(python3 "$REPO/scripts/box_tg.py" card "$TARGET_CHAT" "${msg_id:--}" "${photo:--}" \
              "$caption" "$(card_keyboard "$mode" "$saved")" 2>/dev/null)"
   card_set "$mode" "$idx" "${new_id:-$msg_id}" "$id"
-  note "карточка $mode $idx: $district, $price тыс"
+  note "карточка $mode $idx: $district, $price руб"
+  # Фото следующей карточки в кеш, пока человек смотрит эту. Фоном и с
+  # закрытым выводом: иначе подстановка $(card_show ...) ждала бы его.
+  if [ "$mode" = pick ]; then
+    ( u="$(q "select coalesce((select p.url from core.offer_photo p
+                                where p.source = o.source and p.offer_id = o.offer_id
+                                order by p.photo_pos limit 1), '')
+                from marts.offer_pick o where true $(filter_where)
+               order by o.score desc limit 1 offset $(( idx + 1 ));")"
+      [ -n "$u" ] && python3 "$REPO/scripts/box_tg.py" prefetch "$u" ) >/dev/null 2>&1 &
+  fi
 }
 
 cmd_flats() {

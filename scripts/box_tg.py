@@ -19,15 +19,18 @@ scripts/box_bot.sh — вся работа с базой и машиной ос�
     box_tg.py edit <msg_id> <текст> [клавиатура] [чат]
     box_tg.py photo <url> <подпись> [чат]
     box_tg.py card <чат> <msg_id|-> <url фото|-> <подпись> <клавиатура>
+    box_tg.py prefetch <url фото>      положить фото в кеш заранее
     box_tg.py answer <callback_id> [всплывающая подсказка]
     box_tg.py commands                 меню команд в телеграме
 """
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -184,23 +187,55 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36")
 
 
+PHOTOS = REPO / "data" / "bot" / "photos"
+PHOTOS_KEEP = 300
+
+
 def fetch_photo(url: str) -> bytes:
-    """Картинка объявления, скачанная самим ботом.
+    """Картинка объявления, скачанная самим ботом, с кешем на диске.
 
     Заголовок браузера нужен потому, что без него площадка отдает отказ:
     ровно поэтому телеграм не может забрать фото по ссылке сам. Предел
-    телеграма на фотографию 10 МБ, и качать больше незачем: память бокса
-    дороже картинки.
+    телеграма на фотографию 10 МБ, и качать больше незачем.
+
+    Кеш и повтор появились 24.10.2026. При быстром листании сервер фото
+    отвечал 429 «слишком много запросов», на замере в 3 случаях из 16, и
+    карточка приходила без картинки. Повтор идет с паузой, а кеш
+    избавляет от второго запроса той же картинки, когда листают назад
+    или открывают отложенное. Хранятся 300 последних, около 20 МБ.
     """
     if not url:
         return b""
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": UA,
-                                                   "Referer": "https://www.cian.ru/"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.read(10 * 1024 * 1024)
-    except (urllib.error.URLError, OSError, TimeoutError):
-        return b""
+    key = PHOTOS / (hashlib.md5(url.encode()).hexdigest() + ".jpg")
+    if key.exists():
+        key.touch()
+        return key.read_bytes()
+    blob = b""
+    for pause in (0, 1.0, 2.5):
+        time.sleep(pause)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": UA,
+                                                       "Referer": "https://www.cian.ru/"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                blob = resp.read(10 * 1024 * 1024)
+            break
+        except urllib.error.HTTPError as e:
+            # Повторять есть смысл только отказ по частоте. 404 значит,
+            # что фото снято вместе с объявлением.
+            if e.code != 429:
+                return b""
+        except (urllib.error.URLError, OSError, TimeoutError):
+            return b""
+    if blob:
+        try:
+            PHOTOS.mkdir(parents=True, exist_ok=True)
+            key.write_bytes(blob)
+            old = sorted(PHOTOS.glob("*.jpg"), key=lambda p: p.stat().st_mtime)
+            for p in old[:-PHOTOS_KEEP]:
+                p.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return blob
 
 
 def multipart(method: str, fields: dict, blob: bytes) -> dict:
@@ -331,6 +366,9 @@ def main() -> int:
         a = sys.argv[2:7] + [""] * 5
         print(card(a[0], "" if a[1] == "-" else a[1], "" if a[2] == "-" else a[2],
                    a[3], keyboard_arg(a[4])))
+    elif what == "prefetch":
+        # Следующая карточка, пока человек смотрит текущую.
+        fetch_photo(sys.argv[2] if len(sys.argv) > 2 else "")
     elif what == "answer":
         # Без этого ответа кнопка крутится у человека на экране до
         # таймаута, даже когда всё уже сделано.
