@@ -149,3 +149,14 @@ def test_бот_отдает_фразу_разбору_а_гость_может_
     assert "понимаю только команды" not in src
     gate = src.split("guest_allowed() {")[1].split("}")[0]
     assert "*) return 0 ;;" in gate
+
+
+@pytest.mark.parametrize("text, want", [
+    # Обе ошибки нашел замер 25.10.2026. Числа замера остаются от первого
+    # прогона, эти проверки держат только исправление.
+    ("однушка минимум 40 квадратов", {"rooms": [1], "area": 40}),
+    ("двушка 70-85 тысяч", {"rooms": [2], "price": 85}),
+    ("1-2 комнаты до 80", {"rooms": [1, 2], "price": 80}),
+])
+def test_правила_после_замера(text, want):
+    assert box_nl.rules(text, DISTRICTS)["filters"] == want

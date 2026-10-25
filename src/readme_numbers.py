@@ -467,6 +467,19 @@ def results_facts() -> dict[str, str]:
         f["ce_plc_age"] = pct(pa["mean_effect_pp"], 2, sign=True)
         f["ce_plc_age_cover"] = str(round(100 * pa["share_ci_covering_zero"]))
         f["ce_plc_reps"] = str(pa["reps"])
+    nl_path = RESULTS / "nl_eval.json"
+    if nl_path.exists():
+        from datetime import date
+        d = json.loads(nl_path.read_text())
+        f["nl_n"] = str(d["n"])
+        f["nl_date"] = ru_date(date.fromisoformat(d["date"]))
+        f["nl_model"] = d["model"]
+        f["nl_primary"] = "правила" if d["primary"] == "rules" else "GigaChat"
+        for k in ("rules", "gigachat", "bot"):
+            f[f"nl_{k}"] = str(d[k]["exact"])
+            f[f"nl_{k}_pct"] = pct(100 * d[k]["exact"] / d["n"], 1)
+            f[f"nl_{k}_flag"] = str(d[k]["unknown_flag"])
+        f["nl_latency"] = pct(d["gigachat"]["latency_median_s"], 2)
     return f
 
 

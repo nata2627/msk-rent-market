@@ -1,0 +1,174 @@
+{
+ "date": "2026-10-25",
+ "model": "GigaChat-2",
+ "n": 80,
+ "rule": "gigachat if exact(gigachat) >= exact(rules) else rules",
+ "primary": "rules",
+ "gigachat": {
+  "exact": 75,
+  "unknown_flag": 77,
+  "field_errors": {
+   "mkad": 1,
+   "price": 2,
+   "rooms": 2
+  },
+  "latency_median_s": 0.35,
+  "misses": [
+   {
+    "text": "от 2 комнат до 130",
+    "got": {
+     "price": 130,
+     "rooms": [
+      2,
+      3
+     ]
+    },
+    "want": {
+     "rooms": [
+      2,
+      3,
+      4,
+      5
+     ],
+     "price": 130
+    }
+   },
+   {
+    "text": "однушка не за мкадом до 70",
+    "got": {
+     "price": 70,
+     "rooms": [
+      1
+     ]
+    },
+    "want": {
+     "rooms": [
+      1
+     ],
+     "mkad": true,
+     "price": 70
+    }
+   },
+   {
+    "text": "двушка от 50 метров до 110",
+    "got": {
+     "area": 50,
+     "rooms": [
+      2
+     ]
+    },
+    "want": {
+     "rooms": [
+      2
+     ],
+     "area": 50,
+     "price": 110
+    }
+   },
+   {
+    "text": "на заселение до 180 тысяч",
+    "got": {
+     "price": 180,
+     "entry": 180
+    },
+    "want": {
+     "entry": 180
+    }
+   },
+   {
+    "text": "студия у метро",
+    "got": {
+     "metro": 10,
+     "rooms": [
+      1
+     ]
+    },
+    "want": {
+     "metro": 10
+    }
+   }
+  ]
+ },
+ "rules": {
+  "exact": 78,
+  "unknown_flag": 79,
+  "field_errors": {
+   "area": 1,
+   "metro": 1,
+   "price": 1
+  },
+  "latency_median_s": 0.0,
+  "misses": [
+   {
+    "text": "однушка минимум 38 квадратов",
+    "got": {
+     "rooms": [
+      1
+     ],
+     "metro": 38
+    },
+    "want": {
+     "rooms": [
+      1
+     ],
+     "area": 38
+    }
+   },
+   {
+    "text": "двушка 80-90 тысяч",
+    "got": {
+     "rooms": [
+      2
+     ]
+    },
+    "want": {
+     "rooms": [
+      2
+     ],
+     "price": 90
+    }
+   }
+  ]
+ },
+ "bot": {
+  "exact": 78,
+  "unknown_flag": 79,
+  "field_errors": {
+   "area": 1,
+   "metro": 1,
+   "price": 1
+  },
+  "latency_median_s": 0.0,
+  "misses": [
+   {
+    "text": "однушка минимум 38 квадратов",
+    "got": {
+     "rooms": [
+      1
+     ],
+     "metro": 38
+    },
+    "want": {
+     "rooms": [
+      1
+     ],
+     "area": 38
+    }
+   },
+   {
+    "text": "двушка 80-90 тысяч",
+    "got": {
+     "rooms": [
+      2
+     ]
+    },
+    "want": {
+     "rooms": [
+      2
+     ],
+     "price": 90
+    }
+   }
+  ]
+ }
+}

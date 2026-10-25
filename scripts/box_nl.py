@@ -131,7 +131,7 @@ UNSUPPORTED = ("студи", "ремонт", "балкон", "без комис�
                "мебел", "лифт", "парковк", "этаж", "посуточ")
 PET_WORDS = ("кот", "кош", "собак", "пес", "псом", "животн", "питом", "щен")
 ENTRY_CTX = re.compile(r"(заселен|сразу|въезд|залог|первым месяц)")
-NUM = re.compile(r"(?<![\w-])(\d{1,3}(?:[  ]\d{3})+|\d+)(?:[.,]\d+)?")
+NUM = re.compile(r"(?<!\w)(\d{1,3}(?:[  ]\d{3})+|\d+)(?:[.,]\d+)?")
 
 
 def rooms_of(t: str) -> list[int] | None:
@@ -177,7 +177,9 @@ def rules(text: str, districts: list[str]) -> dict:
             continue
         if re.match(r"\s*-\s*\d", after):        # «80-90 тысяч»: потолок второй
             continue
-        if re.match(r"\s*мин", after) or re.search(r"мин\w*\s*$", before):
+        # «минут», «мин.», но не «минимум»: на нем замер 25.10.2026 поймал
+        # площадь, прочитанную как минуты до метро.
+        if re.match(r"\s*мин(ут|\.|\b)", after) or re.search(r"\bмин(ут\w*|\.)?\s*$", before):
             out["metro"] = n
             continue
         if re.match(r"\s*\+?\s*(м2|м²|м\b|кв|метр|квадрат)", after) or re.search(r"площад\w*\s*(от\s*)?$", before):
