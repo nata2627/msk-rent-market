@@ -577,11 +577,11 @@ def test_надписи_кнопок_по_русски_и_без_внутрен�
         # что видит человек.
         assert f'echo "$out, животные $v"' not in src
     assert "pets_human()" in src
-    assert "по договорённости" in src
+    assert "по договоренности" in src
 
     kb = keyboard(pets="negotiable")
     labels = [b["text"] for row in kb["inline_keyboard"] for b in row]
-    assert "Животные: по договорённости" in labels
+    assert "Животные: по договоренности" in labels
     assert "договор" not in labels
 
 

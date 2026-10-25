@@ -72,6 +72,12 @@ flowchart LR
 <!--n:nl_rules-->78<!--/n-->, GigaChat <!--n:nl_gigachat-->75<!--/n-->.
 Цену оценивает команда `/price`.
 
+<p>
+<img src="figures/bot/flats.png" width="32%" alt="Карточка подбора с кнопками">
+<img src="figures/bot/filters.png" width="32%" alt="Экран фильтров">
+<img src="figures/bot/saved.png" width="32%" alt="Отложенные варианты">
+</p>
+
 ```
 /price 2к 45 м2 Хамовники
 

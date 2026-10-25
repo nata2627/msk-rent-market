@@ -280,7 +280,7 @@ filter_where() {
 pets_human() {
   case "$1" in
     allowed)    echo "можно" ;;
-    negotiable) echo "по договорённости" ;;
+    negotiable) echo "по договоренности" ;;
     forbidden)  echo "нельзя" ;;
     unknown)    echo "не указано" ;;
     *)          echo "$1" ;;
@@ -339,7 +339,7 @@ def mark(flag, label):
 
 price_label = "цена: " + (price + " тыс" if price else "любая")
 area_label = "от " + (area + " м2" if area else "любой")
-pets_label = {"allowed": "можно", "negotiable": "по договорённости",
+pets_label = {"allowed": "можно", "negotiable": "по договоренности",
               "forbidden": "нельзя"}.get(pets, "не важно")
 
 rows = [
@@ -354,7 +354,7 @@ rows = [
     # «договор аренды», хотя речь о состоянии «по договорённости».
     [("Животные: " + pets_label, "e")],
     [(mark(bool(park), "парк в 1 км"), "k"), (mark(bool(mkad), "внутри МКАД"), "d")],
-    [("Сбросить всё", "x"), ("Показать варианты", "s")],
+    [("Сбросить все", "x"), ("Показать варианты", "s")],
 ]
 print(json.dumps({"inline_keyboard": [
     [{"text": t, "callback_data": d} for t, d in row] for row in rows]},
@@ -374,7 +374,7 @@ ${lines:-Пока ничего не задано, поэтому наверх л
 
 Подходит: ${found:-?} вариантов
 
-Меняйте кнопками под этим сообщением — оно обновится на месте.
+Меняйте кнопками под этим сообщением, оно обновится на месте.
 Точные числа и район удобнее текстом, например:
 \$ /filter цена 90
 Весь список текстовых команд: /filter текстом"
@@ -428,7 +428,7 @@ filter_button() {
       # задать — для проверок рынка, не для подбора.
       case "$(filter_get pets)" in
         "")           filter_set pets allowed;    toast="животные: можно" ;;
-        allowed)      filter_set pets negotiable; toast="животные: по договорённости" ;;
+        allowed)      filter_set pets negotiable; toast="животные: по договоренности" ;;
         *)            filter_set pets "";         toast="животные: не важно" ;;
       esac ;;
     k)   [ -n "$(filter_get park)" ] && { filter_set park ""; toast="парк не важен"; } \
