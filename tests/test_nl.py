@@ -160,3 +160,9 @@ def test_бот_отдает_фразу_разбору_а_гость_может_
 ])
 def test_правила_после_замера(text, want):
     assert box_nl.rules(text, DISTRICTS)["filters"] == want
+
+
+def test_к_метро_тоже_у_метро():
+    # Фраза владелицы 25.10.2026: «Двушка 90 к к метро с котом».
+    r = box_nl.rules("Двушка 90 к к метро с котом", DISTRICTS)
+    assert r["filters"] == {"rooms": [2], "price": 90, "metro": 10, "pets": "allowed"}

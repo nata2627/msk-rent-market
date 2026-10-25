@@ -194,7 +194,7 @@ def rules(text: str, districts: list[str]) -> dict:
         else:
             unknown.append(raw)
 
-    if "metro" not in out and re.search(r"(у|рядом с|возле|около)\s+метро|шагов", t):
+    if "metro" not in out and re.search(r"(у|к|рядом с|возле|около|недалеко от|поближе к)\s+метро|шагов", t):
         out["metro"] = NEAR_METRO
     if re.search(r"животн\w* по договор", t):
         out["pets"] = "negotiable"
