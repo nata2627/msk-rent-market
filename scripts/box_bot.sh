@@ -39,7 +39,7 @@ OFFSET_FILE="$STATE_DIR/offset"
 POLL_LOCK="$STATE_DIR/poll.lock"
 mkdir -p "$STATE_DIR" "$LOG_DIR"
 
-note() { echo "$(date '+%d.%m %H:%M') $*" >>"$BOT_LOG"; }
+note() { echo "$(date '+%d.%m %H:%M:%S') $*" >>"$BOT_LOG"; }
 
 from_env() {
   [ -f "$REPO/.env" ] || return 0
@@ -728,7 +728,7 @@ card_show() {
   if [ "$mode" = "pick" ]; then
     total="$(q "select count(*) from marts.offer_pick o where true $(filter_where);" | tr -d '[:space:]')"
     row="$(q "select $CARD_COLS from marts.offer_pick o where true $(filter_where)
-              order by o.score desc limit 1 offset $idx;")"
+              order by o.score desc, o.offer_id limit 1 offset $idx;")"
     head="Вариант $(( idx + 1 )) из ${total:-?}"
     tail="
 
@@ -766,7 +766,7 @@ $url"
                                 where p.source = o.source and p.offer_id = o.offer_id
                                 order by p.photo_pos limit 1), '')
                 from marts.offer_pick o where true $(filter_where)
-               order by o.score desc limit 1 offset $(( idx + 1 ));")"
+               order by o.score desc, o.offer_id limit 1 offset $(( idx + 1 ));")"
       [ -n "$u" ] && python3 "$REPO/scripts/box_tg.py" prefetch "$u" ) >/dev/null 2>&1 &
   fi
 }
