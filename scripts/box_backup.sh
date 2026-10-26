@@ -47,7 +47,7 @@ notify() { bash "$REPO/scripts/box_notify.sh" "$@" >/dev/null 2>&1; }
 find "$LOG_DIR" -name 'backup_*.log' -mtime +60 -delete 2>/dev/null
 
 RECIPIENT="$(grep -E '^BACKUP_AGE_RECIPIENT=' "$REPO/.env" | cut -d= -f2-)"
-REMOTE="${BACKUP_REMOTE:-gdrive:rent_msk_backup}"
+REMOTE="${BACKUP_REMOTE:-gdrive:rent_backup}"
 RC=(rclone --drive-chunk-size 8M --stats 0 --log-level NOTICE)
 
 fail() {
@@ -70,6 +70,13 @@ MODE="${1:-auto}"
 LOCK="$REPO/data/box.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
   say "Идет обход, копия подождет следующей попытки"
+  # Молчаливый выход здесь уже стоил двух ночей без копии: 25 и 26.10
+  # все попытки попали в ночной обход, а тревоги не было. Если последней
+  # ночной копии больше суток, об этом надо знать.
+  LAST="$(cat "$STATE/daily" 2>/dev/null)"
+  if [ -z "$LAST" ] || [[ "$LAST" < "$(date -d yesterday +%F)" ]]; then
+    fail "обход держит замок, последняя ночная копия ${LAST:-не делалась}"
+  fi
   exit 0
 fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT

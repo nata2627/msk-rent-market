@@ -25,7 +25,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 KEY="${BACKUP_AGE_KEY:-$HOME/.config/rent_backup/age.key}"
 CONF="${RCLONE_CONFIG:-$HOME/.config/rent_backup/rclone.conf}"
-REMOTE="${BACKUP_REMOTE:-gdrive:rent_msk_backup}"
+REMOTE="${BACKUP_REMOTE:-gdrive:rent_backup}"
 RC=(rclone --config "$CONF" --log-level ERROR)
 PGX=(docker compose exec -T postgres)
 say() { echo "$(date +%H:%M:%S) === $*"; }
