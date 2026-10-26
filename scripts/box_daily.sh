@@ -111,8 +111,11 @@ say "База отвечает"
 # корзины у полного и узкого нарезаны по-разному, и --resume их не
 # узнает. Это 16 тысяч лишних снимков в сутки, около 0,12 ГБ при 12,9 ГБ
 # свободного диска (замер 23.10.2026), и лишние запросы к площадке.
-# Покрытие то же, что в итоге дня и в расчете снятий: успешный прогон за
-# эту дату, корзины нужных комнатностей без ошибок. Полный обход не
+# Покрытие: за эту дату есть успешный прогон, а корзины нужных
+# комнатностей без ошибок лежат в любом прогоне даты. Сначала считались
+# только корзины самого успешного прогона, и 26.10.2026 узкий срез пошел
+# второй раз: полный обход упал после однушек, а сторож добрал остаток
+# продолжением, которое однушки уже пропустило. Полный обход не
 # пропускается никогда: его запускает сторож, когда день не покрыт.
 case "$MODE" in
   narrow) NEED_ROOMS="'1','2'"; NEED_N=2 ;;
@@ -123,8 +126,11 @@ if [ -n "$NEED_ROOMS" ]; then
   COVERED_N="$(docker exec -i "$PG_CONTAINER" psql -qtA -U rent -d rent -c \
     "select count(distinct b.rooms)
        from raw.collection_run r join raw.bucket b using (run_id)
-      where r.source = 'cian' and r.status = 'ok' and b.error is null
-        and r.snapshot_date = '$SNAPSHOT_DATE' and b.rooms in ($NEED_ROOMS);" \
+      where r.source = 'cian' and b.error is null
+        and r.snapshot_date = '$SNAPSHOT_DATE' and b.rooms in ($NEED_ROOMS)
+        and exists (select 1 from raw.collection_run ok
+                     where ok.source = 'cian' and ok.status = 'ok'
+                       and ok.snapshot_date = '$SNAPSHOT_DATE');" \
     2>/dev/null | tr -d '[:space:]')"
   if [ "${COVERED_N:-0}" -ge "$NEED_N" ]; then
     say "Комнатности режима $MODE за $SNAPSHOT_DATE уже покрыты успешным прогоном, обход не нужен"
