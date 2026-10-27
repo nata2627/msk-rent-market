@@ -39,3 +39,12 @@ def test_cells_respect_thresholds():
 def test_data_date_present():
     d = json.loads(SITE.read_text())
     assert len(d["data_date"]) == 10 and d["panel_days"] > 0
+
+
+def test_quality_days_complete():
+    # Пропущенный день должен остаться строкой: ряд без дыр по датам.
+    q = json.loads(SITE.read_text())["quality"]
+    dates = [d["date"] for d in q["days"]]
+    assert dates == sorted(set(dates))
+    assert q["days_total"] == len(dates)
+    assert q["days_covered"] + len(q["missed"]) == q["days_total"]

@@ -326,6 +326,16 @@ def operations(rows) -> dict[str, str]:
     for label, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         tbl.append(f"| {label} | {n} |")
     f["ops_fail_table"] = block(tbl)
+
+    # Полнота закрытого дня, то же определение, что на витрине
+    # (marts.collection_quality): README и витрина не должны расходиться.
+    (comp, und), = rows("""
+        select percentile_disc(0.5) within group (order by completeness_pct),
+               percentile_disc(0.5) within group (order by underfilled_pct)
+        from marts.collection_quality where is_covered
+    """)
+    f["q_completeness"] = pct(comp)
+    f["q_underfilled"] = pct(und, 0)
     return f
 
 

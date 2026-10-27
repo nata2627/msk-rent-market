@@ -92,6 +92,20 @@ models:
           arguments:
             columns: [snapshot_date, rooms_count]
 
+  - name: collection_quality
+    description: Качество сбора по дням для витрины. Пропущенный день остается строкой.
+    columns:
+      - name: snapshot_date
+        data_tests: [unique, not_null]
+      - name: completeness_pct
+        description: Доля заявленного ЦИАНом, которую забрали листья дерева корзин успешных прогонов.
+        data_tests:
+          - min_value:
+              arguments:
+                value: 0
+      - name: underfilled_pct
+        description: Доля листьев без ошибки, где собрано меньше заявленного.
+
   - name: exit_day
     description: Уходы по дням и комнатности.
     data_tests:

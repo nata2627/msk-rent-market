@@ -75,6 +75,35 @@ def rosstat_history(cur) -> dict[str, list]:
     return out
 
 
+def quality(cur) -> dict:
+    """Качество сбора по дням. Здесь только счетчики прогонов и корзин,
+    объявлений в ячейках нет, поэтому порог ячейки не нужен."""
+    cur.execute("""select snapshot_date, is_covered, runs_failed, completeness_pct::float8,
+                          underfilled_pct::float8, offers_12
+                     from marts.collection_quality order by snapshot_date""")
+    days = [{"date": d.isoformat(), "covered": c, "runs_failed": f,
+             "completeness_pct": p, "underfilled_pct": u, "offers": n}
+            for d, c, f, p, u, n in cur.fetchall()]
+    covered = [d for d in days if d["covered"]]
+    pct = sorted(d["completeness_pct"] for d in covered if d["completeness_pct"] is not None)
+    und = sorted(d["underfilled_pct"] for d in covered if d["underfilled_pct"] is not None)
+    # Насколько велик недобор там, где он есть: заявленное площадкой
+    # число неточное, и мелкий недобор от него не отличить.
+    cur.execute("""select percentile_disc(0.5) within group (order by b.claimed_count - b.collected_count)
+                     from raw.collection_run r join raw.bucket b using (run_id)
+                    where r.source = 'cian' and r.status = 'ok' and not b.was_split
+                      and b.error is null and b.collected_count < b.claimed_count""")
+    short = cur.fetchone()[0]
+    return {"days": days,
+            "days_total": len(days),
+            "days_covered": len(covered),
+            "missed": [d["date"] for d in days if not d["covered"]],
+            "completeness_median": pct[len(pct) // 2] if pct else None,
+            "completeness_min": pct[0] if pct else None,
+            "underfilled_median": und[len(und) // 2] if und else None,
+            "shortfall_median": short}
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     with db.connect() as conn, conn.cursor() as cur:
@@ -91,6 +120,7 @@ def main() -> int:
             "survival": survival_curve(conn),
             "drops": drop_shares(conn),
             "rosstat": rosstat_history(cur),
+            "quality": quality(cur),
         }
     fc = json.loads((RESULTS / "forecast.json").read_text())
     payload["forecast"] = {"chosen": fc["decision"]["chosen"],

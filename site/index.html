@@ -94,6 +94,14 @@ a { color: var(--s1); }
   <div class="chart" id="drift"></div>
   <p class="note" id="driftnote"></p>
 
+  <h2>Насколько полны данные</h2>
+  <p>Сколько однушек и двушек панель увидела за каждый день. Площадка отдает выдачу рывками, обход
+    падает и добирается сторожем, поэтому качество сбора показано числами за каждый день.</p>
+  <div class="chart" id="quality"></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>день закрыт успешным прогоном</span>
+    <span><i style="background:var(--warn)"></i>только упавшие прогоны или ничего</span></div>
+  <p class="note" id="qualitynote"></p>
+
   <footer>
     <p>Данные собирает отдельная машина раз в день. Если она остановится, страница покажет последнюю дату
       данных. Код, методика и оговорки в
@@ -308,6 +316,38 @@ function barsChart(id, rows, label, value, fmtV, h) {
     .attr("text-anchor", "end").attr("fill", css("--ink")).attr("font-size", 13).text(label);
 }
 
+function qualityChart(data) {
+  const q = data.quality, f = frame("quality", 260);
+  const days = q.days.map(d => ({...d, t: parseD(d.date)}));
+  const x = d3.scaleBand().domain(days.map(d => d.date)).range([0, f.iw]).padding(0.2);
+  const y = d3.scaleLinear().domain([0, d3.max(days, d => d.offers || 0) * 1.1]).nice().range([f.ih, 0]);
+  const step = Math.ceil(days.length / (f.w < 520 ? 4 : 8));
+  f.g.append("g").attr("transform", `translate(0,${f.ih})`)
+    .call(d3.axisBottom(x).tickValues(days.filter((_, i) => i % step === 0).map(d => d.date))
+      .tickFormat(d => d3.timeFormat("%d.%m")(parseD(d))).tickSizeOuter(0));
+  f.g.append("g").call(d3.axisLeft(y).ticks(5).tickFormat(d => ru(d)).tickSize(-f.iw))
+    .call(g => g.select(".domain").remove());
+  const pct = v => v === null ? "нет" : v.toFixed(1).replace(".", ",") + "%";
+  const tipHtml = d => `<b>${d3.timeFormat("%d.%m.%Y")(d.t)}</b><br>` +
+    (d.offers ? `однушек и двушек ${ru(d.offers)}` : "объявлений за день в данных нет") +
+    (d.covered ? `<br>забрано от заявленного ${pct(d.completeness_pct)}<br>корзин с недобором ${pct(d.underfilled_pct)}`
+               : "<br>успешного прогона нет") +
+    (d.runs_failed ? `<br>упавших прогонов ${d.runs_failed}` : "");
+  f.g.selectAll("rect").data(days).join("rect")
+    .attr("x", d => x(d.date)).attr("width", x.bandwidth()).attr("rx", 2)
+    .attr("y", d => d.offers ? y(d.offers) : f.ih - 3).attr("height", d => d.offers ? f.ih - y(d.offers) : 3)
+    .attr("fill", d => d.covered ? css("--s1") : css("--warn"))
+    .on("mousemove", (ev, d) => { const [px, py] = d3.pointer(ev, f.el); showTip(f, tipHtml(d), px, py); })
+    .on("mouseleave", () => f.tip.style("opacity", 0));
+  const miss = q.missed.map(d => d3.timeFormat("%d.%m")(parseD(d)));
+  document.getElementById("qualitynote").textContent =
+    `За ${q.days_total} календарных дней с ${d3.timeFormat("%d.%m")(days[0].t)} успешный прогон был в ${q.days_covered}` +
+    (miss.length ? `, без него ${miss.join(", ")}` : "") + `. В закрытый день панель забирает ` +
+    `в медиане ${pct(q.completeness_median)} объявлений, которые площадка заявила в выдаче (худший день ` +
+    `${pct(q.completeness_min)}). Корзин с недобором в медиане ${pct(q.underfilled_median)}, ` +
+    `и в половине из них не хватает ${q.shortfall_median} объявл. или меньше: площадка сама заявляет число неточно.`;
+}
+
 function render(data) {
   const dd = parseD(data.data_date);
   const age = Math.floor((Date.now() - dd) / 86400000);
@@ -326,6 +366,7 @@ function render(data) {
             d => `${d.share_pct.toFixed(1)}%, из ${ru(d.offers)} объявлений`);
   barsChart("drift", data.model_drift, d => "с " + d3.timeFormat("%d.%m")(parseD(d.week)), d => d.mape_pct,
             d => `MAPE ${d.mape_pct.toFixed(1)}%, ${ru(d.n)} новых объявлений`);
+  if (data.quality) qualityChart(data);
   document.getElementById("driftnote").textContent = data.model.threshold_pct
     ? `Порог тревоги ${data.model.threshold_pct}%.`
     : `Порог появится с четвертой неделей. Модель ${data.model.version}, ошибка на проверке ${data.model.mape_pct}%, покрытие интервала 80% равно ${data.model.coverage80}.`;
