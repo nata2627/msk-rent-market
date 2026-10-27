@@ -391,7 +391,9 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
                 gone = db.mark_disappeared(conn, snapshot_date, collected_rooms)
                 log.info("Перестали появляться в выдаче: %d объявлений "
                          "(это снятие с публикации, а не сдача квартиры)", gone)
-            db.refresh_marts(conn)
+            # Витрины здесь больше не пересобираются: с 27.10.2026 их
+            # строит dbt отдельным шагом прогона (make marts на макбуке,
+            # scripts/box_marts.sh на боксе), и у него свое окружение.
 
         log.info("Итог: корзин %d, пропущено собранных %d, недобрано в %d, "
                  "переделено по недобору %d, не прочиталось %d, "

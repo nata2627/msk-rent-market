@@ -123,9 +123,7 @@ step() {
 step "Добор комнатностей" "$PY" -m etl.collect --mode full --transport browser \
                              --rooms 3,4,5,6,7,9
 step "Дедупликация" "$PY" -m src.dedup
-step "Витрины"      docker compose exec -T postgres \
-                      psql -q -U "${POSTGRES_USER:-rent}" -d "${POSTGRES_DB:-rent}" \
-                      -c "select marts.refresh_all();"
+step "Витрины"      make -s marts
 
 say "Конец"
 find "$LOG_DIR" -name 'weekly_*.log' -mtime +90 -delete 2>/dev/null

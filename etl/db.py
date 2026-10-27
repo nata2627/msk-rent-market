@@ -658,7 +658,3 @@ def remark_disappeared(conn, until_date, source: str = "cian") -> int:
     return mark_disappeared(conn, until_date, codes, source=source)
 
 
-def refresh_marts(conn) -> None:
-    with conn.cursor() as cur:
-        cur.execute("select marts.refresh_all()")
-    conn.commit()

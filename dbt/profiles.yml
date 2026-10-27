@@ -10,5 +10,7 @@ rent_msk:
       user: "{{ env_var('POSTGRES_USER', 'rent') }}"
       password: "{{ env_var('POSTGRES_PASSWORD') }}"
       dbname: "{{ env_var('POSTGRES_DB', 'rent') }}"
-      schema: dbt_marts
+      # Схема из окружения: сверка строит в dbt_marts рядом с рабочими
+      # витринами, рабочая сборка пишет в marts.
+      schema: "{{ env_var('DBT_SCHEMA', 'dbt_marts') }}"
       threads: 2

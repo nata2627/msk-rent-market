@@ -235,20 +235,29 @@ docker run --rm \
     step 'Справочник'     python -m etl.districts            || fails=\$((fails+1))
     step 'Парки и МКАД'   python -m etl.parks                || fails=\$((fails+1))
     step 'Дедупликация'   python -m src.dedup                || fails=\$((fails+1))
-    step 'Витрины'        python -c \"
-import psycopg
-from etl import config
-with psycopg.connect(**config.DB) as conn:
-    conn.execute('select marts.refresh_all()')
-    conn.commit()
-print('витрины пересобраны')
-\" || fails=\$((fails+1))
 
     echo \"\$(date +%H:%M:%S) === Сбоев: \$fails\"
     exit \$fails
   "
 
 FAILS=$?
+
+# Витрины строит dbt в своем контейнере (scripts/box_marts.sh), а не
+# marts.refresh_all() внутри контейнера сбора: с 27.10.2026 определения
+# витрин и тесты к ним живут в dbt/models/marts. Шаг пишет в журнал те же
+# строки «=== Витрины», что и шаги в контейнере, по ним смотрит /log.
+say "Витрины"
+# В журнал только итог dbt и ошибки: построчный отчет о 40 моделях и
+# тестах каждый день топил бы в себе сбор.
+MARTS_OUT="$("$REPO/scripts/box_marts.sh" 2>&1)"
+MARTS_CODE=$?
+printf '%s\n' "$MARTS_OUT" | grep -E 'Done\.|ERROR|FAIL|WARN ' || true
+if [ "$MARTS_CODE" = 0 ]; then
+  say "Витрины — готово"
+else
+  say "Витрины — СБОЙ, иду дальше"
+  FAILS=$((FAILS + 1))
+fi
 say "Конец, сбоев: $FAILS"
 
 # Доклад наружу. Сбой сбора отделён от всех прочих намеренно: сбор

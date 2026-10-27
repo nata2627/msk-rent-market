@@ -150,9 +150,7 @@ fi
 step "Справочник"      "$PY" -m etl.districts
 step "Парки и МКАД"    "$PY" -m etl.parks
 step "Дедупликация"    "$PY" -m src.dedup
-step "Витрины"         docker compose exec -T postgres \
-                         psql -q -U "${POSTGRES_USER:-rent}" -d "${POSTGRES_DB:-rent}" \
-                         -c "select marts.refresh_all();"
+step "Витрины"         make -s marts
 
 say "Конец"
 

@@ -137,8 +137,10 @@ rebuild:
 parks:
 	$(PY) -m etl.parks
 
+# Витрины строит dbt с 27.10.2026, а не marts.refresh_all(): определения
+# и тесты к ним в dbt/models/marts. build, а не run, чтобы тесты шли сразу.
 marts:
-	$(PG) -c "select marts.refresh_all();"
+	export DBT_SCHEMA=marts; $(DBT) build --profiles-dir .
 
 checks:
 	@for f in sql/checks/*.sql; do echo ">> $$f"; $(PG) < $$f; done

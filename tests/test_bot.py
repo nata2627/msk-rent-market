@@ -312,12 +312,12 @@ def test_подбор_не_заводит_своего_определения():
     """
     bot = BOT.read_text()
     dash = (ROOT / "scripts" / "setup_dashboard.py").read_text()
-    schema = (ROOT / "sql" / "schema" / "04_alter.sql").read_text()
+    schema = (ROOT / "dbt" / "models" / "marts" / "offer_pick.sql").read_text()
 
     assert "marts.offer_pick" in bot
     assert "marts.offer_pick" in dash
-    assert "create or replace view marts.offer_pick" in schema
-    # Базовые условия — ровно в одном месте, в схеме.
+    assert "materialized='view'" in schema
+    # Базовые условия — ровно в одном месте, в модели dbt.
     for gate in ("is_duplicate", "is_room_share", "is_daily", "lease_term_type"):
         assert gate in schema, f"{gate} пропал из определения подбора"
         assert gate not in bot, f"{gate} продублирован в боте"
