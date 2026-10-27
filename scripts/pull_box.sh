@@ -124,9 +124,22 @@ docker compose exec -T postgres psql -qtA -U rent -d rent -c \
      from pg_stat_activity
     where datname = 'rent' and pid <> pg_backend_pid();" >/dev/null 2>&1
 
+# Схемы проекта сносятся целиком, а не через --clean. --clean удаляет
+# только то, что есть в дампе, и спотыкается о локальное, чего в дампе
+# нет: 27.10.2026 витрины на боксе стали таблицами dbt, а в копии
+# остались матвитрины, зависящие от raw. Сырые таблицы не удалились, и
+# pg_restore долил строки поверх: снимков вышло 1 669 886 против 921 061
+# на боксе. Копия только зеркало бокса, своего в ней нет.
+say "Убираю прежнюю копию"
+docker compose exec -T postgres psql -qtA -v ON_ERROR_STOP=1 -U rent -d rent -c "
+  do \$\$ declare n text; begin
+    for n in select nspname from pg_namespace
+              where nspname not like 'pg\\_%' and nspname not in ('information_schema', 'public')
+    loop execute format('drop schema %I cascade', n); end loop;
+  end \$\$;" || die "прежнюю копию убрать не удалось"
 say "Заливаю (это самая долгая часть)"
 docker compose exec -T postgres pg_restore -U rent -d rent \
-  --clean --if-exists --no-owner -j 4 /tmp/rent.dump
+  --no-owner -j 4 /tmp/rent.dump
 RESTORE_CODE=$?
 docker compose exec -T postgres rm -f /tmp/rent.dump >/dev/null 2>&1
 
