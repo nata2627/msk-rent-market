@@ -12,7 +12,7 @@ from pathlib import Path
 
 import matplotlib.dates as mdates
 
-from src.figures import INK_2, MUTED, S1, S2, canvas, save, titles
+from src.figures import INK_2, MUTED, S1, S2, S3, canvas, save, titles
 
 RESULTS = Path(__file__).resolve().parents[1] / "results"
 
@@ -77,3 +77,29 @@ def fig_panel_index() -> None:
     titles(ax, "Индекс запрашиваемой ставки по панели, 1-2 комнаты",
            "Голубая полоса: 95% интервал гедонического индекса")
     save(fig, "panel_index.png")
+
+
+def fig_panel_index_3() -> None:
+    """Трешки рядом с однушками и двушками, оба ряда гедонические.
+
+    Точки трешек до 12.10 стоят раз в неделю: тогда полный обход шел по
+    воскресеньям, поэтому линия рисуется с маркерами, и редкое начало
+    видно, а не спрятано за интерполяцией."""
+    d12 = json.loads((RESULTS / "panel_index.json").read_text())["hedonic"]
+    d3 = json.loads((RESULTS / "panel_index_3.json").read_text())["hedonic"]
+    fig, ax = canvas()
+    for hed, color, label, marker in ((d12, S1, "1-2 комнаты", None), (d3, S3, "3 комнаты", "o")):
+        xs = [date.fromisoformat(p["date"]) for p in hed]
+        ax.fill_between(xs, [p["lo95"] for p in hed], [p["hi95"] for p in hed],
+                        color=color, alpha=0.15, lw=0)
+        ax.plot(xs, [p["index"] for p in hed], color=color, lw=2, marker=marker, ms=3)
+        ax.annotate(f"{label}, {hed[-1]['index']:.1f}", (xs[-1], hed[-1]["index"]),
+                    xytext=(6, 0), textcoords="offset points", va="center",
+                    color=INK_2, fontsize=9)
+    ax.axhline(100, color=MUTED, lw=0.8)
+    ax.set_ylabel("индекс, первый день = 100", color=MUTED, fontsize=9)
+    ax.xaxis.set_major_locator(mdates.DayLocator(interval=7))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
+    titles(ax, "Гедонический индекс: трешки и однушки с двушками",
+           "Полосы: 95% интервал. Трешки до 12.10 собирались раз в неделю")
+    save(fig, "panel_index_3.png")

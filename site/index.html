@@ -8,19 +8,19 @@
 <style>
 :root {
   --bg: #fcfcfb; --surface: #ffffff; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
-  --axis: #c3c2b7; --grid: #e6e5df; --s1: #2a78d6; --s2: #eb6834; --warn: #b4540c;
+  --axis: #c3c2b7; --grid: #e6e5df; --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --warn: #b4540c;
   --seq0: #dbe8f8; --seq1: #1a4f91; --none: #ecebe6;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #141413; --surface: #1c1c1b; --ink: #f2f1ec; --ink2: #c3c2b7; --muted: #8f8e88;
-    --axis: #4a4945; --grid: #2c2c2a; --s1: #5b9cf0; --s2: #f08a5d; --warn: #f0a35d;
+    --axis: #4a4945; --grid: #2c2c2a; --s1: #5b9cf0; --s2: #f08a5d; --s3: #3fcf98; --warn: #f0a35d;
     --seq0: #1f3350; --seq1: #9cc6ff; --none: #2a2a28;
   }
 }
 :root[data-theme="dark"] {
   --bg: #141413; --surface: #1c1c1b; --ink: #f2f1ec; --ink2: #c3c2b7; --muted: #8f8e88;
-  --axis: #4a4945; --grid: #2c2c2a; --s1: #5b9cf0; --s2: #f08a5d; --warn: #f0a35d;
+  --axis: #4a4945; --grid: #2c2c2a; --s1: #5b9cf0; --s2: #f08a5d; --s3: #3fcf98; --warn: #f0a35d;
   --seq0: #1f3350; --seq1: #9cc6ff; --none: #2a2a28;
 }
 * { box-sizing: border-box; }
@@ -70,10 +70,12 @@ a { color: var(--s1); }
 
   <h2>Индекс запрашиваемой ставки по панели</h2>
   <p>Первый день равен 100. Гедонический индекс по всем объявлениям с полосой 95%, цепной по одним и
-    тем же объявлениям. Цепной падает, потому что оставшимся снижают цену. Рынок в целом почти стоит.</p>
+    тем же объявлениям. Цепной падает, потому что оставшимся снижают цену. Рынок в целом почти стоит.
+    Трешки отдельной линией, до 12.10 их собирали раз в неделю. Ряда трешек у Росстата нет, поэтому прогноза для них нет.</p>
   <div class="chart" id="pindex"></div>
-  <div class="legend"><span><i style="background:var(--s1)"></i>все объявления, гедонический</span>
-    <span><i style="background:var(--s2)"></i>одни и те же объявления, цепной</span></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>1-2 комнаты, гедонический</span>
+    <span><i style="background:var(--s2)"></i>1-2 комнаты, одни и те же объявления, цепной</span>
+    <span><i style="background:var(--s3)"></i>трешки, гедонический</span></div>
 
   <h2>Медиана цены за метр по районам</h2>
   <p>Однушки и двушки, рублей за квадратный метр в месяц. Район показан, если в нем не меньше десяти объявлений.</p>
@@ -203,7 +205,9 @@ function indexChart(data) {
   const hed = data.panel_index.hedonic.map(([d, v, lo, hi]) => [parseD(d), v, lo, hi]);
   const ch = data.panel_index.chain.map(([d, v]) => [parseD(d), v]);
   const x = d3.scaleTime().domain(d3.extent(hed, d => d[0])).range([0, f.iw]);
-  const y = d3.scaleLinear().domain([d3.min(ch, d => d[1]) - 0.5, 100.6]).range([f.ih, 0]);
+  const h3 = (data.panel_index.hedonic3 || []).map(([d, v, lo, hi]) => [parseD(d), v, lo, hi]);
+  const y = d3.scaleLinear().domain([d3.min(ch, d => d[1]) - 0.5,
+                                     Math.max(100.6, d3.max(h3, d => d[1]) || 0) + 0.3]).range([f.ih, 0]);
   axes(f, x, y, d3.timeFormat("%d.%m"), d => d);
   f.g.append("line").attr("x1", 0).attr("x2", f.iw).attr("y1", y(100)).attr("y2", y(100)).attr("stroke", css("--muted"));
   f.g.append("path").datum(hed).attr("fill", css("--s1")).attr("opacity", 0.2)
@@ -212,15 +216,25 @@ function indexChart(data) {
     .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
   f.g.append("path").datum(ch).attr("fill", "none").attr("stroke", css("--s2")).attr("stroke-width", 2)
     .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
+  if (h3.length) {
+    f.g.append("path").datum(h3).attr("fill", "none").attr("stroke", css("--s3")).attr("stroke-width", 2)
+      .attr("d", d3.line().x(d => x(d[0])).y(d => y(d[1])));
+    f.g.selectAll("circle.h3").data(h3).join("circle").attr("class", "h3")
+      .attr("cx", d => x(d[0])).attr("cy", d => y(d[1])).attr("r", 2.5).attr("fill", css("--s3"));
+    const t3 = h3[h3.length - 1];
+    endLabel(f, x, y, t3[0], t3[1], "трешки " + t3[1].toFixed(1));
+  }
   const hl = hed[hed.length - 1], cl = ch[ch.length - 1];
-  endLabel(f, x, y, hl[0], hl[1], "гедонический " + hl[1].toFixed(1));
-  endLabel(f, x, y, cl[0], cl[1], "цепной " + cl[1].toFixed(1));
+  endLabel(f, x, y, hl[0], hl[1], "1-2к " + hl[1].toFixed(1));
+  endLabel(f, x, y, cl[0], cl[1], "1-2к цепной " + cl[1].toFixed(1));
   const chainBy = new Map(ch.map(d => [+d[0], d[1]]));
+  const h3By = new Map(h3.map(d => [+d[0], d[1]]));
   crosshair(f, x, hed.map(d => d[0]), i => {
     const d = hed[i];
     const c = chainBy.get(+d[0]);
     return `<b>${d3.timeFormat("%d.%m.%Y")(d[0])}</b><br>гедонический: ${d[1].toFixed(2)} [${d[2].toFixed(2)}; ${d[3].toFixed(2)}]` +
-      (c !== undefined ? `<br>цепной: ${c.toFixed(2)}` : "");
+      (c !== undefined ? `<br>цепной: ${c.toFixed(2)}` : "") +
+      (h3By.has(+d[0]) ? `<br>трешки: ${h3By.get(+d[0]).toFixed(2)}` : "");
   });
 }
 

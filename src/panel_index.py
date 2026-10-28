@@ -35,6 +35,15 @@
 изменения по Росстату, медианы |Δ log| за последние 36 месяцев. Первая
 пара полных месяцев панели это октябрь и ноябрь 2026.
 
+Трешки (с 28.10.2026). Тот же протокол отдельным рядом, только 3
+комнаты: 4+ комнат мало, и они слишком разные. День засчитывается, если
+в нем успешно обойдена корзина трешек. До 12.10 полный обход шел раз в
+неделю, поэтому начало ряда идет недельными шагами, и различимость
+месячного изменения считается только по дневному хвосту (соседние дни
+не дальше двух суток). Своего ряда у Росстата для трешек нет (в
+справочнике ЕМИСС аренда только одно- и двухкомнатной), поэтому
+различимость сравнивается с типичным изменением ряда 1-2к, с пометкой.
+
 Связка с Росстатом считается только по месяцам, где у панели полный
 месяц и у Росстата уже опубликовано значение. Пока таких месяцев один
 или ноль, результат помечается как предварительный и выводов из него
@@ -58,17 +67,27 @@ CURRENT_YEAR = 2026
 # Дни, когда обе комнатности искомого сегмента обойдены успешным прогоном.
 # Тот же смысл, что у marts.room_crawl_day: упавший прогон не доказывает
 # ни присутствия, ни отсутствия.
-COVERED = """
+def covered_sql(rooms) -> str:
+    codes = ", ".join(f"'{r}'" for r in rooms)
+    return f"""
     select r.snapshot_date
     from raw.collection_run r join raw.bucket b using (run_id)
     where r.source = 'cian' and r.status = 'ok' and b.error is null
-      and b.rooms in ('1', '2')
-    group by 1 having count(distinct b.rooms) = 2
+      and b.rooms in ({codes})
+    group by 1 having count(distinct b.rooms) = {len(rooms)}
 """
+
+
+COVERED = covered_sql((1, 2))
+SEGMENTS = {"12": (1, 2), "3": (3,)}
 
 # Выброс по цене считается по цене наблюдения, а не по последней: та же
 # формула, что is_price_outlier в marts.offer_segment.
-OBS = f"""
+def obs_sql(rooms) -> str:
+    return OBS_TEMPLATE.format(rooms=", ".join(map(str, rooms)), covered=covered_sql(rooms))
+
+
+OBS_TEMPLATE = """
     select ob.snapshot_date, ob.offer_id, ob.price::float8,
            o.total_area::float8, o.rooms_count, o.floor, o.floors_total,
            o.build_year, o.metro_walk_min, o.large_park_distance_m::float8,
@@ -80,8 +99,8 @@ OBS = f"""
     from core.offer_observation ob
     join core.offer o using (source, offer_id)
     left join core.offer_duplicate d using (source, offer_id)
-    where ob.source = 'cian' and o.rooms_count in (1, 2)
-      and ob.snapshot_date in ({COVERED})
+    where ob.source = 'cian' and o.rooms_count in ({rooms})
+      and ob.snapshot_date in ({covered})
       and not ob.is_daily and ob.price > 0
       and o.total_area > 0 and o.district is not null
       and o.floor is not null and o.floors_total is not null
@@ -89,6 +108,8 @@ OBS = f"""
       and not (ob.price < 10000 or ob.price > 5000000
                or ob.price / o.total_area not between 400 and 15000)
 """
+OBS = obs_sql((1, 2))
+
 
 def chain_steps(rows):
     """Шаги цепного индекса между соседними собранными днями.
@@ -256,6 +277,17 @@ def detectability(series, rosstat_abs_dlog):
             "distinguishes": bool(mde < typical)}
 
 
+def daily_tail(series, max_gap=2):
+    """Хвост ряда, где соседние дни не дальше max_gap суток: недельный
+    шаг начала ряда трешек раздул бы дневной шум."""
+    from datetime import date
+    d = [date.fromisoformat(p["date"]) for p in series]
+    i = len(d) - 1
+    while i > 0 and (d[i] - d[i - 1]).days <= max_gap:
+        i -= 1
+    return series[i:]
+
+
 def rosstat_abs_dlog(conn, months=36):
     with conn.cursor() as cur:
         cur.execute("""
@@ -269,14 +301,7 @@ def rosstat_abs_dlog(conn, months=36):
     return np.array(out)
 
 
-def main() -> int:
-    from etl import db
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    with db.connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(OBS)
-            rows = cur.fetchall()
-        abs_dlog = rosstat_abs_dlog(conn)
+def segment(rows, abs_dlog, tail_only=False) -> dict:
     chain = chain_index(chain_steps(rows))
     hed, meta = hedonic_index(rows)
     first, last = hed[0], hed[-1]
@@ -285,23 +310,46 @@ def main() -> int:
              "lo95_pct": round(last["lo95"] - 100, 3),
              "hi95_pct": round(last["hi95"] - 100, 3)}
     total["flat"] = total["lo95_pct"] <= 0 <= total["hi95_pct"]
-    payload = {
+    tail = daily_tail(hed) if tail_only else hed
+    det = detectability(tail, abs_dlog)
+    if tail_only:
+        det["days_used"] = len(tail)
+        det["from"] = tail[0]["date"]
+    return {
         "sample": meta,
         "covered_days": len(hed),
         "chain": chain,
         "chain_total_pct": round(chain[-1]["index"] - 100, 3) if chain else None,
         "hedonic": hed,
         "hedonic_total": total,
-        "detectability": detectability(hed, abs_dlog),
-        "first_full_month_pair": ["2026-10", "2026-11"],
-        "rosstat_overlap_months": 0,
+        "detectability": det,
     }
+
+
+def main() -> int:
+    from etl import db
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    rows = {}
+    with db.connect() as conn:
+        with conn.cursor() as cur:
+            for key, rooms in SEGMENTS.items():
+                cur.execute(obs_sql(rooms))
+                rows[key] = cur.fetchall()
+        abs_dlog = rosstat_abs_dlog(conn)
+    payload = segment(rows["12"], abs_dlog)
+    payload.update({"first_full_month_pair": ["2026-10", "2026-11"],
+                    "rosstat_overlap_months": 0})
+    three = segment(rows["3"], abs_dlog, tail_only=True)
+    three["detectability"]["rosstat_series"] = "1-2 комнаты, у Росстата нет ряда трешек"
     RESULTS.mkdir(exist_ok=True)
     (RESULTS / "panel_index.json").write_text(json.dumps(payload, ensure_ascii=False, indent=1))
-    log.info("Гедонический: %s; цепной: %s%%", total, payload["chain_total_pct"])
-    log.info("Различимость: %s", payload["detectability"])
-    from src.index_figures import fig_panel_index
+    (RESULTS / "panel_index_3.json").write_text(json.dumps(three, ensure_ascii=False, indent=1))
+    for name, p in (("1-2к", payload), ("3к", three)):
+        log.info("%s. Гедонический: %s; цепной: %s%%", name, p["hedonic_total"], p["chain_total_pct"])
+        log.info("%s. Различимость: %s", name, p["detectability"])
+    from src.index_figures import fig_panel_index, fig_panel_index_3
     fig_panel_index()
+    fig_panel_index_3()
     return 0
 
 

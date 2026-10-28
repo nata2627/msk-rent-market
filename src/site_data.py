@@ -131,6 +131,13 @@ def main() -> int:
         "hedonic": [[p["date"], p["index"], p["lo95"], p["hi95"]] for p in ix["hedonic"]],
         "chain": [[ix["hedonic"][0]["date"], 100.0]] + [[p["date"], p["index"]] for p in ix["chain"]],
     }
+    # Трешки отдельным рядом: до 12.10 точки раз в неделю, у Росстата
+    # ряда трешек нет, поэтому прогноза для них на витрине нет.
+    ix3_path = RESULTS / "panel_index_3.json"
+    if ix3_path.exists():
+        ix3 = json.loads(ix3_path.read_text())
+        payload["panel_index"]["hedonic3"] = [[p["date"], p["index"], p["lo95"], p["hi95"]]
+                                              for p in ix3["hedonic"]]
     pm = json.loads((RESULTS / "price_model.json").read_text())
     payload["model_drift"] = [{"week": w["week_start"], "n": w["n"], "mape_pct": w["mape_pct"]}
                               for w in pm["drift"]["weeks"]]

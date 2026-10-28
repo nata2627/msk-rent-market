@@ -399,6 +399,27 @@ def results_facts() -> dict[str, str]:
         f["ix_mde"] = pct(det["mde_pct"], 2)
         f["ix_rosstat_mom"] = pct(det["rosstat_median_abs_mom_pct"], 2)
         f["ix_sd_day"] = pct(det["sd_day_pct"], 2)
+        # Вывод по правилу тоже меткой: с новыми днями интервал может
+        # начать или перестать накрывать ноль, и текст обязан следовать.
+        f["ix_flat_verdict"] = ("считается плоским, потому что интервал накрывает ноль"
+                                if t["flat"] else
+                                "плоским не считается, потому что интервал не накрывает ноль")
+        f["ix_noise"] = "в пределах шума" if t["flat"] else "больше дневного шума"
+    ix3_path = RESULTS / "panel_index_3.json"
+    if ix3_path.exists():
+        d = json.loads(ix3_path.read_text())
+        t, det = d["hedonic_total"], d["detectability"]
+        f["ix3_days"] = str(d["covered_days"])
+        f["ix3_rows"] = thousands(d["sample"]["rows"])
+        f["ix3_offers"] = thousands(d["sample"]["offers"])
+        f["ix3_hed"] = pct(t["change_pct"], 2, sign=True)
+        f["ix3_hed_ci"] = f"{pct(t['lo95_pct'], 2, sign=True)}; {pct(t['hi95_pct'], 2, sign=True)}"
+        f["ix3_chain"] = pct(d["chain_total_pct"], 1, sign=True)
+        f["ix3_mde"] = pct(det["mde_pct"], 2)
+        f["ix3_tail_days"] = str(det["days_used"])
+        f["ix3_peak"] = pct(max(p["index"] for p in d["hedonic"]) - 100, 1, sign=True)
+        f["ix3_flat_verdict"] = ("плоский, интервал накрывает ноль" if t["flat"]
+                                 else "не плоский, интервал не накрывает ноль")
     pm_path = RESULTS / "price_model.json"
     if pm_path.exists():
         d = json.loads(pm_path.read_text())
