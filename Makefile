@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: nl-eval backup-check backup-restore cover hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: nl-eval ask-dev ask-eval backup-check backup-restore cover hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -307,6 +307,12 @@ forecast: ## бэктест четырех моделей по правилу и
 
 nl-eval: ## разбор фраз бота на 80 замороженных фразах, один раз: results/nl_eval.json
 	$(PY) -m src.nl_eval
+
+ask-dev: ## настройка вопросов о рынке: оба режима вызова на dev, сколько угодно раз
+	$(PY) -m src.ask_eval dev
+
+ask-eval: ## замер вопросов о рынке на 60 тестовых, один раз
+	$(PY) -m src.ask_eval test
 
 readme-numbers: ## подставить в README свежие числа из базы
 	$(PY) -m src.readme_numbers
