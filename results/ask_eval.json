@@ -1,0 +1,77 @@
+{
+ "date": "2026-10-28",
+ "n": 60,
+ "mode": "json",
+ "mode_rule": "functions if exact_dev(functions) >= exact_dev(json) else json",
+ "rule": "GigaChat-2-Pro if pct(pro) - pct(lite) >= 5 else GigaChat-2",
+ "model": "GigaChat-2",
+ "results": [
+  {
+   "model": "GigaChat-2",
+   "mode": "json",
+   "n": 60,
+   "exact": 58,
+   "exact_pct": 96.7,
+   "function_right": 58,
+   "latency_median_s": 0.39,
+   "misses": [
+    {
+     "text": "найди мне двушку до 80 тысяч",
+     "got": {
+      "fn": "market_price",
+      "args": {
+       "rooms": [
+        2
+       ]
+      }
+     },
+     "want": {
+      "fn": "none",
+      "args": {}
+     }
+    },
+    {
+     "text": "какая зарплата нужна, чтобы снимать двушку",
+     "got": {
+      "fn": "market_price",
+      "args": {
+       "rooms": [
+        2
+       ]
+      }
+     },
+     "want": {
+      "fn": "none",
+      "args": {}
+     }
+    }
+   ]
+  },
+  {
+   "model": "GigaChat-2-Pro",
+   "mode": "json",
+   "n": 60,
+   "exact": 59,
+   "exact_pct": 98.3,
+   "function_right": 59,
+   "latency_median_s": 0.69,
+   "misses": [
+    {
+     "text": "найди мне двушку до 80 тысяч",
+     "got": {
+      "fn": "market_price",
+      "args": {
+       "rooms": [
+        2
+       ]
+      }
+     },
+     "want": {
+      "fn": "none",
+      "args": {}
+     }
+    }
+   ]
+  }
+ ]
+}

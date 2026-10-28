@@ -490,6 +490,17 @@ def results_facts() -> dict[str, str]:
             f[f"nl_{k}_pct"] = pct(100 * d[k]["exact"] / d["n"], 1)
             f[f"nl_{k}_flag"] = str(d[k]["unknown_flag"])
         f["nl_latency"] = pct(d["gigachat"]["latency_median_s"], 2)
+    ask_path = RESULTS / "ask_eval.json"
+    if ask_path.exists():
+        from datetime import date
+        d = json.loads(ask_path.read_text())
+        f["ask_n"] = str(d["n"])
+        f["ask_date"] = ru_date(date.fromisoformat(d["date"]))
+        f["ask_model"] = d["model"]
+        for k, r in zip(("lite", "pro"), d["results"]):
+            f[f"ask_{k}"] = str(r["exact"])
+            f[f"ask_{k}_pct"] = pct(r["exact_pct"], 1)
+            f[f"ask_{k}_latency"] = pct(r["latency_median_s"], 2)
     return f
 
 
