@@ -31,7 +31,8 @@ def no_network(monkeypatch):
 
 
 def test_наборы_не_пересекаются_и_заморожены():
-    assert len(DEV) == 30 and len(TEST) == 60
+    # dev пополняется промахами после замера, test заморожен навсегда
+    assert len(DEV) >= 30 and len(TEST) == 60
     dev = {box_nl.norm(c["text"]) for c in DEV}
     assert not dev & {box_nl.norm(c["text"]) for c in TEST}
 

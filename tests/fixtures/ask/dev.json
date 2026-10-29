@@ -339,5 +339,31 @@
    "fn": "none",
    "args": {}
   }
+ },
+ {
+  "text": "где дешевле всего трешки",
+  "want": {
+   "fn": "district_rank",
+   "args": {
+    "rooms": [
+     3
+    ],
+    "order": "cheap",
+    "limit": 5
+   }
+  }
+ },
+ {
+  "text": "где самые дорогие однушки",
+  "want": {
+   "fn": "district_rank",
+   "args": {
+    "rooms": [
+     1
+    ],
+    "order": "expensive",
+    "limit": 5
+   }
+  }
  }
 ]

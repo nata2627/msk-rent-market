@@ -59,6 +59,20 @@ restore)
   "${PSQL[@]}" -d postgres -c "drop database if exists $DB" -c "create database $DB"
   say "Полная копия $FULL в базу $DB"
   dec "$REMOTE/full/$FULL" | "${PGX[@]}" pg_restore --no-owner -U rent -d "$DB"
+  # Ночные копии перекрываются на три даты, и прогоны из них сначала
+  # удаляются. У внешних ключей на ссылающейся стороне нет индексов: на
+  # проде они не нужны, а здесь удаление каждого снимка проходило всю
+  # raw.offer_snapshot в поисках same_as, и ночная часть шла час. На время
+  # восстановления индексы ставятся, после снимаются, чтобы схема
+  # совпадала с рабочей.
+  "${PSQL[@]}" -d "$DB" <<SQL
+create index restore_snapshot_same_as on raw.offer_snapshot(same_as);
+create index restore_snapshot_bucket on raw.offer_snapshot(bucket_id);
+create index restore_pets_run on raw.pets_hit(run_id);
+create index restore_pets_bucket on raw.pets_hit(bucket_id);
+create index restore_bucket_parent on raw.bucket(parent_bucket_id);
+create index restore_observation_run on core.offer_observation(run_id);
+SQL
   for d in $DAYS; do
     [[ "$d" > "$FULL_DATE" ]] || continue
     say "Ночная копия $d"
@@ -86,6 +100,7 @@ drop table tmp_collection_run, tmp_bucket, tmp_offer_snapshot, tmp_pets_hit;
 commit;
 SQL
   done
+  "${PSQL[@]}" -d "$DB" -c "drop index raw.restore_snapshot_same_as, raw.restore_snapshot_bucket, raw.restore_pets_run, raw.restore_pets_bucket, raw.restore_bucket_parent, core.restore_observation_run"
   "${PSQL[@]}" -d "$DB" -c "select max(snapshot_date), count(*) from raw.offer_snapshot"
   say "raw восстановлен. Дальше core из raw: POSTGRES_DB=$DB make rebuild"
   ;;
