@@ -43,6 +43,7 @@ jobs:
           TG_TOKEN: ${{ secrets.NOTIFY_TG_TOKEN }}
           TG_CHAT: ${{ secrets.NOTIFY_TG_CHAT }}
           EVENT: ${{ github.event_name }}
+          BEAT_LATE_H: ${{ vars.BEAT_LATE_H }}
         run: |
           git fetch -q --depth=1 origin heartbeat || true
           beat=$(git log -1 --format=%ct FETCH_HEAD 2>/dev/null || echo 0)

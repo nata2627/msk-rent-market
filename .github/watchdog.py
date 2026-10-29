@@ -16,10 +16,14 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
 MSK = timezone(timedelta(hours=3))
-BEAT_LATE = timedelta(hours=1)
+# Порог молчания задается переменной репозитория BEAT_LATE_H. Пока сбор
+# временно живет на макбуке (с 29.10.2026, SSD Mac mini отказывает),
+# макбук спит по ночам, и порог поднят до 30 часов: тревога только если
+# не было ни одного дня работы.
+BEAT_LATE = timedelta(hours=float(os.environ.get("BEAT_LATE_H") or 1))
 # От часа до 2 ч 10 мин: два-три сообщения в начале беды при ходе раз в
 # полчаса с опозданиями GitHub, дальше напоминание раз в шесть часов.
-FIRST_WINDOW = timedelta(hours=2, minutes=10)
+FIRST_WINDOW = BEAT_LATE + timedelta(hours=1, minutes=10)
 REMIND = timedelta(hours=6)
 SITE_LATE = timedelta(hours=36)
 
