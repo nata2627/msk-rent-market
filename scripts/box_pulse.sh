@@ -50,7 +50,12 @@ PSI_MEM_WARN="${PULSE_PSI_MEM_WARN:-5}"
 PSI_IO_WARN="${PULSE_PSI_IO_WARN:-40}"
 
 psi() { awk -v k="$2" '$1 == k { split($3, a, "="); print a[2] }' "/proc/pressure/$1" 2>/dev/null; }
-MEM_MB=$(( $(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0) / 1048576 ))
+# Занятая память без неактивного кэша файлов: memory.current считает и
+# кэш, который ядро отдаст по первому требованию. 29.10.2026 копия базы
+# читала 2,7 ГБ файлов, memory.current показал 2763 МБ и поднял ложную
+# тревогу, а занято процессами было около 940 МБ.
+INACTIVE=$(awk '$1 == "inactive_file" { print $2 }' /sys/fs/cgroup/memory.stat 2>/dev/null)
+MEM_MB=$(( ( $(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0) - ${INACTIVE:-0} ) / 1048576 ))
 OOM=$(awk '$1 == "oom_kill" { print $2 }' /sys/fs/cgroup/memory.events 2>/dev/null)
 CHROME_MB=$(ps -eo rss=,comm= 2>/dev/null | awk '$2 ~ /chrom/ { s += $1 } END { print int(s / 1024) }')
 MEM_SOME=$(psi memory some); MEM_FULL=$(psi memory full); IO_FULL=$(psi io full)
@@ -67,7 +72,7 @@ fi
 gt() { awk -v a="${1:-0}" -v b="$2" 'BEGIN { exit !(a > b) }'; }
 if [ "$MEM_MB" -gt "$MEM_WARN_MB" ]; then
   notify mem-box "Память бокса ${MEM_MB} из 3072 МБ, Chrome ${CHROME_MB} МБ
-Еще немного, и ядро начнет убивать процессы или машина встанет. /status покажет обход, лечение /unlock."
+Еще немного, и ядро начнет убивать процессы. /status покажет, что идет. /unlock не нажимать, пока не ясно, что замок держит зависший обход: он же держит копию базы и выгрузку."
 fi
 if gt "$MEM_FULL" "$PSI_MEM_WARN"; then
   notify mem-host "Хост Mac mini ждет память: ${MEM_FULL}% времени за минуту
