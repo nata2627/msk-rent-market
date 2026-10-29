@@ -39,6 +39,19 @@ OFFSET_FILE="$STATE_DIR/offset"
 POLL_LOCK="$STATE_DIR/poll.lock"
 mkdir -p "$STATE_DIR" "$LOG_DIR"
 
+# Доступная память в МБ. На боксе free, на макбуке (сбор там временно
+# с 29.10.2026) free нет, и доступным считаем свободные, неактивные и
+# спекулятивные страницы vm_stat: их система отдаст без выгрузки на диск.
+avail_mb() {
+  if command -v free >/dev/null; then
+    free -m | awk 'NR==2 {print $7}'
+  else
+    vm_stat | awk '/page size of/ {ps=$8}
+      /Pages (free|inactive|speculative):/ {gsub(/\./,"",$NF); n+=$NF}
+      END {printf "%d\n", n*ps/1048576}'
+  fi
+}
+
 note() { echo "$(date '+%d.%m %H:%M:%S') $*" >>"$BOT_LOG"; }
 
 from_env() {
@@ -175,7 +188,7 @@ cmd_status() {
               from raw.collection_run order by run_id desc limit 1;")"
   fresh="$(q "select verdict from marts.data_freshness;")"
   disk="$(df -Pm "$REPO" | awk 'NR==2 {print $4}')"
-  mem="$(free -m | awk 'NR==2 {print $7}')"
+  mem="$(avail_mb)"
   if crawl_running; then
     last="$(ls -t "$LOG_DIR"/box_2*.log 2>/dev/null | head -1)"
     if [ "$ROLE" = "owner" ]; then
@@ -466,7 +479,7 @@ filter_button() {
 #
 # Пустой отбор — это не «показать всё», а «показать самое дорогое»: балл
 # за цену в проекте перевёрнут намеренно, дешевизна на данных оказалась
-# признаком беды. Владелица увидела это первой же командой (квартиры за
+# признаком беды. Это видно с первой же команды (квартиры за
 # 175 тысяч и за три миллиона), а потом ровно то же получил гость, когда
 # у него завёлся собственный пустой набор.
 #

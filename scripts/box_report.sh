@@ -27,6 +27,19 @@ LOG_DIR="$REPO/data/logs"
 mkdir -p "$LOG_DIR"
 REPORT="$LOG_DIR/box_report.log"
 
+# Доступная память в МБ. На боксе free, на макбуке (сбор там временно
+# с 29.10.2026) free нет, и доступным считаем свободные, неактивные и
+# спекулятивные страницы vm_stat: их система отдаст без выгрузки на диск.
+avail_mb() {
+  if command -v free >/dev/null; then
+    free -m | awk 'NR==2 {print $7}'
+  else
+    vm_stat | awk '/page size of/ {ps=$8}
+      /Pages (free|inactive|speculative):/ {gsub(/\./,"",$NF); n+=$NF}
+      END {printf "%d\n", n*ps/1048576}'
+  fi
+}
+
 q() {
     docker exec -i "$PG_CONTAINER" psql -qtA -F' ' -U rent -d rent -c "$1" 2>/dev/null
 }
@@ -96,7 +109,7 @@ q() {
     echo
     echo "-- машина"
     echo "  диск: $(df -Pm "$REPO" | awk 'NR==2 {print $4}') МБ свободно"
-    echo "  память: $(free -m | awk 'NR==2 {print $7}') МБ доступно"
+    echo "  память: $(avail_mb) МБ доступно"
     q "select '  база: ' || pg_size_pretty(pg_database_size('rent'));"
 
     echo

@@ -62,7 +62,7 @@ models:
                 value: 5
 
   - name: offer_scored
-    description: Оценка варианта. Предпочтения владелицы, а не модель рынка.
+    description: Оценка варианта. Личные предпочтения, а не модель рынка.
     data_tests:
       - unique_key:
           arguments:
