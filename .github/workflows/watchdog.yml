@@ -1,45 +1,49 @@
 # Сторож снаружи машины сбора.
 #
-# Все остальные проверки живут на самом Mac mini, и если его выключат или
-# пропадет сеть, тревогу прислать будет некому. Здесь проверка идет на
-# серверах GitHub: машина сбора каждый день в 19:30 по Москве кладет в
-# репозиторий site/data/site.json, и если файл не обновлялся больше 36
-# часов или данные в нем старше двух дней, задание падает. О падении
-# задания по расписанию GitHub сам пишет владелице на почту.
+# Все остальные проверки живут на самом Mac mini, и если машина зависнет,
+# выключится или пропадет сеть, тревогу прислать будет некому. Здесь
+# проверка идет на серверах GitHub.
+#
+# Пульс. Бокс раз в пятнадцать минут перезаписывает ветку heartbeat
+# (scripts/box_pulse.sh). Сторож ходит раз в полчаса и пишет в телеграм,
+# если отметке больше часа. 29.10.2026 Mac mini завис в 08:15, а прежний
+# сторож, сверявший только витрину раз в сутки с порогом 36 часов,
+# заметил бы это лишь вечером 30.10, и только письмом на почту.
+#
+# Чтобы одна беда не слала сообщение каждые полчаса, тревога идет, пока
+# отметке от часа до двух с небольшим, а дальше раз в шесть часов.
+# Расписание GitHub опаздывает на 5-20 минут, поэтому окно шире часа.
+#
+# Свежесть витрины. Раз в сутки, в 21:00 по Москве, через полтора часа
+# после выгрузки: файл site/data/site.json не старше 36 часов, данные в
+# нем не старше двух дней. Это ловит беду, при которой машина жива, а
+# обход или выгрузка падают.
+#
+# Секреты NOTIFY_TG_TOKEN и NOTIFY_TG_CHAT те же, что в .env бокса.
 name: watchdog
 
 on:
   schedule:
-    # 21:00 по Москве, через полтора часа после выгрузки витрины.
-    - cron: "0 18 * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  freshness:
+  watch:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Свежесть данных витрины
+        with:
+          fetch-depth: 1
+      - name: Пульс и свежесть
+        env:
+          TG_TOKEN: ${{ secrets.NOTIFY_TG_TOKEN }}
+          TG_CHAT: ${{ secrets.NOTIFY_TG_CHAT }}
+          EVENT: ${{ github.event_name }}
         run: |
-          python3 - <<'PY'
-          import json, sys
-          from datetime import date, datetime, timedelta, timezone
-          d = json.load(open("site/data/site.json"))
-          now = datetime.now(timezone.utc)
-          made = datetime.fromisoformat(d["generated_at"])
-          data = date.fromisoformat(d["data_date"])
-          today = (now + timedelta(hours=3)).date()
-          print(f"выгрузка {made:%d.%m %H:%M} UTC, данные на {data:%d.%m}")
-          problems = []
-          if now - made > timedelta(hours=36):
-              problems.append(f"витрина не обновлялась {(now - made).days} дн. "
-                              "Машина сбора выключена, без сети или выгрузка падает")
-          if (today - data).days > 2:
-              problems.append(f"последний покрытый день {data:%d.%m}, обход не идет")
-          for p in problems:
-              print(f"::error::{p}")
-          sys.exit(1 if problems else 0)
-          PY
+          git fetch -q --depth=1 origin heartbeat || true
+          beat=$(git log -1 --format=%ct FETCH_HEAD 2>/dev/null || echo 0)
+          python3 .github/watchdog.py "$beat"
