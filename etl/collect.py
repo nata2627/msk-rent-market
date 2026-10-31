@@ -402,7 +402,12 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
                  buckets_resplit, buckets_failed, len(seen_offers),
                  client.requests_made, status)
 
-    if hasattr(client, "close"):
+    # После Ctrl-C посреди вызова playwright его синхронная обвязка сломана:
+    # context.close() крутится вечно на полном CPU. 30.10.2026 так процесс
+    # провисел четыре с половиной часа, держал daily.lock, и хвост дня не
+    # запустился. Без close процесс выходит сразу, браузер гаснет вместе с
+    # драйвером; всё нужное в базе уже записано finish_run.
+    if hasattr(client, "close") and note != "прервано вручную":
         client.close()
     return 0 if status == "ok" else 1
 
