@@ -170,17 +170,20 @@ echo "$(date +%F\ %H:%M)  сбоев: $FAILED  ${SUMMARY:-сбор не выпо
 #
 # Три ограничения, без которых такое самокоммитание опасно:
 #
-# 1. В индекс идёт ТОЛЬКО README.md. Никаких `git add -A`: в рабочем
+# 1. В индекс идут ТОЛЬКО README.md и methods/ (числа туда подставляет тот
+#    же src.readme_numbers с 24.10.2026; без methods/ они висели
+#    незакоммиченными после каждого прогона). Никаких `git add -A`: в рабочем
 #    дереве могут лежать чужие правки, и смести их в автоматический
 #    коммит — худшее, что может сделать фоновый скрипт.
 # 2. Пуша нет. Наружу уходит только руками.
 # 3. Если файл не изменился, коммита не будет. Пустые коммиты каждый
 #    день засоряют историю и прячут настоящие изменения.
 say "Числа README"
+NUM_PATHS=(README.md methods)
 # Проверка ДО подстановки: если README уже изменён, значит его правит
 # человек, и автоматический коммит смёл бы недописанный текст в историю.
 # Числа всё равно подставим — они не мешают, — а коммит оставим человеку.
-if git -C "$REPO" diff --quiet -- README.md; then
+if git -C "$REPO" diff --quiet -- "${NUM_PATHS[@]}"; then
     README_WAS_CLEAN=1
 else
     README_WAS_CLEAN=0
@@ -189,7 +192,7 @@ fi
 if "$PY" -m src.readme_numbers >/dev/null 2>&1; then
     if [ "$README_WAS_CLEAN" = 0 ]; then
         say "Числа README — подставлены, но в файле есть чужие правки, не коммичу"
-    elif git -C "$REPO" diff --quiet -- README.md; then
+    elif git -C "$REPO" diff --quiet -- "${NUM_PATHS[@]}"; then
         say "Числа README — без изменений, коммит не нужен"
     elif [ -d "$REPO/.git/rebase-merge" ] || [ -d "$REPO/.git/rebase-apply" ] \
          || [ -f "$REPO/.git/MERGE_HEAD" ]; then
@@ -197,7 +200,7 @@ if "$PY" -m src.readme_numbers >/dev/null 2>&1; then
         # не то, что человек начал делать руками.
         say "Числа README — идёт слияние или перебазирование, не коммичу"
     else
-        git -C "$REPO" add README.md
+        git -C "$REPO" add -u -- "${NUM_PATHS[@]}"
         git -C "$REPO" commit -q -m "Числа панели за $(date +%d.%m.%Y)" \
             && say "Числа README — закоммичено" \
             || say "Числа README — коммит не прошёл"
