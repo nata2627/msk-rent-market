@@ -1,7 +1,7 @@
 """Кто спрашивает и что ему можно. Правила старого бота без изменений."""
 from __future__ import annotations
 
-from bot.commands import Ctx, Reply, dispatch, parse
+from bot.commands import UNKNOWN_BUTTON, Action, Answer, Ctx, Reply, dispatch, parse, press
 from bot.config import Settings
 
 # Журнала здесь намеренно нет: в нем пути, ошибки и устройство машины,
@@ -50,7 +50,7 @@ def stale_text(text: str) -> str:
 
 
 def handle_message(settings: Settings, chat: str, text: str, sent_at: float,
-                   now: float, note) -> list[Reply]:
+                   now: float, note) -> list[Action]:
     """Входной фильтр и разбор одного сообщения. note пишет строку в журнал."""
     role = who(settings, chat)
     if role == "stranger":
@@ -66,3 +66,17 @@ def handle_message(settings: Settings, chat: str, text: str, sent_at: float,
         return [Reply(GUEST_REFUSAL)]
     note(f"команда от {role}: {text}")
     return dispatch(Ctx(settings, chat, role), text)
+
+
+def handle_button(settings: Settings, chat: str, data: str, msg_id: str, note) -> list[Action]:
+    """Нажатие кнопки. Срока давности нет: кнопка меняет только фильтры и
+    карточку своего чата, а гостю доступны все кнопки, лечения среди них нет."""
+    role = who(settings, chat)
+    if role == "stranger":
+        note(f"чужой чат {chat}, пропускаю кнопку: {data}")
+        return []
+    note(f"кнопка: {data}")
+    replies = press(Ctx(settings, chat, role), data, msg_id)
+    if replies == [Answer(UNKNOWN_BUTTON)]:
+        note(f"неизвестная кнопка: {data}")
+    return replies

@@ -11,17 +11,21 @@ import logging
 import os
 import sys
 import time
+from types import SimpleNamespace
 
-from telegram import BotCommand, LinkPreviewOptions, Update
+from telegram import (BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto,
+                      LinkPreviewOptions, Update)
 import httpx
 from telegram.request import HTTPXRequest
-from telegram.error import TelegramError
-from telegram.ext import Application, ContextTypes, MessageHandler, TypeHandler, filters
+from telegram.error import BadRequest, TelegramError
+from telegram.ext import (Application, CallbackQueryHandler, ContextTypes, MessageHandler,
+                          TypeHandler, filters)
 
 from bot import config, menu, status
-from bot.access import handle_message
-from bot.commands import Reply
+from bot.access import handle_button, handle_message
+from bot.actions import Action, Answer, Card, Keyboard, Reply
 from bot.liveness import ChatLocks, Pulse, guarded
+from bot.photos import Photos
 from bot.render import render
 
 log = logging.getLogger("bot")
@@ -88,35 +92,112 @@ async def remember_offset(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     offset_file(context.bot_data["settings"]).write_text(f"{top}\n")
 
 
+def markup(keyboard: Keyboard | None) -> InlineKeyboardMarkup | None:
+    if not keyboard:
+        return None
+    return InlineKeyboardMarkup([[InlineKeyboardButton(t, callback_data=d) for t, d in row]
+                                 for row in keyboard])
+
+
 async def send(context: ContextTypes.DEFAULT_TYPE, chat: str, reply: Reply) -> None:
     await context.bot.send_message(
         chat_id=chat, text=render(reply.text), parse_mode="HTML",
-        link_preview_options=NO_PREVIEW, reply_markup=reply.keyboard)
+        link_preview_options=NO_PREVIEW, reply_markup=markup(reply.keyboard))
 
 
-async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def show_card(context: ContextTypes.DEFAULT_TYPE, chat: str, card: Card) -> str:
+    """Карточка на месте прежней или новым сообщением; id того, что ее держит.
+
+    Правка невозможна, когда у варианта нет фото, а прежнее сообщение было
+    с фото (или наоборот), или сообщение слишком старое. Тогда старое
+    удаляется и приходит новое, а не молчание.
+    """
+    bot, photos = context.bot, context.bot_data["photos"]
+    kb = markup(card.keyboard)
+    text = render(card.caption)
+    media = photos.file_ids.get(card.photo) or await photos.get(card.photo)
+    if card.msg_id:
+        if media:
+            try:
+                m = await bot.edit_message_media(
+                    chat_id=chat, message_id=card.msg_id, reply_markup=kb,
+                    media=InputMediaPhoto(media, caption=text, parse_mode="HTML"))
+                photos.remember(card.photo, m)
+                return card.msg_id
+            except BadRequest as e:
+                if "not modified" in e.message:
+                    return card.msg_id
+                note(f"карточку не поправить на месте: {e.message}")
+        try:
+            await bot.delete_message(chat_id=chat, message_id=card.msg_id)
+        except TelegramError:
+            pass
+    if media:
+        try:
+            m = await bot.send_photo(chat_id=chat, photo=media, caption=text,
+                                     parse_mode="HTML", reply_markup=kb)
+            photos.remember(card.photo, m)
+            return str(m.message_id)
+        except BadRequest as e:
+            # Картинку телеграм не принял: вариант все равно нужен, текстом.
+            note(f"фото не принято: {e.message}")
+    m = await bot.send_message(chat_id=chat, text=text, parse_mode="HTML",
+                               link_preview_options=NO_PREVIEW, reply_markup=kb)
+    return str(m.message_id)
+
+
+async def execute(context: ContextTypes.DEFAULT_TYPE, chat: str, actions: list[Action],
+                  query_id: str | None = None) -> None:
+    answered = False
+    for a in actions:
+        if isinstance(a, Answer):
+            if query_id and not answered:
+                await context.bot.answer_callback_query(query_id, text=a.text)
+                answered = True
+        elif isinstance(a, Card):
+            msg_id = await show_card(context, chat, a)
+            if a.on_sent:
+                a.on_sent(msg_id or a.msg_id)
+            note(a.label)
+            if a.prefetch:
+                # Фото следующей карточки в кеш, пока человек смотрит эту.
+                asyncio.get_running_loop().create_task(context.bot_data["photos"].get(a.prefetch))
+        else:
+            await send(context, chat, a)
+    # Без ответа кнопка крутится у человека на экране до таймаута, даже
+    # когда обработчик упал или ничего не показал.
+    if query_id and not answered:
+        await context.bot.answer_callback_query(query_id)
+
+
+def first_line(actions: list[Action]) -> str:
+    for a in actions:
+        text = a.caption if isinstance(a, Card) else a.text
+        if text:
+            return text.splitlines()[0]
+    return ""
+
+
+async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     started = time.monotonic()
     settings: config.Settings = context.bot_data["settings"]
-    msg = update.message
-    chat = str(msg.chat_id)
-    # Перевод строки и табуляция становятся пробелом, как в box_tg.py:
-    # разбор аргументов по словам на этом построен.
-    text = (msg.text or "").replace("\t", " ").replace("\n", " ")
+    query = update.callback_query
+    if query.message is None:
+        # Сообщение старше 48 часов телеграм уже не отдает: править нечего.
+        await query.answer()
+        return
+    chat = str(query.message.chat.id)
+    msg_id = str(query.message.message_id)
+    data = query.data or ""
     async with context.bot_data["locks"](chat):
-        replies = await guarded(handle_message, settings, chat, text, msg.date.timestamp(),
-                                time.time(), note, label=text)
+        actions = await guarded(handle_button, settings, chat, data, msg_id, note, label=data)
+        if not actions:
+            return  # чужой чат: ни ответа, ни индикатора
         thought = time.monotonic() - started
-        for r in replies:
-            await send(context, chat, r)
-    if replies:
-        # Обработка: от получения события процессом до ухода последнего
-        # ответа. Возраст: от отправки человеком, по часам телеграма с
-        # точностью до секунды, в него входит доставка события.
-        spent = time.monotonic() - started
-        age = time.time() - msg.date.timestamp()
-        note(f"ответ в чат {chat}: {replies[0].text.splitlines()[0]} "
-             f"| обработка {spent:.3f} с (логика {thought:.3f}, отправка {spent - thought:.3f}), "
-             f"возраст {age:.0f} с")
+        await execute(context, chat, actions, query.id)
+    spent = time.monotonic() - started
+    note(f"кнопка {data} в чате {chat}: {first_line(actions)} "
+         f"| обработка {spent:.3f} с (логика {thought:.3f}, телеграм {spent - thought:.3f})")
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -172,9 +253,11 @@ def build(settings: config.Settings) -> Application:
            .post_init(start_pulse).post_shutdown(stop_pulse).build())
     app.bot_data["settings"] = settings
     app.bot_data["locks"] = ChatLocks()
+    app.bot_data["photos"] = Photos(settings.state_dir / "photos")
     app.add_error_handler(on_error)
     app.add_handler(TypeHandler(Update, remember_offset), group=-1)
     app.add_handler(MessageHandler(filters.TEXT, on_message))
+    app.add_handler(CallbackQueryHandler(on_button))
     return app
 
 
@@ -185,10 +268,10 @@ def run_once(settings: config.Settings, text: str) -> int:
     async def go() -> None:
         app = Application.builder().token(settings.token).build()
         async with app:
-            for r in replies:
-                await app.bot.send_message(
-                    chat_id=settings.owner, text=render(r.text), parse_mode="HTML",
-                    link_preview_options=NO_PREVIEW, reply_markup=r.keyboard)
+            # execute ждет от контекста только бота и общие данные.
+            ctx = SimpleNamespace(bot=app.bot,
+                                  bot_data={"photos": Photos(settings.state_dir / "photos")})
+            await execute(ctx, settings.owner, replies)
 
     asyncio.run(go())
     print(f"команда «{text}» выполнена, ответ ушёл в чат")

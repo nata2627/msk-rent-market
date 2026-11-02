@@ -6,27 +6,10 @@ scripts/box_bot.sh дословно.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from bot import info, status
-from bot.config import Settings
-
-
-@dataclass
-class Reply:
-    text: str
-    keyboard: dict | None = None
-
-
-@dataclass
-class Ctx:
-    settings: Settings
-    chat: str
-    role: str  # owner или guest; чужой сюда не доходит
-    replies: list[Reply] = field(default_factory=list)
-
-    def reply(self, text: str, keyboard: dict | None = None) -> None:
-        self.replies.append(Reply(text, keyboard))
+from bot import cards, info, status
+from bot.actions import Action, Answer, Card, Ctx, Reply  # noqa: F401
 
 
 @dataclass(frozen=True)
@@ -118,13 +101,16 @@ HANDLERS = {
     "/журнал": cmd_log,
     "/pulse": cmd_pulse,
     "/итог": cmd_pulse,
+    "/flats": cards.cmd_flats,
+    "/подбор": cards.cmd_flats,
+    "/saved": cards.cmd_saved,
+    "/отложенные": cards.cmd_saved,
 }
 
 # Еще не перенесенные команды. Пока бот живет только на тестовом токене,
 # честнее сказать это прямо, чем ответить «команды нет». Список пустеет
 # по ходу этапа 2 и исчезает вместе с ним.
 PENDING = {
-    "/flats", "/подбор", "/saved", "/отложенные",
     "/undo", "/вернуть", "/filter", "/фильтр", "/отбор",
     "/price", "/цена", "/ask", "/вопрос",
     "/clean", "/чистка", "/unlock", "/замок", "/catchup", "/догнать",
@@ -132,7 +118,7 @@ PENDING = {
 }
 
 
-def dispatch(ctx: Ctx, text: str) -> list[Reply]:
+def dispatch(ctx: Ctx, text: str) -> list[Action]:
     p = parse(text)
     handler = HANDLERS.get(p.cmd)
     if handler:
@@ -141,4 +127,26 @@ def dispatch(ctx: Ctx, text: str) -> list[Reply]:
         ctx.reply(f"Команда «{p.cmd or text}» еще переносится на новый бот")
     else:
         ctx.reply(f"Команды «{p.cmd}» нет. Что умею — /help")
+    return ctx.replies
+
+
+UNKNOWN_BUTTON = "не знаю такой кнопки"
+
+# Кнопки экрана фильтров переносятся вместе с /filter.
+PENDING_BUTTONS = {
+    "p-10", "p+10", "a-5", "a+5", "r1", "r2", "r12", "r0",
+    "m10", "m15", "m20", "m0", "e", "k", "d", "x", "filters",
+}
+
+
+def press(ctx: Ctx, data: str, msg_id: str) -> list[Action]:
+    """Нажатие кнопки. Белый список: неизвестное ничего не меняет."""
+    if cards.button(ctx, data, msg_id):
+        pass
+    elif data == "noop":
+        ctx.answer("это просто надпись")
+    elif data in PENDING_BUTTONS:
+        ctx.answer("фильтры еще переносятся на новый бот")
+    else:
+        ctx.answer(UNKNOWN_BUTTON)
     return ctx.replies
