@@ -12,12 +12,13 @@ import os
 import sys
 import time
 
-from telegram import LinkPreviewOptions, Update
+from telegram import BotCommand, LinkPreviewOptions, Update
 import httpx
 from telegram.request import HTTPXRequest
+from telegram.error import TelegramError
 from telegram.ext import Application, ContextTypes, MessageHandler, TypeHandler, filters
 
-from bot import config, status
+from bot import config, menu, status
 from bot.access import handle_message
 from bot.commands import Reply
 from bot.liveness import ChatLocks, Pulse, guarded
@@ -124,19 +125,40 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     log.error("ошибка вне обработчика", exc_info=context.error)
 
 
+MENU_CHECK_S = 3600
+
+
+async def keep_menu(app: Application) -> None:
+    stamp = app.bot_data["settings"].state_dir / "menu"
+    commands = [BotCommand(c, d) for c, d in menu.COMMANDS]
+    while True:
+        if menu.due(stamp):
+            try:
+                await app.bot.set_my_commands(commands)
+                stamp.touch()
+                note("меню команд обновлено")
+            except TelegramError as e:
+                # Меню не стоит того, чтобы ронять процесс: попробуем через час.
+                log.warning(f"меню команд не обновилось: {e}")
+        await asyncio.sleep(MENU_CHECK_S)
+
+
 async def start_pulse(app: Application) -> None:
     await skip_backlog(app)
     pulse = Pulse(app.bot_data["settings"].state_dir / "pulse", on_beat=status.refresh_fresh)
     pulse.watch()
     # Задача пульса живет вне учета библиотеки: она стартует до опроса,
     # а останавливается в stop_pulse вместе с процессом.
-    app.bot_data["pulse"] = asyncio.get_running_loop().create_task(pulse.run())
+    loop = asyncio.get_running_loop()
+    app.bot_data["pulse"] = loop.create_task(pulse.run())
+    app.bot_data["menu"] = loop.create_task(keep_menu(app))
 
 
 async def stop_pulse(app: Application) -> None:
-    task = app.bot_data.get("pulse")
-    if task:
-        task.cancel()
+    for name in ("pulse", "menu"):
+        task = app.bot_data.get(name)
+        if task:
+            task.cancel()
 
 
 def build(settings: config.Settings) -> Application:

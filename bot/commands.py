@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from bot import status
+from bot import info, status
 from bot.config import Settings
 
 
@@ -93,6 +93,18 @@ def cmd_help(ctx: Ctx, p: Parsed) -> None:
     ctx.reply(HELP_OWNER if ctx.role == "owner" else HELP_GUEST)
 
 
+def cmd_market(ctx: Ctx, p: Parsed) -> None:
+    ctx.reply(info.market())
+
+
+def cmd_log(ctx: Ctx, p: Parsed) -> None:
+    ctx.reply(info.log(ctx.settings, p.arg))
+
+
+def cmd_pulse(ctx: Ctx, p: Parsed) -> None:
+    ctx.reply(info.pulse(ctx.settings))
+
+
 # Команда и ее русские имена ведут в один обработчик, как в dispatch
 # старого бота.
 HANDLERS = {
@@ -100,6 +112,12 @@ HANDLERS = {
     "/help": cmd_help,
     "/status": cmd_status,
     "/статус": cmd_status,
+    "/market": cmd_market,
+    "/рынок": cmd_market,
+    "/log": cmd_log,
+    "/журнал": cmd_log,
+    "/pulse": cmd_pulse,
+    "/итог": cmd_pulse,
 }
 
 # Еще не перенесенные команды. Пока бот живет только на тестовом токене,
@@ -107,8 +125,8 @@ HANDLERS = {
 # по ходу этапа 2 и исчезает вместе с ним.
 PENDING = {
     "/flats", "/подбор", "/saved", "/отложенные",
-    "/undo", "/вернуть", "/filter", "/фильтр", "/отбор", "/market", "/рынок",
-    "/price", "/цена", "/ask", "/вопрос", "/log", "/журнал", "/pulse", "/итог",
+    "/undo", "/вернуть", "/filter", "/фильтр", "/отбор",
+    "/price", "/цена", "/ask", "/вопрос",
     "/clean", "/чистка", "/unlock", "/замок", "/catchup", "/догнать",
     "/dbup", "/база",
 }
