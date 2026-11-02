@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Бот как постоянный процесс на макбуке. Ставится на G3 вместо задачи
+  со StartInterval 60, которая запускала scripts/box_bot.sh.
+
+  KeepAlive поднимает процесс после любого выхода: падения, сети, которой
+  не было при пробуждении, и выхода по собственному сторожу пульса
+  (bot/liveness.py), когда цикл событий встал. ThrottleInterval не дает
+  упавшему на старте процессу перезапускаться чаще раза в 10 секунд.
+-->
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.nata2627.rent-msk.bot</string>
+  <key>ProgramArguments</key><array>
+    <string>/Users/nataliagordeeva/rent_msk/.venv/bin/python</string>
+    <string>-m</string><string>bot</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/nataliagordeeva/rent_msk</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>RENT_BOT_ENV</key><string>prod</string>
+    <key>PATH</key><string>/opt/homebrew/opt/coreutils/libexec/gnubin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/nataliagordeeva/rent_msk/data/logs/launchd.com.nata2627.rent-msk.bot.log</string>
+  <key>StandardErrorPath</key><string>/Users/nataliagordeeva/rent_msk/data/logs/launchd.com.nata2627.rent-msk.bot.log</string>
+</dict></plist>

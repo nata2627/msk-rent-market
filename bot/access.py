@@ -1,0 +1,66 @@
+"""Кто спрашивает и что ему можно. Правила старого бота без изменений."""
+from __future__ import annotations
+
+from bot.commands import Ctx, Reply, dispatch, parse
+from bot.config import Settings
+
+# Журнала здесь намеренно нет: в нем пути, ошибки и устройство машины,
+# гостю это ничего не дает, а показывает лишнее.
+GUEST_COMMANDS = frozenset(
+    "/help /start /status /flats /saved /undo /market /filter /price /ask "
+    "/статус /подбор /рынок /фильтр /отбор /цена /отложенные /вернуть /вопрос".split()
+)
+
+# Бокс мог молчать сутки, и «догнать день», отправленное вчера, сегодня
+# означало бы не то.
+STALE_SECONDS = 900
+
+
+def who(settings: Settings, chat: str) -> str:
+    # Чужой это не враг: бота находят поиском. Ему просто ничего не уходит.
+    if chat == settings.owner:
+        return "owner"
+    if chat in settings.guests:
+        return "guest"
+    return "stranger"
+
+
+def guest_allowed(text: str) -> bool:
+    # Фраза без косой черты это подбор словами, он гостю доступен.
+    if not text.startswith("/"):
+        return True
+    return parse(text).cmd in GUEST_COMMANDS
+
+
+def is_stale(sent_at: float, now: float) -> bool:
+    return now - sent_at > STALE_SECONDS
+
+
+GUEST_REFUSAL = """Это команда владелицы
+
+Показывать можно всё, а трогать машину сбора — нет. Доступно:
+/status, /flats, /market, /log, /filter со своими фильтрами"""
+
+
+def stale_text(text: str) -> str:
+    return (f"Команда «{text}» пришла больше пятнадцати минут назад — я её не\n"
+            "выполняю. Если она ещё нужна, пришлите заново.")
+
+
+def handle_message(settings: Settings, chat: str, text: str, sent_at: float,
+                   now: float, note) -> list[Reply]:
+    """Входной фильтр и разбор одного сообщения. note пишет строку в журнал."""
+    role = who(settings, chat)
+    if role == "stranger":
+        # Ответ подтвердил бы, что бот живой и что-то умеет. В журнал да,
+        # чтобы знать, что стучались.
+        note(f"чужой чат {chat}, пропускаю: {text}")
+        return []
+    if is_stale(sent_at, now):
+        note(f"команда старше пятнадцати минут, пропускаю: {text}")
+        return [Reply(stale_text(text))]
+    if role == "guest" and not guest_allowed(text):
+        note(f"гость {chat} просил «{text}», отказано")
+        return [Reply(GUEST_REFUSAL)]
+    note(f"команда от {role}: {text}")
+    return dispatch(Ctx(settings, chat, role), text)
