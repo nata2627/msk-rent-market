@@ -16,8 +16,10 @@ Keyboard = list[list[tuple[str, str]]]
 
 @dataclass
 class Reply:
+    """Сообщение; с msg_id правка прежнего на месте (экран фильтров)."""
     text: str
     keyboard: Keyboard | None = None
+    msg_id: str = ""
 
 
 @dataclass

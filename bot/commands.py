@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from bot import cards, info, status
+from bot import cards, filters, info, status
 from bot.actions import Action, Answer, Card, Ctx, Reply  # noqa: F401
 
 
@@ -88,6 +88,13 @@ def cmd_pulse(ctx: Ctx, p: Parsed) -> None:
     ctx.reply(info.pulse(ctx.settings))
 
 
+def cmd_filter(ctx: Ctx, p: Parsed) -> None:
+    # Значение берется хвостом с третьего слова, а не словом: название
+    # района бывает с пробелом (cut -s -d' ' -f3- у старого бота).
+    rest = p.tail.split(" ", 1)
+    filters.cmd_filter(ctx, p.arg.lower(), rest[1] if len(rest) > 1 else "")
+
+
 # Команда и ее русские имена ведут в один обработчик, как в dispatch
 # старого бота.
 HANDLERS = {
@@ -105,13 +112,17 @@ HANDLERS = {
     "/подбор": cards.cmd_flats,
     "/saved": cards.cmd_saved,
     "/отложенные": cards.cmd_saved,
+    "/filter": cmd_filter,
+    "/фильтр": cmd_filter,
+    "/отбор": cmd_filter,
+    "/undo": filters.cmd_undo,
+    "/вернуть": filters.cmd_undo,
 }
 
 # Еще не перенесенные команды. Пока бот живет только на тестовом токене,
 # честнее сказать это прямо, чем ответить «команды нет». Список пустеет
 # по ходу этапа 2 и исчезает вместе с ним.
 PENDING = {
-    "/undo", "/вернуть", "/filter", "/фильтр", "/отбор",
     "/price", "/цена", "/ask", "/вопрос",
     "/clean", "/чистка", "/unlock", "/замок", "/catchup", "/догнать",
     "/dbup", "/база",
@@ -132,21 +143,13 @@ def dispatch(ctx: Ctx, text: str) -> list[Action]:
 
 UNKNOWN_BUTTON = "не знаю такой кнопки"
 
-# Кнопки экрана фильтров переносятся вместе с /filter.
-PENDING_BUTTONS = {
-    "p-10", "p+10", "a-5", "a+5", "r1", "r2", "r12", "r0",
-    "m10", "m15", "m20", "m0", "e", "k", "d", "x", "filters",
-}
-
 
 def press(ctx: Ctx, data: str, msg_id: str) -> list[Action]:
     """Нажатие кнопки. Белый список: неизвестное ничего не меняет."""
-    if cards.button(ctx, data, msg_id):
+    if cards.button(ctx, data, msg_id) or filters.button(ctx, data, msg_id):
         pass
     elif data == "noop":
         ctx.answer("это просто надпись")
-    elif data in PENDING_BUTTONS:
-        ctx.answer("фильтры еще переносятся на новый бот")
     else:
         ctx.answer(UNKNOWN_BUTTON)
     return ctx.replies

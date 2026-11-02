@@ -100,6 +100,20 @@ def markup(keyboard: Keyboard | None) -> InlineKeyboardMarkup | None:
 
 
 async def send(context: ContextTypes.DEFAULT_TYPE, chat: str, reply: Reply) -> None:
+    if reply.msg_id:
+        # Правка на месте: иначе экран фильтров после пяти нажатий это пять
+        # одинаковых сообщений. Не вышло (сообщение удалено или с фото),
+        # тогда новое, а не молчание, как было у старого бота.
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat, message_id=reply.msg_id, text=render(reply.text),
+                parse_mode="HTML", link_preview_options=NO_PREVIEW,
+                reply_markup=markup(reply.keyboard))
+            return
+        except BadRequest as e:
+            if "not modified" in e.message:
+                return
+            note(f"экран не поправить на месте: {e.message}")
     await context.bot.send_message(
         chat_id=chat, text=render(reply.text), parse_mode="HTML",
         link_preview_options=NO_PREVIEW, reply_markup=markup(reply.keyboard))
