@@ -36,10 +36,12 @@ def is_stale(sent_at: float, now: float) -> bool:
     return now - sent_at > STALE_SECONDS
 
 
+# Список доступного гостю здесь сверен с GUEST_COMMANDS (решение 6 от 02.11):
+# у старого бота в нем был /log, которого гостю нельзя.
 GUEST_REFUSAL = """Это команда владелицы
 
 Показывать можно всё, а трогать машину сбора — нет. Доступно:
-/status, /flats, /market, /log, /filter со своими фильтрами"""
+/status, /flats, /saved, /market, /price, /ask, /filter со своими фильтрами"""
 
 
 def stale_text(text: str) -> str:

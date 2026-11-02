@@ -5,6 +5,7 @@
 оболочки, неизвестная команда. Сети нет: проверяется логика, которая
 решает, что ответить, без телеграма.
 """
+import re
 from pathlib import Path
 
 import pytest
@@ -131,7 +132,12 @@ def test_тексты_help_дословно_из_старого_бота():
     src = (ROOT / "scripts" / "box_bot.sh").read_text()
     assert commands.HELP_OWNER in src
     assert commands.HELP_GUEST in src
-    assert access.GUEST_REFUSAL in src
+
+
+def test_отказ_гостю_называет_только_доступное():
+    named = set(re.findall(r"/\w+", access.GUEST_REFUSAL.splitlines()[-1]))
+    assert named <= access.GUEST_COMMANDS
+    assert "/log" not in named
 
 
 def test_разметка_та_же_что_у_box_tg():
