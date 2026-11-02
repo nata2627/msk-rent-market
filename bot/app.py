@@ -146,13 +146,22 @@ async def show_card(context: ContextTypes.DEFAULT_TYPE, chat: str, card: Card) -
     return str(m.message_id)
 
 
+async def answer(context: ContextTypes.DEFAULT_TYPE, query_id: str, text: str | None) -> None:
+    # Нажатию больше 15 с телеграм ответить не дает (бот лежал, нажатие
+    # ждало в очереди). Это не повод не показать карточку.
+    try:
+        await context.bot.answer_callback_query(query_id, text=text)
+    except BadRequest as e:
+        note(f"нажатие не погашено: {e.message}")
+
+
 async def execute(context: ContextTypes.DEFAULT_TYPE, chat: str, actions: list[Action],
                   query_id: str | None = None) -> None:
     answered = False
     for a in actions:
         if isinstance(a, Answer):
             if query_id and not answered:
-                await context.bot.answer_callback_query(query_id, text=a.text)
+                await answer(context, query_id, a.text)
                 answered = True
         elif isinstance(a, Card):
             msg_id = await show_card(context, chat, a)
@@ -167,7 +176,7 @@ async def execute(context: ContextTypes.DEFAULT_TYPE, chat: str, actions: list[A
     # Без ответа кнопка крутится у человека на экране до таймаута, даже
     # когда обработчик упал или ничего не показал.
     if query_id and not answered:
-        await context.bot.answer_callback_query(query_id)
+        await answer(context, query_id, None)
 
 
 def first_line(actions: list[Action]) -> str:
@@ -176,6 +185,30 @@ def first_line(actions: list[Action]) -> str:
         if text:
             return text.splitlines()[0]
     return ""
+
+
+async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    started = time.monotonic()
+    settings: config.Settings = context.bot_data["settings"]
+    msg = update.message
+    chat = str(msg.chat_id)
+    # Перевод строки и табуляция становятся пробелом, как в box_tg.py:
+    # разбор аргументов по словам на этом построен.
+    text = (msg.text or "").replace("\t", " ").replace("\n", " ")
+    async with context.bot_data["locks"](chat):
+        replies = await guarded(handle_message, settings, chat, text, msg.date.timestamp(),
+                                time.time(), note, label=text)
+        thought = time.monotonic() - started
+        await execute(context, chat, replies)
+    if replies:
+        # Обработка: от получения события процессом до ухода последнего
+        # ответа. Возраст: от отправки человеком, по часам телеграма с
+        # точностью до секунды, в него входит доставка события.
+        spent = time.monotonic() - started
+        age = time.time() - msg.date.timestamp()
+        note(f"ответ в чат {chat}: {first_line(replies)} "
+             f"| обработка {spent:.3f} с (логика {thought:.3f}, отправка {spent - thought:.3f}), "
+             f"возраст {age:.0f} с")
 
 
 async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

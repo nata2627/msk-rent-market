@@ -478,3 +478,24 @@ def test_фото_качается_один_раз_и_кешируется(tmp_p
     assert asyncio.run(go()) == (b"jpg", b"jpg", b"jpg")
     assert hits == ["https://img/1.jpg"]
     assert len(list((tmp_path / "photos").glob("*.jpg"))) == 1
+
+
+def test_приложение_собирается_с_обработчиками(settings):
+    """02.11 из app.py при правке выпал on_message: тесты логики были
+    зелеными, а процесс падал на старте, и бот молчал."""
+    from telegram.ext import CallbackQueryHandler, MessageHandler
+    s = config.load({"NOTIFY_TG_TOKEN_DEV": "123:abc", "NOTIFY_TG_CHAT": "42"},
+                    repo=settings.repo)
+    built = app.build(s)
+    kinds = {type(h) for group in built.handlers.values() for h in group}
+    assert {MessageHandler, CallbackQueryHandler} <= kinds
+
+
+def test_старое_нажатие_не_мешает_показать_карточку():
+    class Late(FakeBot):
+        async def answer_callback_query(self, qid, text=None):
+            raise BadRequest("Query is too old and response timeout expired or query id is invalid")
+    bot, sent = Late(), []
+    run(bot, FakePhotos({}), [Answer(None), a_card(msg_id="77", photo="", sent=sent)], query_id="q")
+    assert [c[0] for c in bot.calls] == ["delete", "message"]
+    assert sent == ["901"]

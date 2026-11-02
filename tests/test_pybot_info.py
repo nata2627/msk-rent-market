@@ -91,6 +91,14 @@ def test_log_последний_по_времени_и_15_строк(settings):
     assert text.splitlines()[2:] == [f"новый {i}" for i in range(25, 40)]
 
 
+def test_log_видит_журналы_макбука(settings):
+    write_log(settings, "box_2026-10-28_1100.log", ["бокс"], age=86400 * 5)
+    write_log(settings, "daily_20261102_1417.log", ["дневной"], age=60)
+    write_log(settings, "mac_tail_202611.log", ["хвост"], age=10)
+    write_log(settings, "backup_20261102_1704.log", ["копия"], age=1)
+    assert ask(settings, "/log")[0].startswith("Журнал mac_tail_202611.log")
+
+
 @pytest.mark.parametrize("arg,ok", [("1", True), ("9", True), ("10", True), ("49", True),
                                     ("50", True), ("0", False), ("51", False), ("05", False),
                                     ("100", False), ("-1", False), ("$(id)", False)])
@@ -164,11 +172,15 @@ def test_pulse_боевой_бот_токен_не_подменяет(tmp_path, 
 # Меню и перенос
 # ---------------------------------------------------------------------
 
-def test_меню_то_же_что_у_box_tg():
+def test_меню_как_у_box_tg_плюс_price_и_ask():
     spec = importlib.util.spec_from_file_location("box_tg", ROOT / "scripts" / "box_tg.py")
     box_tg = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(box_tg)
-    assert menu.COMMANDS == box_tg.COMMANDS
+    assert [c for c in menu.COMMANDS if c[0] not in ("price", "ask")] == box_tg.COMMANDS
+    names = [c for c, _ in menu.COMMANDS]
+    assert names.index("price") == names.index("market") + 1
+    # Предел телеграма на описание команды 256 знаков, на имя 32.
+    assert all(len(d) <= 256 and len(c) <= 32 for c, d in menu.COMMANDS)
 
 
 def test_меню_раз_в_сутки(tmp_path):

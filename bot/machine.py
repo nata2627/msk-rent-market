@@ -41,14 +41,25 @@ def crawl_running(box_repo: Path) -> bool:
     return (box_repo / "data" / "box.lock").is_dir()
 
 
+# Журналы прогона: box_* на боксе, daily_* и mac_tail_* на макбуке, где
+# сбор идет с 29.10.2026 (решение 7 от 02.11). Старый бот искал только
+# box_*, и на макбуке /log отвечал, что журналов нет.
+RUN_LOGS = ("box_2*.log", "daily_2*.log", "mac_tail_2*.log")
+
+
+def latest_run_log(box_repo: Path) -> Path | None:
+    folder = box_repo / "data" / "logs"
+    logs = [p for pattern in RUN_LOGS for p in folder.glob(pattern)]
+    return max(logs, key=lambda p: p.stat().st_mtime) if logs else None
+
+
 def last_crawl_line(box_repo: Path) -> str:
-    logs = sorted((box_repo / "data" / "logs").glob("box_2*.log"),
-                  key=lambda p: p.stat().st_mtime)
-    if not logs:
+    last = latest_run_log(box_repo)
+    if last is None:
         return ""
     # Журнал обхода растет до мегабайт, а нужна одна строка: читаем хвост.
     try:
-        with logs[-1].open("rb") as f:
+        with last.open("rb") as f:
             f.seek(0, 2)
             f.seek(max(0, f.tell() - 4096))
             lines = f.read().decode(errors="replace").splitlines()

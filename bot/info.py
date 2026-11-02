@@ -8,7 +8,7 @@ import threading
 import time
 from pathlib import Path
 
-from bot import db
+from bot import db, machine
 from bot.config import Settings
 
 # Запрос дословно из cmd_market старого бота: строка собирается в базе,
@@ -50,12 +50,6 @@ LOG_TAIL_BYTES = 3000
 LOG_READ_BYTES = 1 << 20
 
 
-def latest_run_log(box_repo: Path) -> Path | None:
-    logs = sorted((box_repo / "data" / "logs").glob("box_2*.log"),
-                  key=lambda p: p.stat().st_mtime)
-    return logs[-1] if logs else None
-
-
 def log_tail(path: Path, n: int) -> str:
     with path.open("rb") as f:
         f.seek(0, 2)
@@ -70,7 +64,7 @@ def log(settings: Settings, arg: str) -> str:
     if arg and not LOG_ARG.fullmatch(arg):
         return LOG_ARG_TEXT
     n = int(arg) if arg else LOG_DEFAULT
-    last = latest_run_log(settings.box_repo)
+    last = machine.latest_run_log(settings.box_repo)
     if last is None:
         return "Журналов прогона нет вовсе."
     return f"""Журнал {last.name}, последние {n} строк
