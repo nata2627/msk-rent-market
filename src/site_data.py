@@ -65,6 +65,40 @@ def drop_shares(conn) -> list[dict]:
                   key=lambda x: -x["share_pct"])
 
 
+def exit_prices(cur) -> dict[str, list]:
+    """Последняя цена ушедших объявлений: дневная средняя и скользящая за
+    семь календарных дней.
+
+    День ухода последний, когда объявление видели в выдаче. По дням
+    средняя гуляет на свою полосу, поэтому линия скользящая: окно из семи
+    дней по день включительно, объявления окна сложены вместе, а не
+    усреднены средние дней. Средняя и ошибка окна собираются из дневных
+    точно: сумма цен равна n * avg, разброс восстанавливается из ошибки
+    дня. Точка окна показывается, если в нем не меньше четырех дней уходов:
+    после пропущенных дней сбора и в начале ряда окно иначе держалось бы
+    на одном-двух днях."""
+    cur.execute("""select rooms_count, exit_date, exits, avg_price, avg_price_se
+                     from marts.exit_day
+                    where rooms_count in (1, 2) and exits >= %s
+                    order by rooms_count, exit_date""", (MIN_DISTRICT,))
+    days: dict[int, list] = {}
+    for r, d, n, avg, se in cur.fetchall():
+        days.setdefault(r, []).append((d, n, avg, se))
+    out: dict[str, list] = {"1": [], "2": []}
+    for r, rows in days.items():
+        for d, n_day, avg_day, _ in rows:
+            win = [x for x in rows if 0 <= (d - x[0]).days < 7]
+            point = [d.isoformat(), n_day, avg_day, None, None]
+            if len(win) >= 4:
+                n = sum(x[1] for x in win)
+                mean = sum(x[1] * x[2] for x in win) / n
+                # Квадраты отклонений от средней окна: внутри дня плюс между днями.
+                ss = sum((x[1] - 1) * x[1] * x[3] ** 2 + x[1] * (x[2] - mean) ** 2 for x in win)
+                point[3:] = [round(mean), round((ss / (n - 1) / n) ** 0.5)]
+            out[str(r)].append(point)
+    return out
+
+
 def rosstat_history(cur) -> dict[str, list]:
     cur.execute("""select rooms, to_char(period, 'YYYY-MM'), price::float8
                    from core.rosstat_rent where region = 'Москва' and period >= '2021-01-01'
@@ -119,6 +153,7 @@ def main() -> int:
             "districts": districts(cur),
             "survival": survival_curve(conn),
             "drops": drop_shares(conn),
+            "exit_prices": exit_prices(cur),
             "rosstat": rosstat_history(cur),
             "quality": quality(cur),
         }

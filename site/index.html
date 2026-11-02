@@ -77,6 +77,18 @@ a { color: var(--s1); }
     <span><i style="background:var(--s2)"></i>1-2 комнаты, одни и те же объявления, цепной</span>
     <span><i style="background:var(--s3)"></i>трешки, гедонический</span></div>
 
+  <h2>Средняя цена ушедших объявлений</h2>
+  <p>Последняя запрашиваемая цена объявления перед уходом с рынка, тысяч рублей в месяц, по дню, когда
+    его видели в выдаче последний раз. Линия скользящая средняя за семь дней, все ушедшие за окно вместе,
+    точки средние отдельных дней. Ушедшее объявление чаще всего значит сданную квартиру, но не всегда:
+    его могли и просто снять. Поправок на срок жизни и состав квартир нет. Полоса показывает 95% вокруг
+    средней. Уход засчитывается после трех собранных дней отсутствия, поэтому ряд отстает от даты данных на
+    несколько дней. Точка линии ставится, если в окне не меньше четырех дней уходов. Ряд начинается с панели, 22.09.2026, раньше уходов не видно.</p>
+  <div class="chart" id="exits"></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>однокомнатная</span>
+    <span><i style="background:var(--s2)"></i>двухкомнатная</span></div>
+  <p class="note" id="exitsnote"></p>
+
   <h2>Медиана цены за метр по районам</h2>
   <p>Однушки и двушки, рублей за квадратный метр в месяц. Район показан, если в нем не меньше десяти объявлений.</p>
   <div class="chart" id="map"></div>
@@ -362,6 +374,41 @@ function qualityChart(data) {
     `и в половине из них не хватает ${q.shortfall_median} объявл. или меньше: площадка сама заявляет число неточно.`;
 }
 
+function exitsChart(data) {
+  const f = frame("exits", 300);
+  const colors = {"1": css("--s1"), "2": css("--s2")};
+  const ser = {}, roll = {};
+  for (const k of ["1", "2"]) {
+    ser[k] = data.exit_prices[k].map(([d, n, avg, ravg, rse]) =>
+      ({d: parseD(d), n, avg: avg / 1000, r: ravg === null ? null : ravg / 1000,
+        lo: ravg === null ? null : (ravg - 1.96 * rse) / 1000, hi: ravg === null ? null : (ravg + 1.96 * rse) / 1000}));
+    roll[k] = ser[k].filter(d => d.r !== null);
+  }
+  const all = [...ser["1"], ...ser["2"]];
+  const x = d3.scaleTime().domain(d3.extent(all, d => d.d)).range([0, f.iw]);
+  const y = d3.scaleLinear().domain([d3.min(all, d => d.avg) * 0.95, d3.max(all, d => d.avg) * 1.02]).nice().range([f.ih, 0]);
+  axes(f, x, y, d3.timeFormat("%d.%m"), d => d);
+  for (const k of ["1", "2"]) {
+    f.g.selectAll("circle.e" + k).data(ser[k]).join("circle").attr("class", "e" + k)
+      .attr("cx", d => x(d.d)).attr("cy", d => y(d.avg)).attr("r", 2).attr("fill", colors[k]).attr("opacity", 0.35);
+    f.g.append("path").datum(roll[k]).attr("fill", colors[k]).attr("opacity", 0.18)
+      .attr("d", d3.area().x(d => x(d.d)).y0(d => y(d.lo)).y1(d => y(d.hi)));
+    f.g.append("path").datum(roll[k]).attr("fill", "none").attr("stroke", colors[k]).attr("stroke-width", 2)
+      .attr("d", d3.line().x(d => x(d.d)).y(d => y(d.r)));
+    const e = roll[k][roll[k].length - 1];
+    endLabel(f, x, y, e.d, e.r, (k === "1" ? "1к " : "2к ") + e.r.toFixed(1));
+  }
+  const by2 = new Map(ser["2"].map(d => [+d.d, d]));
+  const dates = ser["1"].map(d => d.d);
+  const row = (lab, d) => !d ? "" : `${lab}: за 7 дней ` + (d.r === null ? "мало дней" : `${d.r.toFixed(1)} [${d.lo.toFixed(1)}; ${d.hi.toFixed(1)}]`) +
+    `, за день ${d.avg.toFixed(1)}, ушло ${d.n}`;
+  crosshair(f, x, dates, i => `<b>${d3.timeFormat("%d.%m.%Y")(dates[i])}</b><br>${row("1к", ser["1"][i])}<br>${row("2к", by2.get(+dates[i]))}`);
+  const span = k => { const a = roll[k][0], b = roll[k][roll[k].length - 1];
+    return `${k}к ${a.r.toFixed(1)} → ${b.r.toFixed(1)} (${((b.r / a.r - 1) * 100).toFixed(1).replace("-", "−")}%)`; };
+  document.getElementById("exitsnote").textContent =
+    `Скользящая средняя от первой точки к последней, тысяч рублей: ${span("1")}; ${span("2")}.`;
+}
+
 function render(data) {
   const dd = parseD(data.data_date);
   const age = Math.floor((Date.now() - dd) / 86400000);
@@ -374,6 +421,7 @@ function render(data) {
   }
   forecastChart(data);
   indexChart(data);
+  if (data.exit_prices) exitsChart(data);
   mapChart(data);
   survChart(data);
   barsChart("drops", data.drops.filter(d => d.seller !== "не указан"), d => d.seller, d => d.share_pct,

@@ -11,10 +11,18 @@ with e as (
       and not coalesce(s.is_duplicate, false)
       and not coalesce(s.is_room_share, false)
       and not coalesce(s.is_price_outlier, false))
+-- Средняя рядом с медианой: медиана цены липнет к круглым 60 и 80 тысячам
+-- и неделями стоит на месте, средняя шевелится и вместе со своей
+-- стандартной ошибкой показывает, различим ли сдвиг. Цена последняя
+-- перед уходом, без поправок на срок жизни: так задуман этот ряд.
 select d as exit_date, rooms_count::smallint as rooms_count, count(*) as exits,
-       percentile_disc(0.5) within group (order by price)::int as med_price
+       percentile_disc(0.5) within group (order by price)::int as med_price,
+       round(avg(price))::int as avg_price,
+       round(stddev_samp(price) / sqrt(count(*)))::int as avg_price_se
 from e group by 1, 2
 union all
 select d, 0::smallint, count(*),
-       percentile_disc(0.5) within group (order by price)::int
+       percentile_disc(0.5) within group (order by price)::int,
+       round(avg(price))::int,
+       round(stddev_samp(price) / sqrt(count(*)))::int
 from e group by 1
