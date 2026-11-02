@@ -13,6 +13,8 @@ import sys
 import time
 
 from telegram import LinkPreviewOptions, Update
+import httpx
+from telegram.request import HTTPXRequest
 from telegram.ext import Application, ContextTypes, MessageHandler, TypeHandler, filters
 
 from bot import config, status
@@ -24,6 +26,13 @@ from bot.render import render
 log = logging.getLogger("bot")
 
 ALLOWED_UPDATES = ["message", "callback_query"]
+
+# httpx по умолчанию закрывает соединение после 5 с простоя, и ответ на
+# первое нажатие после паузы платил за новое подключение к телеграму:
+# замер 02.11.2026 на getMe 0,65-0,76 с против 0,16 с на открытом. Человек
+# в боте почти всегда делает паузу дольше 5 с, поэтому соединение держится
+# пять минут.
+KEEPALIVE_S = 300
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
 
@@ -95,6 +104,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     async with context.bot_data["locks"](chat):
         replies = await guarded(handle_message, settings, chat, text, msg.date.timestamp(),
                                 time.time(), note, label=text)
+        thought = time.monotonic() - started
         for r in replies:
             await send(context, chat, r)
     if replies:
@@ -104,7 +114,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         spent = time.monotonic() - started
         age = time.time() - msg.date.timestamp()
         note(f"ответ в чат {chat}: {replies[0].text.splitlines()[0]} "
-             f"| обработка {spent:.3f} с, возраст {age:.0f} с")
+             f"| обработка {spent:.3f} с (логика {thought:.3f}, отправка {spent - thought:.3f}), "
+             f"возраст {age:.0f} с")
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -131,7 +142,11 @@ async def stop_pulse(app: Application) -> None:
 def build(settings: config.Settings) -> Application:
     # concurrent_updates: разные чаты не ждут друг друга, а порядок внутри
     # одного чата держит ChatLocks.
-    app = (Application.builder().token(settings.token).concurrent_updates(True)
+    request = HTTPXRequest(connection_pool_size=8, httpx_kwargs={
+        "limits": httpx.Limits(max_connections=8, max_keepalive_connections=8,
+                               keepalive_expiry=KEEPALIVE_S)})
+    app = (Application.builder().token(settings.token).request(request)
+           .concurrent_updates(True)
            .post_init(start_pulse).post_shutdown(stop_pulse).build())
     app.bot_data["settings"] = settings
     app.bot_data["locks"] = ChatLocks()
