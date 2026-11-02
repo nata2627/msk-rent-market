@@ -34,8 +34,11 @@ done
 [ -d "$REPO/data/daily.lock" ] && { say "Срез идет больше часа после 14:00, хвост пропускаю"; exit 0; }
 
 say "Витрина"
+# Индекс цен берётся из rent_msk: его каждый день пересчитывает daily.sh, а
+# в rent_site он попадает только с ручным пушем. Коммитить его ещё и здесь
+# нельзя, две истории одного файла ломали бы pull --rebase.
 if git -C "$SITE" pull -q --rebase --autostash \
-  && RESULTS_DIR="$SITE/results" SITE_OUT="$SITE/site/data/site.json" "$REPO/.venv/bin/python" -m src.site_data; then
+  && RESULTS_DIR="$SITE/results" INDEX_DIR="$REPO/results" SITE_OUT="$SITE/site/data/site.json" "$REPO/.venv/bin/python" -m src.site_data; then
   git -C "$SITE" add site/data/site.json results/price_model.json results/price_runs.csv 2>/dev/null
   if git -C "$SITE" diff --cached --quiet; then
     say "Нечего выгружать"

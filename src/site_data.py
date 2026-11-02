@@ -32,6 +32,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # отдельного клона репозитория. Поэтому оба пути можно переопределить.
 OUT = Path(os.environ.get("SITE_OUT", ROOT / "site" / "data" / "site.json"))
 RESULTS = Path(os.environ.get("RESULTS_DIR", ROOT / "results"))
+# Индекс цен пересчитывается каждый день на машине сбора, а остальные
+# результаты лежат в клоне. Отдельный путь не даёт смешать их в одном коммите.
+INDEX_DIR = Path(os.environ.get("INDEX_DIR", RESULTS))
 MIN_DISTRICT = 10
 MIN_RISK = 5
 MIN_SHARE = 50
@@ -161,14 +164,14 @@ def main() -> int:
     payload["forecast"] = {"chosen": fc["decision"]["chosen"],
                            "last_month": fc["last_month"],
                            "series": {k: fc["forecast"][f"nominal_{k}"] for k in ("1", "2")}}
-    ix = json.loads((RESULTS / "panel_index.json").read_text())
+    ix = json.loads((INDEX_DIR / "panel_index.json").read_text())
     payload["panel_index"] = {
         "hedonic": [[p["date"], p["index"], p["lo95"], p["hi95"]] for p in ix["hedonic"]],
         "chain": [[ix["hedonic"][0]["date"], 100.0]] + [[p["date"], p["index"]] for p in ix["chain"]],
     }
     # Трешки отдельным рядом: до 12.10 точки раз в неделю, у Росстата
     # ряда трешек нет, поэтому прогноза для них на витрине нет.
-    ix3_path = RESULTS / "panel_index_3.json"
+    ix3_path = INDEX_DIR / "panel_index_3.json"
     if ix3_path.exists():
         ix3 = json.loads(ix3_path.read_text())
         payload["panel_index"]["hedonic3"] = [[p["date"], p["index"], p["lo95"], p["hi95"]]
