@@ -178,6 +178,24 @@ def test_цена_словами(settings, world, monkeypatch):
     assert out.startswith("Типичная 2к 45 м2, Хамовники\n98 тыс в месяц (80%: 85-112)")
 
 
+@pytest.mark.parametrize("arg", ["80 тыс", "80", "80тыс", "80 000", "80000 руб", "80 т."])
+def test_цена_одним_числом_ставит_потолок(settings, world, arg):
+    out = text_of(ask(settings, f"/price {arg}"))
+    assert out.startswith("Принято: price = 80\n")
+    assert filters.load(settings, "42")["price"] == "80"
+
+
+def test_цена_одним_числом_гостю_в_его_фильтр(settings, world):
+    ask(settings, "/price 77 тыс", chat="7")
+    assert filters.load(settings, "7")["price"] == "77"
+    assert "price" not in filters.load(settings, "42")
+
+
+def test_цена_одним_числом_вне_границ(settings, world):
+    assert text_of(ask(settings, "/price 5")).startswith("Не похоже на правду")
+    assert "price" not in filters.load(settings, "42")
+
+
 @pytest.mark.parametrize("value,want", [
     (None, ""), (True, "t"), (False, "f"), (45.0, "45"), (45.5, "45.5"),
     (Decimal("12.30"), "12.30"), (datetime.date(2026, 11, 2), "2026-11-02"), (7, "7"),

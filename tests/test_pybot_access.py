@@ -129,9 +129,12 @@ def test_help_владелице_и_гостю_разный(settings):
 
 
 def test_тексты_help_дословно_из_старого_бота():
+    # Кроме строки про потолок цены через /price: ее у старого бота нет.
     src = (ROOT / "scripts" / "box_bot.sh").read_text()
-    assert commands.HELP_OWNER in src
-    assert commands.HELP_GUEST in src
+    added = "/price 77 — потолок цены в подборе, в тысячах\n"
+    for text in (commands.HELP_OWNER, commands.HELP_GUEST):
+        assert added in text
+        assert text.replace(added, "") in src
 
 
 def test_отказ_гостю_называет_только_доступное():
