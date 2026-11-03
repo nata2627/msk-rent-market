@@ -194,6 +194,5 @@ def test_меню_раз_в_сутки(tmp_path):
 def test_перенесенные_команды_не_числятся_в_переносе():
     done = {"/market", "/рынок", "/log", "/журнал", "/pulse", "/итог"}
     assert done <= commands.HANDLERS.keys()
-    assert not done & commands.PENDING
     for cmd in done:
         assert re.search(rf"(^|[|( ]){re.escape(cmd)}[|)]", OLD, re.M)

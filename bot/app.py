@@ -23,8 +23,9 @@ from telegram.ext import (Application, CallbackQueryHandler, ContextTypes, Messa
 
 from bot import config, menu, status
 from bot.access import handle_button, handle_message
+from bot.commands import TIMEOUT_S, parse
 from bot.actions import Action, Answer, Card, Keyboard, Reply
-from bot.liveness import ChatLocks, Pulse, guarded
+from bot.liveness import HANDLER_TIMEOUT_S, ChatLocks, Pulse, guarded
 from bot.photos import Photos
 from bot.render import render
 
@@ -201,6 +202,10 @@ def first_line(actions: list[Action]) -> str:
     return ""
 
 
+def timeout_for(text: str) -> float:
+    return TIMEOUT_S.get(parse(text).cmd, HANDLER_TIMEOUT_S)
+
+
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     started = time.monotonic()
     settings: config.Settings = context.bot_data["settings"]
@@ -211,7 +216,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     text = (msg.text or "").replace("\t", " ").replace("\n", " ")
     async with context.bot_data["locks"](chat):
         replies = await guarded(handle_message, settings, chat, text, msg.date.timestamp(),
-                                time.time(), note, label=text)
+                                time.time(), note, label=text, timeout=timeout_for(text))
         thought = time.monotonic() - started
         await execute(context, chat, replies)
     if replies:

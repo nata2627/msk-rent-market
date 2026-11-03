@@ -45,13 +45,21 @@ class Facts:
     last_line: str
 
 
+SEG_SQL = """
+    select count(distinct s.offer_id)
+      from raw.offer_snapshot s
+      join core.offer o using (source, offer_id)
+     where s.snapshot_date = current_date and o.rooms_count in (1, 2)"""
+
+
+def gather_seg() -> int:
+    """Собрано за сегодня по сегменту, однушки и двушки."""
+    return db.scalar(SEG_SQL) or 0
+
+
 def gather(settings) -> Facts:
     return Facts(
-        seg=db.scalar("""
-            select count(distinct s.offer_id)
-              from raw.offer_snapshot s
-              join core.offer o using (source, offer_id)
-             where s.snapshot_date = current_date and o.rooms_count in (1, 2)""") or 0,
+        seg=gather_seg(),
         covered=db.scalar("""
             select coalesce(string_agg(distinct b.rooms, ', '), 'нет')
               from raw.collection_run r join raw.bucket b using (run_id)

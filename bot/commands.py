@@ -6,9 +6,11 @@ scripts/box_bot.sh дословно.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from datetime import date
 
-from bot import cards, filters, info, status, words
+from bot import cards, filters, heal, info, status, words
 from bot.actions import Action, Answer, Card, Ctx, Reply  # noqa: F401
 
 
@@ -104,6 +106,20 @@ def cmd_ask(ctx: Ctx, p: Parsed) -> None:
     words.cmd_ask(ctx, p.tail)
 
 
+DAY = re.compile(r"20[0-9][0-9]-[0-1][0-9]-[0-3][0-9]")
+
+
+def cmd_catchup(ctx: Ctx, p: Parsed) -> None:
+    # Дата проверяется образцом, а не подставляется: она уходит доводом
+    # в box_daily.sh.
+    if not p.arg:
+        heal.cmd_catchup(ctx, date.today().isoformat())
+    elif DAY.fullmatch(p.arg):
+        heal.cmd_catchup(ctx, p.arg)
+    else:
+        ctx.reply("Дата должна выглядеть как 2026-10-22. Без даты беру сегодня.")
+
+
 # Команда и ее русские имена ведут в один обработчик, как в dispatch
 # старого бота.
 HANDLERS = {
@@ -130,15 +146,19 @@ HANDLERS = {
     "/цена": cmd_price,
     "/ask": cmd_ask,
     "/вопрос": cmd_ask,
+    "/clean": heal.cmd_clean,
+    "/чистка": heal.cmd_clean,
+    "/unlock": heal.cmd_unlock,
+    "/замок": heal.cmd_unlock,
+    "/catchup": cmd_catchup,
+    "/догнать": cmd_catchup,
+    "/dbup": heal.cmd_dbup,
+    "/база": heal.cmd_dbup,
 }
 
-# Еще не перенесенные команды. Пока бот живет только на тестовом токене,
-# честнее сказать это прямо, чем ответить «команды нет». Список пустеет
-# по ходу этапа 2 и исчезает вместе с ним.
-PENDING = {
-    "/clean", "/чистка", "/unlock", "/замок", "/catchup", "/догнать",
-    "/dbup", "/база",
-}
+# Обычный срок обработчика минута. /dbup ждет docker compose до 120 с и
+# потом базу, как старый бот, и под минутой ответил бы «не успела».
+TIMEOUT_S = {"/dbup": 180, "/база": 180}
 
 
 def dispatch(ctx: Ctx, text: str) -> list[Action]:
@@ -149,8 +169,6 @@ def dispatch(ctx: Ctx, text: str) -> list[Action]:
     elif not p.cmd.startswith("/"):
         # Подбор словами: «двушка до 90 у метро с котом».
         words.cmd_phrase(ctx, text)
-    elif p.cmd in PENDING:
-        ctx.reply(f"Команда «{p.cmd}» еще переносится на новый бот")
     else:
         ctx.reply(f"Команды «{p.cmd}» нет. Что умею — /help")
     return ctx.replies

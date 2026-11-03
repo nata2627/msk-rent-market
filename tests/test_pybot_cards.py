@@ -343,7 +343,7 @@ def test_состояние_карусели_в_формате_старого_б
 
 def test_перенесенные_команды_не_числятся_в_переносе():
     for cmd in ("/flats", "/подбор", "/saved", "/отложенные"):
-        assert cmd in commands.HANDLERS and cmd not in commands.PENDING
+        assert cmd in commands.HANDLERS
 
 
 # ---------------------------------------------------------------------
