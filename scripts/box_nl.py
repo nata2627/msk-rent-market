@@ -425,28 +425,29 @@ def take_quota(chat: str, role: str) -> bool:
     return True
 
 
-def alarm(err: str) -> None:
+def alarm(err: str, env: dict | None = None) -> None:
     subprocess.run(["bash", str(REPO / "scripts" / "box_notify.sh"), "gigachat-key",
                     f"GigaChat не принял ключ\n{time.strftime('%d.%m, %H:%M')}\n\n{err}. "
                     "Фразы бот разбирает правилами, кнопки работают. Ключ перевыпускается "
                     "в кабинете developers.sber.ru и кладется в .env как GIGACHAT_AUTH_KEY."],
-                   capture_output=True, timeout=30)
+                   capture_output=True, timeout=30, env=env)
 
 
-def cmd_apply(path: str, chat: str, role: str, text: str) -> int:
-    """Пишет фильтры и печатает одну строку состояния для box_bot.sh.
+def apply(path: str, chat: str, role: str, text: str, districts, alarm=alarm) -> tuple[str, list[str]]:
+    """Пишет фильтры; строка состояния и то, что понять не удалось.
 
     ok <кто разобрал>    фильтры записаны, прежние в <файл>.prev
     limit <число>         лимит фраз на сегодня выбран
     none                  ничего не разобрано, фильтры не тронуты
-    Следом строками «? ...» идет то, что понять не удалось.
+
+    districts это функция: справочник нужен только после проверки лимита.
     """
     if not take_quota(chat, role):
-        print(f"limit {LIMITS.get(role, 0)}")
-        return 0
-    res = parse(text[:300], districts_from_db())
+        return f"limit {LIMITS.get(role, 0)}", []
+    res = parse(text[:300], districts())
     if (res.get("error") or "").startswith("key:"):
         alarm(res["error"][5:])
+    status = "none"
     if res["filters"]:
         f = Path(path)
         keep = {}
@@ -455,11 +456,17 @@ def cmd_apply(path: str, chat: str, role: str, text: str) -> int:
             Path(path + ".prev").write_text(old)
             keep = dict(x.split("=", 1) for x in old.splitlines() if "=" in x)
         f.write_text("\n".join(file_lines(res["filters"], keep)) + "\n")
-        print(f"ok {res['source']}")
-    else:
-        print("none")
-    for u in res["unknown"]:
-        print("? " + " ".join(str(u).split()))
+        status = f"ok {res['source']}"
+    return status, [" ".join(str(u).split()) for u in res["unknown"]]
+
+
+def cmd_apply(path: str, chat: str, role: str, text: str) -> int:
+    """Печатает строку состояния для box_bot.sh, следом «? ...» на каждое
+    непонятое."""
+    status, unknown = apply(path, chat, role, text, districts_from_db)
+    print(status)
+    for u in unknown:
+        print("? " + u)
     return 0
 
 

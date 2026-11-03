@@ -53,6 +53,7 @@ class Ctx:
     chat: str
     role: str  # owner или guest; чужой сюда не доходит
     replies: list[Action] = field(default_factory=list)
+    note: Callable[[str], None] = lambda text: None  # строка в журнал бота
 
     def reply(self, text: str, keyboard: Keyboard | None = None) -> None:
         self.replies.append(Reply(text, keyboard))

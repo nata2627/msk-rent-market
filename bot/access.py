@@ -65,7 +65,7 @@ def handle_message(settings: Settings, chat: str, text: str, sent_at: float,
         note(f"гость {chat} просил «{text}», отказано")
         return [Reply(GUEST_REFUSAL)]
     note(f"команда от {role}: {text}")
-    return dispatch(Ctx(settings, chat, role), text)
+    return dispatch(Ctx(settings, chat, role, note=note), text)
 
 
 def handle_button(settings: Settings, chat: str, data: str, msg_id: str, note) -> list[Action]:
@@ -76,7 +76,7 @@ def handle_button(settings: Settings, chat: str, data: str, msg_id: str, note) -
         note(f"чужой чат {chat}, пропускаю кнопку: {data}")
         return []
     note(f"кнопка: {data}")
-    replies = press(Ctx(settings, chat, role), data, msg_id)
+    replies = press(Ctx(settings, chat, role, note=note), data, msg_id)
     if replies == [Answer(UNKNOWN_BUTTON)]:
         note(f"неизвестная кнопка: {data}")
     return replies

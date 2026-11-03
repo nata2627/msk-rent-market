@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from bot import cards, filters, info, status
+from bot import cards, filters, info, status, words
 from bot.actions import Action, Answer, Card, Ctx, Reply  # noqa: F401
 
 
@@ -95,6 +95,15 @@ def cmd_filter(ctx: Ctx, p: Parsed) -> None:
     filters.cmd_filter(ctx, p.arg.lower(), rest[1] if len(rest) > 1 else "")
 
 
+def cmd_price(ctx: Ctx, p: Parsed) -> None:
+    # Хвостом целиком: в нем ссылка или «2к 45 м2 район».
+    words.cmd_price(ctx, p.tail)
+
+
+def cmd_ask(ctx: Ctx, p: Parsed) -> None:
+    words.cmd_ask(ctx, p.tail)
+
+
 # Команда и ее русские имена ведут в один обработчик, как в dispatch
 # старого бота.
 HANDLERS = {
@@ -117,13 +126,16 @@ HANDLERS = {
     "/отбор": cmd_filter,
     "/undo": filters.cmd_undo,
     "/вернуть": filters.cmd_undo,
+    "/price": cmd_price,
+    "/цена": cmd_price,
+    "/ask": cmd_ask,
+    "/вопрос": cmd_ask,
 }
 
 # Еще не перенесенные команды. Пока бот живет только на тестовом токене,
 # честнее сказать это прямо, чем ответить «команды нет». Список пустеет
 # по ходу этапа 2 и исчезает вместе с ним.
 PENDING = {
-    "/price", "/цена", "/ask", "/вопрос",
     "/clean", "/чистка", "/unlock", "/замок", "/catchup", "/догнать",
     "/dbup", "/база",
 }
@@ -134,8 +146,11 @@ def dispatch(ctx: Ctx, text: str) -> list[Action]:
     handler = HANDLERS.get(p.cmd)
     if handler:
         handler(ctx, p)
-    elif p.cmd in PENDING or not p.cmd.startswith("/"):
-        ctx.reply(f"Команда «{p.cmd or text}» еще переносится на новый бот")
+    elif not p.cmd.startswith("/"):
+        # Подбор словами: «двушка до 90 у метро с котом».
+        words.cmd_phrase(ctx, text)
+    elif p.cmd in PENDING:
+        ctx.reply(f"Команда «{p.cmd}» еще переносится на новый бот")
     else:
         ctx.reply(f"Команды «{p.cmd}» нет. Что умею — /help")
     return ctx.replies
