@@ -174,6 +174,12 @@ https://www.cian.ru/rent/flat/1000/"""
         assert piece in OLD
 
 
+def test_гостю_карточка_без_баллов(settings, base):
+    c = card_of(open_flats(settings, chat="7"))
+    assert "балл" not in c.caption
+    assert c.caption.startswith("Вариант 1 из 3\nРайон 0\n1 комн., 40 м2\n")
+
+
 def test_столбцы_карточки_дословно(settings):
     old = OLD.split('CARD_COLS="')[1].split('"\n')[0]
     assert cards.CARD_COLS.replace("%%", "%") == old

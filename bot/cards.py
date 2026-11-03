@@ -166,7 +166,10 @@ def keyboard(mode: str, is_saved: bool, price: str, rooms: str) -> Keyboard:
     ]
 
 
-def caption(head: str, r: Row, is_saved: bool, tail: str) -> str:
+def caption(head: str, r: Row, is_saved: bool, tail: str, role: str = "owner") -> str:
+    # Балл считается по весам владелицы (что важно ей), гостю он ничего
+    # не говорит о его квартире.
+    score = f" · {r.score} баллов" if role == "owner" else ""
     if not r.active:
         tail += "\n\nСнято с публикации, по ссылке может не открыться."
     entry = ""
@@ -174,7 +177,7 @@ def caption(head: str, r: Row, is_saved: bool, tail: str) -> str:
         entry = f"\n\nПри заселении {r.entry} руб\n" + r.parts.replace("~", "\n")
     star = "\n★ отложено" if is_saved else ""
     return f"""{head}
-{r.district} · {r.score} баллов
+{r.district}{score}
 {r.rooms} комн., {r.area} м2
 {r.price} руб/мес
 метро {r.metro} мин пешком, животные {filters.pets_human(r.pets)}{entry}{star}{tail}
@@ -224,7 +227,7 @@ def show(ctx: Ctx, mode: str, idx: int, msg_id: str = "") -> bool:
     is_saved = row.offer_id in saved(s, chat)
     f = filters.load(s, chat)
     ctx.replies.append(Card(
-        caption=caption(head, row, is_saved, tail),
+        caption=caption(head, row, is_saved, tail, ctx.role),
         keyboard=keyboard(mode, is_saved, f.get("price", ""), f.get("rooms", "")),
         photo=row.photo, msg_id=msg_id, prefetch=prefetch,
         on_sent=partial(remember, s, chat, mode, idx, row.offer_id),
