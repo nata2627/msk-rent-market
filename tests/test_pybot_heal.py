@@ -8,6 +8,7 @@
 import os
 import re
 import time
+from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -194,10 +195,19 @@ def test_catchup_запускает_обход(prod, machine):
     assert machine.detached == [[str(prod.box_repo / "scripts" / "box_daily.sh"), "narrow", day]]
 
 
-@pytest.mark.parametrize("arg", ["вчера", "2026-11-2", "2026-11-02;id", "$(id)", "1999-01-01"])
+@pytest.mark.parametrize("arg,back", [("сегодня", 0), ("вчера", 1), ("Позавчера", 2)])
+def test_catchup_понимает_слова_дня(prod, machine, arg, back):
+    day = (date.today() - timedelta(days=back)).isoformat()
+    out = text_of(ask(prod, f"/catchup {arg}"))
+    assert out.startswith(f"Обход за {day} запущен")
+    assert machine.detached == [[str(prod.box_repo / "scripts" / "box_daily.sh"), "narrow", day]]
+
+
+@pytest.mark.parametrize("arg", ["завтра", "2026-11-2", "2026-11-02;id", "$(id)", "1999-01-01"])
 def test_catchup_дата_только_по_образцу(prod, machine, arg):
     out = text_of(ask(prod, f"/catchup {arg}"))
-    assert out == "Дата должна выглядеть как 2026-10-22. Без даты беру сегодня."
+    assert out == ("Дата должна выглядеть как 2026-10-22, или скажи вчера, позавчера. "
+                   "Без даты беру сегодня.")
     assert machine.detached == []
 
 

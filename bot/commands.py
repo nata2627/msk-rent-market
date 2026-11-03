@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from bot import cards, filters, heal, info, status, words
 from bot.actions import Action, Answer, Card, Ctx, Reply  # noqa: F401
@@ -107,17 +107,23 @@ def cmd_ask(ctx: Ctx, p: Parsed) -> None:
 
 
 DAY = re.compile(r"20[0-9][0-9]-[0-1][0-9]-[0-3][0-9]")
+DAYS_BACK = {"сегодня": 0, "вчера": 1, "позавчера": 2}
 
 
 def cmd_catchup(ctx: Ctx, p: Parsed) -> None:
     # Дата проверяется образцом, а не подставляется: она уходит доводом
-    # в box_daily.sh.
-    if not p.arg:
+    # в box_daily.sh. Слова дня считаются здесь же, в box_daily.sh
+    # попадает уже дата.
+    arg = p.arg.lower()
+    if not arg:
         heal.cmd_catchup(ctx, date.today().isoformat())
-    elif DAY.fullmatch(p.arg):
-        heal.cmd_catchup(ctx, p.arg)
+    elif arg in DAYS_BACK:
+        heal.cmd_catchup(ctx, (date.today() - timedelta(days=DAYS_BACK[arg])).isoformat())
+    elif DAY.fullmatch(arg):
+        heal.cmd_catchup(ctx, arg)
     else:
-        ctx.reply("Дата должна выглядеть как 2026-10-22. Без даты беру сегодня.")
+        ctx.reply("Дата должна выглядеть как 2026-10-22, или скажи вчера, позавчера. "
+                  "Без даты беру сегодня.")
 
 
 # Команда и ее русские имена ведут в один обработчик, как в dispatch
