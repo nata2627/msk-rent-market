@@ -178,7 +178,8 @@ def test_цена_словами(settings, world, monkeypatch):
     assert out.startswith("Типичная 2к 45 м2, Хамовники\n98 тыс в месяц (80%: 85-112)")
 
 
-@pytest.mark.parametrize("arg", ["80 тыс", "80", "80тыс", "80 000", "80000 руб", "80 т."])
+@pytest.mark.parametrize("arg", ["80 тыс", "80", "80тыс", "80 000", "80000 руб", "80 т.", "80 тысяч",
+                                 "80000 рублей", "80 тыс. руб.", "80 тысяч рублей", "80 000 ₽"])
 def test_цена_одним_числом_ставит_потолок(settings, world, arg):
     out = text_of(ask(settings, f"/price {arg}"))
     assert out.startswith("Принято: price = 80\n")
