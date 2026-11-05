@@ -422,31 +422,33 @@ HELP = """Умею отвечать на такие вопросы:
 свежие ли данные"""
 
 
-def cmd_answer(chat: str, role: str, text: str) -> int:
-    """Печатает готовый ответ. Первая строка служебная для журнала бота:
-    ok <функция>, none, limit, error."""
+def answer(chat: str, role: str, text: str, districts, sql=run_sql, alarm=box_nl.alarm) -> str:
+    """Готовый ответ. Первая строка служебная для журнала бота:
+    ok <функция>, none, limit, error.
+
+    districts это функция: справочник нужен только после проверки лимита.
+    """
     if not box_nl.take_quota(chat, role):
-        print(f"limit\nВопросов на сегодня больше не разбираю, лимит {box_nl.LIMITS.get(role, 0)} в сутки.")
-        return 0
+        return f"limit\nВопросов на сегодня больше не разбираю, лимит {box_nl.LIMITS.get(role, 0)} в сутки."
     try:
-        res = call(text[:300], box_nl.districts_from_db(), bot_model())
+        res = call(text[:300], districts(), bot_model())
     except box_nl.KeyRejected as e:
-        box_nl.alarm(str(e))
-        print("error\nМодель сейчас недоступна, попробуйте позже.")
-        return 0
+        alarm(str(e))
+        return "error\nМодель сейчас недоступна, попробуйте позже."
     except (OSError, ValueError, KeyError, IndexError, TypeError) as e:
-        print(f"error {type(e).__name__}\nМодель не ответила вовремя, попробуйте еще раз.")
-        return 0
+        return f"error {type(e).__name__}\nМодель не ответила вовремя, попробуйте еще раз."
     if res["fn"] == "none":
-        print("none\nНе нашел, каким запросом к данным на это ответить.\n\n" + HELP)
-        return 0
+        return "none\nНе нашел, каким запросом к данным на это ответить.\n\n" + HELP
     try:
-        body = render(res["fn"], res["args"], run_sql(res["fn"], res["args"]))
+        body = render(res["fn"], res["args"], sql(res["fn"], res["args"]))
     except (RuntimeError, OSError, subprocess.SubprocessError) as e:
-        print(f"error sql\nБаза не ответила: {str(e)[:100]}")
-        return 0
+        return f"error sql\nБаза не ответила: {str(e)[:100]}"
     rej = f"\n\nНе учел: {', '.join(res['rejected'])}" if res["rejected"] else ""
-    print(f"ok {res['fn']}\n{body}{rej}")
+    return f"ok {res['fn']}\n{body}{rej}"
+
+
+def cmd_answer(chat: str, role: str, text: str) -> int:
+    print(answer(chat, role, text, box_nl.districts_from_db))
     return 0
 
 
