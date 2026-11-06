@@ -320,11 +320,13 @@ function survChart(data) {
   crosshair(f, x, s.map(d => d.age), i => `<b>${s[i].age} дн.</b><br>висит ${(s[i].surv * 100).toFixed(1)}%<br>в группе риска ${ru(s[i].at_risk)}`);
 }
 
-function barsChart(id, rows, label, value, fmtV, h) {
+// ref: {value, text} — пунктирная линия порога, подпись под столбцами.
+function barsChart(id, rows, label, value, fmtV, h, ref) {
   const f = frame(id, h || (rows.length * 36 + 36));
   f.m.l = 0;
   const lw = 120;
-  const x = d3.scaleLinear().domain([0, d3.max(rows, value) * 1.15]).range([0, f.iw - lw]);
+  const top = Math.max(d3.max(rows, value), ref ? ref.value : 0);
+  const x = d3.scaleLinear().domain([0, top * 1.15]).range([0, f.iw - lw]);
   const y = d3.scaleBand().domain(rows.map(label)).range([0, f.ih]).padding(0.35);
   const g = f.g.append("g").attr("transform", `translate(${lw},0)`);
   g.selectAll("rect").data(rows).join("rect").attr("x", 0).attr("y", d => y(label(d)))
@@ -334,9 +336,23 @@ function barsChart(id, rows, label, value, fmtV, h) {
       showTip(f, `<b>${label(d)}</b><br>${fmtV(d)}`, px, py);
     })
     .on("mouseleave", () => f.tip.style("opacity", 0));
+  if (ref) {
+    // Линия под подписями значений: они стоят у концов столбцов, а порог
+    // обычно рядом с ними.
+    g.append("line").attr("x1", x(ref.value)).attr("x2", x(ref.value)).attr("y1", -4).attr("y2", f.ih + 4)
+      .attr("stroke", css("--ink2")).attr("stroke-width", 1.5).attr("stroke-dasharray", "4 3");
+    const nearEdge = x(ref.value) + 48 > f.iw - lw;
+    g.append("text").attr("x", x(ref.value)).attr("y", f.ih + 18)
+      .attr("text-anchor", nearEdge ? "end" : "middle")
+      .attr("fill", css("--ink2")).attr("font-size", 12).text(ref.text);
+  }
+  // С порогом значения стоят внутри конца столбца: снаружи они упирались
+  // бы в линию порога, которая обычно рядом.
   g.selectAll("text.v").data(rows).join("text").attr("class", "v")
-    .attr("x", d => x(value(d)) + 6).attr("y", d => y(label(d)) + y.bandwidth() / 2).attr("dy", "0.35em")
-    .attr("fill", css("--ink2")).attr("font-size", 12).text(d => fmtV(d).split(",")[0]);
+    .attr("x", d => x(value(d)) + (ref ? -8 : 6)).attr("y", d => y(label(d)) + y.bandwidth() / 2)
+    .attr("dy", "0.35em").attr("text-anchor", ref ? "end" : "start")
+    .attr("fill", css(ref ? "--surface" : "--ink2")).attr("font-size", 12)
+    .text(d => ref ? value(d).toFixed(1) + "%" : fmtV(d).split(",")[0]);
   f.g.selectAll("text.l").data(rows).join("text").attr("class", "l")
     .attr("x", lw - 8).attr("y", d => y(label(d)) + y.bandwidth() / 2).attr("dy", "0.35em")
     .attr("text-anchor", "end").attr("fill", css("--ink")).attr("font-size", 13).text(label);
@@ -427,7 +443,12 @@ function render(data) {
   barsChart("drops", data.drops.filter(d => d.seller !== "не указан"), d => d.seller, d => d.share_pct,
             d => `${d.share_pct.toFixed(1)}%, из ${ru(d.offers)} объявлений`);
   barsChart("drift", data.model_drift, d => "с " + d3.timeFormat("%d.%m")(parseD(d.week)), d => d.mape_pct,
-            d => `MAPE ${d.mape_pct.toFixed(1)}%, ${ru(d.n)} новых объявлений`);
+            d => `MAPE ${d.mape_pct.toFixed(1)}%, ${ru(d.n)} новых объявлений`,
+            data.model_drift.length * 36 + 48,
+            data.model.threshold_pct
+              ? {value: data.model.threshold_pct,
+                 text: `порог ${data.model.threshold_pct}%`}
+              : null);
   if (data.quality) qualityChart(data);
   document.getElementById("driftnote").textContent = data.model.threshold_pct
     ? `Порог тревоги ${data.model.threshold_pct}%.`
