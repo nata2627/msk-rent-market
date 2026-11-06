@@ -7,8 +7,8 @@ from bot.config import Settings
 # Журнала здесь намеренно нет: в нем пути, ошибки и устройство машины,
 # гостю это ничего не дает, а показывает лишнее.
 GUEST_COMMANDS = frozenset(
-    "/help /start /status /flats /saved /undo /market /filter /price /ask "
-    "/статус /подбор /рынок /фильтр /отбор /цена /отложенные /вернуть /вопрос".split()
+    "/help /start /status /flats /new /saved /undo /market /filter /price /ask "
+    "/статус /подбор /новое /рынок /фильтр /отбор /цена /отложенные /вернуть /вопрос".split()
 )
 
 # Бокс мог молчать сутки, и «догнать день», отправленное вчера, сегодня

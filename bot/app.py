@@ -21,7 +21,7 @@ from telegram.error import BadRequest, TelegramError
 from telegram.ext import (Application, CallbackQueryHandler, ContextTypes, MessageHandler,
                           TypeHandler, filters)
 
-from bot import config, menu, status
+from bot import config, menu, news, status
 from bot.access import handle_button, handle_message
 from bot.commands import TIMEOUT_S, parse
 from bot.actions import Action, Answer, Card, Keyboard, Reply
@@ -276,6 +276,31 @@ async def keep_menu(app: Application) -> None:
         await asyncio.sleep(MENU_CHECK_S)
 
 
+NEWS_CHECK_S = 600
+
+
+async def keep_news(app: Application) -> None:
+    """Сводка нового владелице, раз в день после среза.
+
+    Ждать окончания прогона по часам нельзя: срез идет от одного до трех
+    часов, а догон и вовсе когда придется. Поэтому раз в десять минут
+    спрашивается, готовы ли витрины, и это дешево.
+    """
+    settings = app.bot_data["settings"]
+    while True:
+        found = await guarded(news.check, settings, timeout=60, label="сводка нового")
+        if isinstance(found, tuple):
+            chat, day, ctx = found
+            try:
+                await execute(app, chat, ctx.replies)
+                news.mark_sent(settings, chat, day)
+                note(f"сводка нового за {day} ушла")
+            except TelegramError as e:
+                # День не помечен, через десять минут попробуем снова.
+                log.warning(f"сводка нового не ушла: {e}")
+        await asyncio.sleep(NEWS_CHECK_S)
+
+
 async def start_pulse(app: Application) -> None:
     await skip_backlog(app)
     pulse = Pulse(app.bot_data["settings"].state_dir / "pulse", on_beat=status.refresh_fresh)
@@ -285,10 +310,11 @@ async def start_pulse(app: Application) -> None:
     loop = asyncio.get_running_loop()
     app.bot_data["pulse"] = loop.create_task(pulse.run())
     app.bot_data["menu"] = loop.create_task(keep_menu(app))
+    app.bot_data["news"] = loop.create_task(keep_news(app))
 
 
 async def stop_pulse(app: Application) -> None:
-    for name in ("pulse", "menu"):
+    for name in ("pulse", "menu", "news"):
         task = app.bot_data.get(name)
         if task:
             task.cancel()

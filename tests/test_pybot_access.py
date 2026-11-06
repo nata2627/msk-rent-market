@@ -85,7 +85,8 @@ def test_гостю_просмотр_доступен(settings, cmd):
 def test_гостевой_список_как_у_старого_бота():
     src = (ROOT / "scripts" / "box_bot.sh").read_text()
     line = next(l for l in src.splitlines() if l.startswith("GUEST_COMMANDS="))
-    assert set(line.split('"')[1].split()) == access.GUEST_COMMANDS
+    # /new появилась 06.11, после переключения: у старого бота ее нет.
+    assert set(line.split('"')[1].split()) == access.GUEST_COMMANDS - {"/new", "/новое"}
 
 
 def test_протухшая_команда_не_выполняется(settings):
@@ -129,12 +130,16 @@ def test_help_владелице_и_гостю_разный(settings):
 
 
 def test_тексты_help_дословно_из_старого_бота():
-    # Кроме строки про потолок цены через /price: ее у старого бота нет.
+    # Кроме строк про потолок цены через /price и про /new: их у старого
+    # бота нет.
     src = (ROOT / "scripts" / "box_bot.sh").read_text()
-    added = "/price 77 — потолок цены в подборе, в тысячах\n"
+    added = ("/price 77 — потолок цены в подборе, в тысячах\n",
+             "/new — только новое под отбор за последний день\n")
     for text in (commands.HELP_OWNER, commands.HELP_GUEST):
-        assert added in text
-        assert text.replace(added, "") in src
+        for line in added:
+            assert line in text
+            text = text.replace(line, "")
+        assert text in src
 
 
 def test_отказ_гостю_называет_только_доступное():

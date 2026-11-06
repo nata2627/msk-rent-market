@@ -172,11 +172,11 @@ def test_pulse_боевой_бот_токен_не_подменяет(tmp_path, 
 # Меню и перенос
 # ---------------------------------------------------------------------
 
-def test_меню_как_у_box_tg_плюс_price_и_ask():
+def test_меню_как_у_box_tg_плюс_price_ask_и_new():
     spec = importlib.util.spec_from_file_location("box_tg", ROOT / "scripts" / "box_tg.py")
     box_tg = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(box_tg)
-    assert [c for c in menu.COMMANDS if c[0] not in ("price", "ask")] == box_tg.COMMANDS
+    assert [c for c in menu.COMMANDS if c[0] not in ("price", "ask", "new")] == box_tg.COMMANDS
     names = [c for c, _ in menu.COMMANDS]
     assert names.index("price") == names.index("market") + 1
     # Предел телеграма на описание команды 256 знаков, на имя 32.

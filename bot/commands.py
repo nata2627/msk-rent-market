@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from bot import cards, filters, heal, info, status, words
+from bot import cards, filters, heal, info, news, status, words
 from bot.actions import Action, Answer, Card, Ctx, Reply  # noqa: F401
 
 
@@ -32,6 +32,7 @@ def parse(text: str) -> Parsed:
 HELP_GUEST = """Что я умею
 
 /flats — подбор карточками, листается кнопками
+/new — только новое под отбор за последний день
 /saved — отложенные варианты
 /filter — ваши фильтры подбора, с кнопками
 /market — числа рынка за сегодня
@@ -50,6 +51,7 @@ HELP_OWNER = """Что я умею
 
 /status — что сейчас с панелью и машиной
 /flats — подбор карточками, листается кнопками
+/new — только новое под отбор за последний день
 /saved — отложенные варианты
 /filter — посмотреть и поменять фильтры подбора
 /market — числа рынка за сегодня
@@ -155,6 +157,8 @@ HANDLERS = {
     "/итог": cmd_pulse,
     "/flats": cards.cmd_flats,
     "/подбор": cards.cmd_flats,
+    "/new": news.cmd_new,
+    "/новое": news.cmd_new,
     "/saved": cards.cmd_saved,
     "/отложенные": cards.cmd_saved,
     "/filter": cmd_filter,

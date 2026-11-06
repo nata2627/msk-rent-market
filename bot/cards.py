@@ -160,6 +160,13 @@ def keyboard(mode: str, is_saved: bool, price: str, rooms: str) -> Keyboard:
              (mark(rooms == "1,2", "1-2к"), "cr12")],
             [("еще фильтры", "filters"), ("отложенные", "sv")],
         ]
+    if mode == "new":
+        # Цена и комнаты здесь не меняются: сводка нового посчитана по
+        # отбору, и правка с этой карточки молча увела бы в весь подбор.
+        return [
+            [("◀", "c<"), ("★ убрать" if is_saved else "★ отложить", "cs"), ("▶", "c>")],
+            [("весь подбор", "s"), ("отложенные", "sv")],
+        ]
     return [
         [("◀", "v<"), ("★ убрать" if is_saved else "★ вернуть", "vs"), ("▶", "v>")],
         [("к подбору", "s")],
@@ -187,6 +194,11 @@ def caption(head: str, r: Row, is_saved: bool, tail: str, role: str = "owner") -
 
 ORDER = "order by o.score desc, o.offer_id"
 
+# Новое это впервые увиденное в последний собранный день. День берется из
+# panel_day, а не из max(first_seen_date): в день, когда нового нет вовсе,
+# максимум показал бы вчерашнее под видом сегодняшнего.
+NEW_COND = "first_seen_date = (select max(snapshot_date) from marts.panel_day)"
+
 
 def show(ctx: Ctx, mode: str, idx: int, msg_id: str = "") -> bool:
     """Карточка номер idx в режиме mode; False, если такого варианта нет.
@@ -197,9 +209,11 @@ def show(ctx: Ctx, mode: str, idx: int, msg_id: str = "") -> bool:
         return False
     s, chat = ctx.settings, ctx.chat
     prefetch = ""
-    if mode == "pick":
+    if mode in ("pick", "new"):
         f = filters.load(s, chat)
         cond, params = filters.where(f)
+        if mode == "new":
+            cond += f" and {NEW_COND}"
         # Один запрос вместо трех у старого бота: всего вариантов через
         # окно, а вторая строка дает фото следующей карточки для кеша.
         rows = db.query(f"select {CARD_COLS}, count(*) over () from marts.offer_pick o "
@@ -207,7 +221,7 @@ def show(ctx: Ctx, mode: str, idx: int, msg_id: str = "") -> bool:
         if not rows:
             return False
         row = to_row(rows[0][:13])
-        head = f"Вариант {idx + 1} из {rows[0][13]}"
+        head = f"{'Новое' if mode == 'new' else 'Вариант'} {idx + 1} из {rows[0][13]}"
         tail = f"\n\nОтбор: {filters.human(f)}"
         if len(rows) > 1:
             prefetch = rows[1][12] or ""
@@ -286,7 +300,7 @@ def button(ctx: Ctx, data: str, msg_id: str) -> bool:
         # остается, а на его место встает следующий. Убран последний, тогда
         # шаг назад, а если список опустел, карточка остается как была.
         if st.mode != "saved":
-            show(ctx, "pick", st.idx, msg_id)
+            show(ctx, mode, st.idx, msg_id)
         elif not show(ctx, "saved", st.idx, msg_id) and st.idx > 0:
             show(ctx, "saved", st.idx - 1, msg_id)
     elif data in ("cp-", "cp+"):
@@ -300,6 +314,12 @@ def button(ctx: Ctx, data: str, msg_id: str) -> bool:
         filters.put(s, chat, "rooms", cur)
         ctx.answer(f"комнат: {cur}")
         show(ctx, "pick", 0, msg_id)
+    elif data == "nw":
+        # Сводка нового это текст, а карточка с фото: правка на месте
+        # стерла бы сводку, поэтому карусель приходит новым сообщением.
+        ctx.answer("новое")
+        if not show(ctx, "new", 0):
+            ctx.reply("Нового под отбор уже нет: ушло из выдачи или отбор поменялся. Весь подбор: /flats")
     elif data == "sv":
         ctx.answer("отложенные")
         if not saved(s, chat):
@@ -310,7 +330,7 @@ def button(ctx: Ctx, data: str, msg_id: str) -> bool:
         # next и first живут на сообщениях до карусели: нажатие на старой
         # кнопке открывает карусель, а не молчит.
         ctx.answer("ищу")
-        if st.mode == "saved" and msg_id and data == "s":
+        if st.mode in ("saved", "new") and msg_id and data == "s":
             show(ctx, "pick", 0, msg_id)
         else:
             cmd_flats(ctx)
