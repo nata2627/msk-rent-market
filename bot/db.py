@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 import psycopg
 
@@ -23,6 +24,21 @@ CONNECT_TIMEOUT_S = 5
 
 _conn: psycopg.Connection | None = None
 _lock = threading.Lock()
+
+# Витрины пересоздаются целиком, и несколько минут в день marts.* нет.
+# Пульс свежести спрашивает каждые 30 с, и в журнал ложилось по десятку
+# одинаковых предупреждений за прогон, а журнал после переключения
+# читается как «был ли сбой». Это не сбой, поэтому одна строка на окно.
+REBUILD_NOTE_EVERY_S = 600
+_rebuild_noted = 0.0
+
+
+def _note_rebuild() -> None:
+    global _rebuild_noted
+    now = time.monotonic()
+    if now - _rebuild_noted >= REBUILD_NOTE_EVERY_S:
+        _rebuild_noted = now
+        log.info("база: витрины пересчитываются, marts временно нет")
 
 
 def _connect() -> psycopg.Connection:
@@ -55,6 +71,12 @@ def query(sql: str, params: list | tuple | None = None) -> list[tuple] | None:
                 _conn = None
                 if attempt == 2:
                     return None
+            except psycopg.errors.UndefinedTable as e:
+                if "marts." in str(e):
+                    _note_rebuild()
+                else:
+                    log.warning(f"база: {e.__class__.__name__}: {str(e).strip()[:200]}")
+                return None
             except psycopg.Error as e:
                 log.warning(f"база: {e.__class__.__name__}: {str(e).strip()[:200]}")
                 return None

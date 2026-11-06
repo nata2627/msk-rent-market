@@ -114,3 +114,42 @@ def test_кеш_свежести_не_ходит_в_базу_повторно(mo
     assert status.fresh() == "сегодня"
     assert status.fresh() == "сегодня"
     assert len(calls) == 1
+
+
+def test_пока_витрины_пересчитываются_вердикт_прежний(monkeypatch):
+    answers = iter(["сегодня", None])
+    monkeypatch.setattr(status.db, "scalar", lambda sql, params=None: next(answers))
+    monkeypatch.setattr(status, "_fresh", (0.0, None))
+    assert status.refresh_fresh() == "сегодня"
+    assert status.refresh_fresh() == "сегодня"
+
+
+def test_старый_вердикт_не_живет_дольше_часа(monkeypatch):
+    monkeypatch.setattr(status.db, "scalar", lambda sql, params=None: None)
+    monkeypatch.setattr(status, "_fresh", (time.monotonic() - status.STALE_OK_S - 1, "сегодня"))
+    assert status.refresh_fresh() is None
+
+
+def test_нет_витрины_одна_строка_в_журнал(monkeypatch, caplog):
+    import psycopg
+    from bot import db
+
+    class Cur:
+        description = None
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, sql, params=None):
+            raise psycopg.errors.UndefinedTable('relation "marts.data_freshness" does not exist')
+
+    class Conn:
+        closed = False
+        def cursor(self): return Cur()
+
+    monkeypatch.setattr(db, "_conn", Conn())
+    monkeypatch.setattr(db, "_rebuild_noted", 0.0)
+    monkeypatch.setattr(db.time, "monotonic", lambda: 10_000.0)
+    caplog.set_level("INFO", logger="bot")
+    for _ in range(5):
+        assert db.query("select 1") is None
+    lines = [r for r in caplog.records if r.name == "bot"]
+    assert len(lines) == 1 and lines[0].levelname == "INFO"

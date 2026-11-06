@@ -15,6 +15,7 @@ NORM = 16500
 # при пересборке витрин. Поэтому его держит кеш, который фоновый пульс
 # обновляет каждые 30 с, и /status не платит эти полсекунды.
 FRESH_TTL_S = 120
+STALE_OK_S = 3600
 _fresh: tuple[float, str | None] = (0.0, None)
 
 
@@ -23,7 +24,12 @@ def refresh_fresh() -> str | None:
     value = db.scalar("select verdict from marts.data_freshness")
     if value is not None:
         _fresh = (time.monotonic(), value)
-    return value
+        return value
+    # Пока витрины пересчитываются, последний известный вердикт вернее
+    # пустоты: /status в эти минуты не должен говорить «база не ответила».
+    # Но не дольше часа, иначе лежащая база выдавала бы вчерашнее «сегодня».
+    at, last = _fresh
+    return last if time.monotonic() - at < STALE_OK_S else None
 
 
 def fresh() -> str | None:
