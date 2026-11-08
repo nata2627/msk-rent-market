@@ -29,7 +29,11 @@ exec >>"$LOG_DIR/price_$(date +%Y%m).log" 2>&1
 say() { echo "$(date '+%d.%m %H:%M:%S') === $*"; }
 notify() { bash "$REPO/scripts/box_notify.sh" "$@" >/dev/null 2>&1; }
 
-WEEK="$(date +%G-W%V)"
+# Неделя с воскресенья (%U), а не по ISO: в ISO воскресенье последний
+# день недели, начатой в понедельник, и обучение в будний день той же
+# недели заранее «занимало» воскресенье. 08.11.2026 так пропало
+# воскресное переобучение после ручного 06.11.
+WEEK="$(date +%Y-U%U)"
 MARK="$REPO/data/models/last_week"
 if [ "$(cat "$MARK" 2>/dev/null)" = "$WEEK" ]; then
   say "Модель недели $WEEK уже есть"
