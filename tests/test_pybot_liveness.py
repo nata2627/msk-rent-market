@@ -87,16 +87,6 @@ def test_status_база_не_ответила():
     assert "Свежесть витрин: неизвестна" in status.text("guest", f, NOW)
 
 
-def test_status_строки_те_же_что_в_box_bot():
-    from pathlib import Path
-    src = (Path(__file__).resolve().parents[1] / "scripts" / "box_bot.sh").read_text()
-    for line in ("Сегмент за сегодня: $seg из $NORM ($pct%)",
-                 "Собрано за сегодня: $seg объявлений 1-2 комнаты ($pct% от обычного дня)",
-                 'lock="идёт обход, последняя строка журнала:', 'lock="сбор сейчас идёт"',
-                 "Диск: $disk МБ свободно", "Память: $mem МБ доступно", "NORM=16500"):
-        assert line in src
-
-
 def test_status_через_разбор_команды(tmp_path, monkeypatch):
     (tmp_path / ".env").write_text("NOTIFY_TG_CHAT=42\n")
     s = config.load({}, repo=tmp_path)

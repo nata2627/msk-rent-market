@@ -61,7 +61,7 @@ LIMITS = {"owner": 50, "guest": 20}
 PRIMARY_RULE = "gigachat if exact(gigachat) >= exact(rules) else rules"
 
 # Поля фильтров и их границы. Те же, что у текстовых команд /filter в
-# box_bot.sh: другого пути в файл фильтров нет.
+# боте: другого пути в файл фильтров нет.
 BOUNDS = {"price": (10, 999), "area": (10, 300), "metro": (1, 60), "entry": (10, 9999)}
 PETS = ("allowed", "negotiable", "forbidden")
 NEAR_METRO = 10   # «у метро» без числа минут
@@ -393,7 +393,7 @@ def districts_from_db() -> list[str]:
 
 
 def file_lines(filters: dict, keep: dict) -> list[str]:
-    """Фильтры в виде файла, который читает box_bot.sh."""
+    """Фильтры в виде файла, который читает бот."""
     lines = []
     for k in ("price", "area", "rooms", "metro", "entry", "pets", "park", "mkad", "district"):
         v = filters.get(k)
@@ -461,7 +461,7 @@ def apply(path: str, chat: str, role: str, text: str, districts, alarm=alarm) ->
 
 
 def cmd_apply(path: str, chat: str, role: str, text: str) -> int:
-    """Печатает строку состояния для box_bot.sh, следом «? ...» на каждое
+    """Печатает строку состояния для бота, следом «? ...» на каждое
     непонятое."""
     status, unknown = apply(path, chat, role, text, districts_from_db)
     print(status)

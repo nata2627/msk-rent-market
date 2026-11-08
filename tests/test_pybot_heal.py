@@ -1,6 +1,6 @@
 """Новый бот: лечение машины сбора и отказы, которые берегут сбор.
 
-Повторяет проверки test_bot.py (отказ посреди обхода, живой обход не
+Повторяет проверки старого бота (отказ посреди обхода, живой обход не
 трогается, обещанные в сообщениях о беде команды есть) и добавляет режим
 тестового бота: проверки настоящие, действия только описанием. Команды
 наружу подменяются записью, в сеть и в docker тесты не ходят.
@@ -16,8 +16,19 @@ import pytest
 
 from bot import access, commands, config, db, heal, status
 from bot.actions import Reply
-from tests.test_bot import PROMISED, ROOT
-from tests.test_pybot_cards import OLD, settings  # noqa: F401
+from tests.test_pybot_cards import ROOT, settings  # noqa: F401
+
+# Команда бота -> в каком скрипте сообщение о беде ее обещает.
+# Обещание без исполнителя хуже отсутствия обещания: человек в дороге
+# нажмет и решит, что починил.
+PROMISED = {
+    "/clean": "box_watch.sh",
+    "/unlock": "box_watch.sh",
+    "/catchup": "box_daily.sh",
+    "/dbup": "box_daily.sh",
+    "/status": "box_watch.sh",
+    "/log": "box_daily.sh",
+}
 
 
 @pytest.fixture
@@ -109,13 +120,13 @@ def test_unlock_без_замка(prod, machine):
     assert machine.ran == []
 
 
-def test_тексты_отказов_как_у_старого():
+def test_тексты_отказов_на_месте():
     src = Path(heal.__file__).read_text()
     for line in ("Браузер держит эти файлы открытыми, и чистка посреди обхода ломает",
                  "Посмотреть, как он идёт: /log", "Если он заклинил: /unlock",
                  "корзины читаются. Снимать замок у живого обхода нельзя: следующий",
                  "База и так отвечает, поднимать нечего. /status"):
-        assert line in OLD and line in src
+        assert line in src
 
 
 # ---------------------------------------------------------------------
@@ -239,14 +250,6 @@ def test_обещанная_в_сообщении_команда_у_нового
     """Сообщение о беде называет команду, бот обязан ее понимать."""
     assert cmd in (ROOT / "scripts" / caller).read_text()
     assert cmd in commands.HANDLERS
-
-
-def test_все_команды_старого_бота_перенесены():
-    body = OLD.split("dispatch() {")[1].split("\n}")[0]
-    old = set()
-    for pattern in re.findall(r"^\s+(/[^)]*)\)", body, re.M):
-        old |= {c for c in pattern.split("|") if c != "/*"}
-    assert old and old <= commands.HANDLERS.keys(), old - commands.HANDLERS.keys()
 
 
 @pytest.mark.parametrize("cmd", ["/clean", "/unlock", "/catchup", "/dbup",

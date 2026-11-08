@@ -1,10 +1,10 @@
 """Новый бот: экран фильтров, /filter текстом, /undo.
 
-Повторяет проверки фильтров из test_bot.py и сверяет клавиатуру и тексты
-со старым ботом. База подменяется, в сеть тесты не ходят.
+Повторяет проверки фильтров старого бота; клавиатура и тексты сверяются
+с эталоном в tests/fixtures/bot, снятым перед удалением старого бота. База подменяется, в сеть тесты не ходят.
 """
 import json
-import subprocess
+from pathlib import Path
 import time
 from types import SimpleNamespace
 
@@ -12,7 +12,7 @@ import pytest
 
 from bot import access, config, db, filters
 from bot.actions import Answer, Reply
-from tests.test_pybot_cards import OLD, base, settings  # noqa: F401
+from tests.test_pybot_cards import base, settings  # noqa: F401
 
 
 @pytest.fixture
@@ -149,8 +149,7 @@ def test_неизвестный_фильтр(settings, pick):
 
 
 def test_справка_текстом_дословно(settings, pick):
-    old = OLD.split('reply "Фильтры текстом\n')[1].split('" ;;')[0]
-    assert text_of(ask(settings, "/filter текстом")) == "Фильтры текстом\n" + old
+    assert text_of(ask(settings, "/filter текстом")) == TEXTS["filter_help"]
 
 
 def test_фильтры_у_гостя_свои(settings, pick):
@@ -182,24 +181,17 @@ def test_undo_возвращает_прежние(settings, pick):
 # Экран с кнопками
 # ---------------------------------------------------------------------
 
-def old_keyboard(price="", rooms="", area="", metro="", pets="", park="", mkad=""):
-    body = OLD.split("  python3 -c '")[1].split("' \"$(filter_get price)\"")[0]
-    out = subprocess.run(["python3", "-c", body, price, rooms, area, metro, pets, park, mkad],
-                         capture_output=True, text=True, check=True)
-    return [[(b["text"], b["callback_data"]) for b in row]
-            for row in json.loads(out.stdout)["inline_keyboard"]]
+# Эталон снят 08.11.2026 с нового бота и сверен со старым box_bot.sh перед
+# его удалением: клавиатуры совпадали по всем пяти отборам.
+FIXTURES = Path(__file__).parent / "fixtures" / "bot"
+KEYBOARDS = json.loads((FIXTURES / "filter_keyboards.json").read_text())["keyboards"]
+TEXTS = json.loads((FIXTURES / "filter_texts.json").read_text())
 
 
-@pytest.mark.parametrize("f", [
-    {},
-    {"price": "90", "rooms": "1,2"},
-    {"rooms": "1", "area": "35", "metro": "10", "pets": "allowed", "park": "1"},
-    {"rooms": "2", "metro": "20", "pets": "negotiable", "mkad": "1"},
-    {"metro": "15", "pets": "forbidden"},
-])
-def test_клавиатура_как_у_старого(f):
-    keys = ("price", "rooms", "area", "metro", "pets", "park", "mkad")
-    assert filters.keyboard(f) == old_keyboard(*(f.get(k, "") for k in keys))
+@pytest.mark.parametrize("case", KEYBOARDS, ids=lambda c: ",".join(c["filters"]) or "пусто")
+def test_клавиатура_как_у_старого(case):
+    want = [[tuple(b) for b in row] for row in case["keyboard"]]
+    assert filters.keyboard(case["filters"]) == want
 
 
 def test_экран_ставит_начальный_отбор(settings, pick):
@@ -214,11 +206,7 @@ def test_экран_ставит_начальный_отбор(settings, pick):
 
 def test_экран_текстом_как_у_старого(settings, pick):
     filters.put(settings, "42", "pets", "allowed")
-    old = OLD.split("filter_screen_text() {")[1].split("printf '%s' \"")[1].split('"\n}')[0]
-    old = (old.replace("${lines:-", "").replace("качества.}", "качества.")
-           .replace("${found:-?}", "123").replace("\\$", "$"))
-    head, _, rest = old.partition("Пока ничего")
-    assert filters.screen_text({}) == head + "Пока ничего" + rest
+    assert filters.screen_text({}) == TEXTS["screen_empty_found_123"]
     assert filters.screen_text({"pets": "allowed"}).startswith(
         "Фильтры подбора\n\nЖивотные: можно\n\nПодходит: 123")
 

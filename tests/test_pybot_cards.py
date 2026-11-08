@@ -1,6 +1,6 @@
 """Новый бот: подбор карточкой, листание, отложенные, фото.
 
-Повторяет проверки test_bot.py для этой части и добавляет поведение,
+Повторяет проверки старого бота для этой части и добавляет поведение,
 которое у старого бота проверялось только с телефона. База подменяется
 списком вариантов, телеграм подменяется записью вызовов.
 """
@@ -17,7 +17,6 @@ from bot.actions import Answer, Card, Ctx, Reply
 from bot.photos import Photos
 
 ROOT = Path(__file__).resolve().parents[1]
-OLD = (ROOT / "scripts" / "box_bot.sh").read_text()
 
 
 def offer(i, price=70000, photo=True, active=True):
@@ -113,23 +112,27 @@ def test_условие_только_параметрами():
 
 def test_свежесть_в_подборе_не_отключаема():
     assert filters.where({})[1] == [0]
-    assert "crawls_missed <= ${v:-0}" in OLD
 
 
 def test_подпись_отбора_как_у_старого_бота():
     f = {"price": "90", "rooms": "1,2", "metro": "15", "pets": "negotiable", "mkad": "1"}
     assert filters.human(f) == ("цена до 90 тыс, комнаты 1,2, метро до 15 мин, "
                                 "животные по договоренности, внутри МКАД")
-    for piece in ('out="$out, цена до $v тыс"', 'out="$out, внутри МКАД"',
-                  'out="$out, животные $(pets_human "$v")"'):
-        assert piece in OLD
 
 
 def test_подбор_не_заводит_своего_определения():
+    # Бот и дашборд читают один marts.offer_pick: два определения подбора
+    # в проекте уже однажды тихо разъехались. Базовые условия лежат ровно
+    # в одном месте, в модели dbt.
     src = "".join(p.read_text() for p in (ROOT / "bot").glob("*.py"))
+    dash = (ROOT / "scripts" / "setup_dashboard.py").read_text()
+    schema = (ROOT / "dbt" / "models" / "marts" / "offer_pick.sql").read_text()
     assert "marts.offer_pick" in src
+    assert "marts.offer_pick" in dash
+    assert "materialized='view'" in schema
     for gate in ("is_duplicate", "is_room_share", "is_daily", "lease_term_type"):
-        assert gate not in src
+        assert gate in schema, f"{gate} пропал из определения подбора"
+        assert gate not in src, f"{gate} продублирован в боте"
 
 
 def test_начальный_отбор_ставится_один_раз(settings, base):
@@ -168,21 +171,12 @@ https://www.cian.ru/rent/flat/1000/"""
     assert c.photo == "https://img/0.jpg"
     assert c.prefetch == "https://img/1.jpg"
     assert c.msg_id == ""
-    for piece in ('head="Вариант $(( idx + 1 )) из ${total:-?}"', "$price руб/мес",
-                  "метро $metro мин пешком, животные $(pets_human \"$pets\")",
-                  "При заселении %s руб"):
-        assert piece in OLD
 
 
 def test_гостю_карточка_без_баллов(settings, base):
     c = card_of(open_flats(settings, chat="7"))
     assert "балл" not in c.caption
     assert c.caption.startswith("Вариант 1 из 3\nРайон 0\n1 комн., 40 м2\n")
-
-
-def test_столбцы_карточки_дословно(settings):
-    old = OLD.split('CARD_COLS="')[1].split('"\n')[0]
-    assert cards.CARD_COLS.replace("%%", "%") == old
 
 
 def test_снятое_и_отложенное_помечены(settings, base):
@@ -344,7 +338,6 @@ def test_у_гостя_свои_фильтры_карточка_и_отложе�
 def test_состояние_карусели_в_формате_старого_бота(settings, base):
     open_flats(settings)
     assert (settings.state_dir / "card.42").read_text() == "pick|0|500|1000\n"
-    assert 'card_set() { echo "$1|$2|$3|$4" >"$(card_file)"; }' in OLD
 
 
 def test_перенесенные_команды_не_числятся_в_переносе():

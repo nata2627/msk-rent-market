@@ -211,7 +211,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     settings: config.Settings = context.bot_data["settings"]
     msg = update.message
     chat = str(msg.chat_id)
-    # Перевод строки и табуляция становятся пробелом, как в box_tg.py:
+    # Перевод строки и табуляция становятся пробелом, как у прежнего bash-бота:
     # разбор аргументов по словам на этом построен.
     text = (msg.text or "").replace("\t", " ").replace("\n", " ")
     async with context.bot_data["locks"](chat):

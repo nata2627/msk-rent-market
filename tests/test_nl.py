@@ -143,14 +143,6 @@ def test_неразобранное_не_трогает_фильтры(monkeypat
     assert not (tmp_path / "filters.42.prev").exists()
 
 
-def test_бот_отдает_фразу_разбору_а_гость_может_писать_словами():
-    src = (ROOT / "scripts" / "box_bot.sh").read_text()
-    assert '*) cmd_phrase "$text" ;;' in src
-    assert "понимаю только команды" not in src
-    gate = src.split("guest_allowed() {")[1].split("}")[0]
-    assert "*) return 0 ;;" in gate
-
-
 @pytest.mark.parametrize("text, want", [
     # Обе ошибки нашел замер 25.10.2026. Числа замера остаются от первого
     # прогона, эти проверки держат только исправление.

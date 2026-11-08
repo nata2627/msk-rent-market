@@ -259,3 +259,26 @@ def test_есть_цель_make_notify_test():
     mk = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert re.search(r"^notify-test:", mk, re.M)
     assert "box_notify.sh --test" in mk
+
+
+# Перенесено из tests/test_bot.py при удалении bash-бота 08.11.2026: проверка
+# про сообщения, а не про бота. Скрипты макбука добавлены, они тоже шлют
+# тревоги.
+NOTIFY_SOURCES = ("box_watch.sh", "box_daily.sh", "box_report.sh", "box_backup.sh",
+                  "box_price_weekly.sh", "box_site_export.sh", "box_pulse.sh",
+                  "mac_tail.sh", "mac_price_weekly.sh")
+
+
+@pytest.mark.parametrize("name", NOTIFY_SOURCES)
+def test_в_сообщениях_о_беде_нет_команд_для_терминала(name):
+    """Лечение в дороге нажимается, а не набирается в ssh.
+
+    Команда вида `rm -rf ~/rent_msk/...` в уведомлении бесполезна ровно
+    тогда, когда уведомление и нужно: в поезде консоли нет.
+    """
+    src = (ROOT / "scripts" / name).read_text()
+    blocks = re.findall(r"notify (?:--always )?[a-z-]+ \"(.*?)\"", src, re.S)
+    assert blocks, f"{name}: не нашлось ни одного сообщения, образец устарел"
+    for block in blocks:
+        assert "ssh " not in block, f"{name}: в сообщении остался ssh"
+        assert "rm -rf" not in block, f"{name}: в сообщении остался rm -rf"

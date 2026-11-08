@@ -11,6 +11,6 @@
 | [index_forecast.md](index_forecast.md) | прогноз по Росстату с бэктестом и индекс по панели |
 | [cut_effect.md](cut_effect.md) | ускоряет ли снижение цены уход объявления |
 | [price_model.md](price_model.md) | модель справедливой цены, интервал, дрейф, команда `/price` |
-| [bot.md](bot.md) | бот в телеграме, команды, роли |
+| [bot.md](bot.md) | бот в телеграме, команды, роли, как он устроен |
 | [operations.md](operations.md) | счет по журналу прогонов, аварии, ключи и их сроки |
 | [limitations.md](limitations.md) | ограничения и что не готово |

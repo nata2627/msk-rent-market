@@ -13,7 +13,7 @@ import pytest
 
 from bot import access, db, filters, words
 from bot.actions import Card, Reply
-from tests.test_pybot_cards import OLD, base, settings  # noqa: F401
+from tests.test_pybot_cards import base, settings  # noqa: F401
 
 box_nl, box_ask, box_price = words.box_nl, words.box_ask, words.box_price
 DISTRICTS = ["Хамовники", "Марьино", "Арбат"]
@@ -95,13 +95,12 @@ def test_лимит_фраз_в_папке_своего_бота(settings, world
     assert box_nl.STATE == settings.state_dir
 
 
-def test_тексты_фразы_как_у_старого():
-    body = OLD.split("cmd_phrase() {")[1].split("\n}")[0]
+def test_тексты_фразы_на_месте():
     src = open(words.__file__).read()
     for line in ("Поправить кнопками: /filter", "Вернуть прежние фильтры: /undo",
                  "Подходящего нет. Ослабить: /filter", "Кнопками можно сколько угодно: /filter",
                  "Можно так: двушка до 90 у метро с котом. Или кнопками ниже."):
-        assert line in body and line in src
+        assert line in src
 
 
 def test_гостю_фраза_доступна(settings, world, monkeypatch):

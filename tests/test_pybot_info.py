@@ -1,6 +1,5 @@
 """Новый бот: /market, /log, /pulse и меню команд.
 
-Тексты сверяются со scripts/box_bot.sh и box_tg.py, пока они живы.
 Сети и базы нет: база, запуск итога дня и время подменяются.
 """
 import importlib.util
@@ -14,7 +13,6 @@ import pytest
 from bot import access, commands, config, db, info, menu
 
 ROOT = Path(__file__).resolve().parents[1]
-OLD = (ROOT / "scripts" / "box_bot.sh").read_text()
 NOW = time.strptime("02.11.2026 18:34", "%d.%m.%Y %H:%M")
 
 
@@ -47,17 +45,10 @@ def test_market_текст_как_у_старого_бота():
 {line}
 
 Снятие — это уход объявления с площадки, а не обязательно сдача."""
-    assert "${line:-база не ответила}" in OLD
-    assert "Снятие — это уход объявления с площадки, а не обязательно сдача." in OLD
 
 
 def test_market_база_не_ответила():
     assert "\nбаза не ответила\n" in info.market_text(None, NOW)
-
-
-def test_market_запрос_дословно_из_старого_бота():
-    old = OLD.split("cmd_market() {")[1].split('q "', 1)[1].split(';")"')[0]
-    assert squash(info.MARKET_SQL) == squash(old)
 
 
 def test_market_гостю_доступен_и_по_русски(settings, monkeypatch):
@@ -110,7 +101,6 @@ def test_log_число_строк_как_в_dispatch(settings, arg, ok):
         assert len(text.splitlines()) == 2 + int(arg)
     else:
         assert text == info.LOG_ARG_TEXT
-    assert f"*) reply \"{info.LOG_ARG_TEXT}\"" in OLD
 
 
 def test_log_длинные_строки_и_предел_сообщения(settings):
@@ -152,7 +142,6 @@ def test_pulse_запускает_итог_отдельно_и_сразу_отв
     args, env, kw = popen[0]
     assert args == ["bash", str(settings.repo / "scripts" / "box_report.sh")]
     assert kw["start_new_session"]
-    assert f'reply "{info.PULSE_TEXT}"' in OLD
 
 
 def test_pulse_тестовый_бот_шлет_итог_своим_токеном(settings, popen):
@@ -172,12 +161,9 @@ def test_pulse_боевой_бот_токен_не_подменяет(tmp_path, 
 # Меню и перенос
 # ---------------------------------------------------------------------
 
-def test_меню_как_у_box_tg_плюс_price_ask_и_new():
-    spec = importlib.util.spec_from_file_location("box_tg", ROOT / "scripts" / "box_tg.py")
-    box_tg = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(box_tg)
-    assert [c for c in menu.COMMANDS if c[0] not in ("price", "ask", "new")] == box_tg.COMMANDS
+def test_меню_порядок_и_пределы_телеграма():
     names = [c for c, _ in menu.COMMANDS]
+    assert names[:3] == ["status", "flats", "new"]
     assert names.index("price") == names.index("market") + 1
     # Предел телеграма на описание команды 256 знаков, на имя 32.
     assert all(len(d) <= 256 and len(c) <= 32 for c, d in menu.COMMANDS)
@@ -191,8 +177,6 @@ def test_меню_раз_в_сутки(tmp_path):
     assert menu.due(stamp, now=time.time() + menu.REFRESH_S + 1)
 
 
-def test_перенесенные_команды_не_числятся_в_переносе():
+def test_market_log_pulse_и_русские_имена_на_месте():
     done = {"/market", "/рынок", "/log", "/журнал", "/pulse", "/итог"}
     assert done <= commands.HANDLERS.keys()
-    for cmd in done:
-        assert re.search(rf"(^|[|( ]){re.escape(cmd)}[|)]", OLD, re.M)

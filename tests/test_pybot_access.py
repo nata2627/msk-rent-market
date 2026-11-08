@@ -82,13 +82,6 @@ def test_гостю_просмотр_доступен(settings, cmd):
     assert access.guest_allowed(cmd)
 
 
-def test_гостевой_список_как_у_старого_бота():
-    src = (ROOT / "scripts" / "box_bot.sh").read_text()
-    line = next(l for l in src.splitlines() if l.startswith("GUEST_COMMANDS="))
-    # /new появилась 06.11, после переключения: у старого бота ее нет.
-    assert set(line.split('"')[1].split()) == access.GUEST_COMMANDS - {"/new", "/новое"}
-
-
 def test_протухшая_команда_не_выполняется(settings):
     replies, notes = handle(settings, "42", "/help", age=901)
     assert replies == [access.stale_text("/help")]
@@ -129,32 +122,25 @@ def test_help_владелице_и_гостю_разный(settings):
     assert handle(settings, "7", "/start")[0] == [commands.HELP_GUEST]
 
 
-def test_тексты_help_дословно_из_старого_бота():
-    # Кроме строк про потолок цены через /price и про /new: их у старого
-    # бота нет.
-    src = (ROOT / "scripts" / "box_bot.sh").read_text()
-    added = ("/price 77 — потолок цены в подборе, в тысячах\n",
-             "/new — только новое под отбор за последний день\n")
-    for text in (commands.HELP_OWNER, commands.HELP_GUEST):
-        for line in added:
-            assert line in text
-            text = text.replace(line, "")
-        assert text in src
-
-
 def test_отказ_гостю_называет_только_доступное():
     named = set(re.findall(r"/\w+", access.GUEST_REFUSAL.splitlines()[-1]))
     assert named <= access.GUEST_COMMANDS
     assert "/log" not in named
 
 
-def test_разметка_та_же_что_у_box_tg():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("box_tg", ROOT / "scripts" / "box_tg.py")
-    box_tg = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(box_tg)
+def test_разметка_та_же_что_у_box_notify():
+    # Тревоги шлет box_notify.sh, ответы бот, и в одном чате они обязаны
+    # выглядеть одинаково: первая строка жирная, строка с $ это команда,
+    # голая ссылка становится словами.
+    import subprocess
     text = "Заголовок <x>\nстрока & ещё\n$ make up\nhttps://cian.ru/rent/flat/1?a=b"
-    assert render(text) == box_tg.render(text)
+    assert render(text) == ('<b>Заголовок &lt;x&gt;</b>\nстрока &amp; ещё\n<code>make up</code>\n'
+                            '<a href="https://cian.ru/rent/flat/1?a=b">Открыть объявление</a>')
+    body = (ROOT / "scripts" / "box_notify.sh").read_text()
+    to_html = body.split("to_html() {\n  python3 -c '")[1].split("'\n}")[0]
+    out = subprocess.run(["python3", "-c", to_html], input=text, capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == render(text), "разметка разъехалась с box_notify.sh"
 
 
 def test_токен_не_попадает_в_журнал(settings, tmp_path):

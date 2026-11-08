@@ -383,7 +383,7 @@ notify-tg:
 
 # Команда бота без телефона: проверить ответ или починить с ноутбука.
 bot-run:
-	bash scripts/box_bot.sh --run $(CMD)
+	RENT_BOT_ENV=prod $(PY) -m bot --run $(CMD)
 
 test:
 	$(VENV)/bin/pytest -q tests
