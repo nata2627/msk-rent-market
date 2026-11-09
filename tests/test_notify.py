@@ -266,7 +266,7 @@ def test_есть_цель_make_notify_test():
 # тревоги.
 NOTIFY_SOURCES = ("box_watch.sh", "box_daily.sh", "box_report.sh", "box_backup.sh",
                   "box_price_weekly.sh", "box_site_export.sh", "box_pulse.sh",
-                  "mac_tail.sh", "mac_price_weekly.sh")
+                  "mac_tail.sh", "mac_price_weekly.sh", "box_numbers.sh")
 
 
 @pytest.mark.parametrize("name", NOTIFY_SOURCES)
