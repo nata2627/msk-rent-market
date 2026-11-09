@@ -1,0 +1,9 @@
+[Unit]
+Description=rent_msk: копия в 20:45, 21:45, 22:45
+
+[Timer]
+OnCalendar=*-*-* 20,21,22:45:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

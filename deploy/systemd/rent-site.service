@@ -1,0 +1,10 @@
+[Unit]
+Description=rent_msk: выгрузка витрины на GitHub
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/rent_msk
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TZ=Europe/Moscow
+TimeoutStartSec=30min
+ExecStart=/bin/bash %h/rent_msk/scripts/box_site_export.sh

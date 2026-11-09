@@ -1,0 +1,10 @@
+[Unit]
+Description=rent_msk: ежедневный срез 1-2 комнат
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/rent_msk
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TZ=Europe/Moscow
+TimeoutStartSec=8h
+ExecStart=/bin/bash %h/rent_msk/scripts/box_daily.sh narrow

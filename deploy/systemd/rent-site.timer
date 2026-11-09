@@ -1,0 +1,9 @@
+[Unit]
+Description=rent_msk: витрина в 19:30
+
+[Timer]
+OnCalendar=*-*-* 19:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

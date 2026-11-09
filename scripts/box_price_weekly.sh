@@ -36,7 +36,9 @@ say() { echo "$(date +%H:%M:%S) === $*"; }
 notify() { bash "$REPO/scripts/box_notify.sh" "$@" >/dev/null 2>&1; }
 find "$LOG_DIR" -name 'price_*.log' -mtime +60 -delete 2>/dev/null
 
-WEEK="$(date +%G-W%V)"
+# Неделя с воскресенья (%U), как в mac_price_weekly.sh: по ISO обучение в
+# будний день занимало воскресенье той же недели (08.11.2026).
+WEEK="$(date +%Y-U%U)"
 MARK="$REPO/data/models/last_week"
 if [ "$(cat "$MARK" 2>/dev/null)" = "$WEEK" ]; then
   say "Модель недели $WEEK уже есть"

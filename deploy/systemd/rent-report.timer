@@ -1,0 +1,9 @@
+[Unit]
+Description=rent_msk: итог дня в 23:50
+
+[Timer]
+OnCalendar=*-*-* 23:50:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

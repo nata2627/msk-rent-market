@@ -1,0 +1,9 @@
+[Unit]
+Description=rent_msk: недельный добор в воскресенье 13:00
+
+[Timer]
+OnCalendar=Sun *-*-* 13:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

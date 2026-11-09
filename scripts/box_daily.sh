@@ -85,9 +85,9 @@ say "Начало, режим $MODE, дата снимка $SNAPSHOT_DATE"
 # которая останавливает прогон целиком.
 if ! docker exec "$PG_CONTAINER" pg_isready -U rent -d rent >/dev/null 2>&1; then
   say "База не отвечает, поднимаю"
-  # Каталог с compose-файлом базы: она живёт отдельно от зеркала кода,
-  # чтобы пересылка кода не задевала данные.
-  (cd "$HOME/rent_data" && docker compose up -d)
+  # Compose-файл в самом репозитории, поднимается только база. Раньше
+  # здесь стоял ~/rent_data бокса, которого на новом SSD нет (09.11.2026).
+  (cd "$REPO" && docker compose up -d postgres)
   for i in $(seq 1 24); do
     sleep 5
     docker exec "$PG_CONTAINER" pg_isready -U rent -d rent >/dev/null 2>&1 && break

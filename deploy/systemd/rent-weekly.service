@@ -1,0 +1,11 @@
+[Unit]
+Description=rent_msk: недельный добор комнатностей 3+
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/rent_msk
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TZ=Europe/Moscow
+TimeoutStartSec=12h
+ExecStartPre=/bin/sh -c 'for i in $$(seq 1 180); do [ -d %h/rent_msk/data/box.lock ] || exit 0; sleep 60; done; echo "замок занят три часа, добор отменен"; exit 1'
+ExecStart=/bin/bash %h/rent_msk/scripts/box_daily.sh weekly

@@ -1,6 +1,11 @@
 # Хранилище проекта: один PostgreSQL 16. Metabase здесь не нужен —
 # отчёты собираются скриптами в figures/ и notebooks/.
 
+# Имя проекта задано явно: от него зависит имя тома с базой
+# (rent_msk_rent_pgdata). Запуск compose из папки с другим именем без
+# этой строки создал бы рядом новую пустую базу.
+name: rent_msk
+
 services:
   postgres:
     image: postgres:16-alpine

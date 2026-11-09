@@ -1,0 +1,9 @@
+[Unit]
+Description=rent_msk: переобучение в воскресенье 16, 18, 20 часов
+
+[Timer]
+OnCalendar=Sun *-*-* 16,18,20:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -227,7 +227,7 @@ def test_dbup_поднимает_базу(prod, machine, monkeypatch):
     monkeypatch.setattr(db, "scalar", lambda sql, p=None: next(seen))
     out = text_of(ask(prod, "/dbup"))
     assert out.startswith("База поднята и отвечает")
-    assert machine.ran == [["docker", "compose", "up", "-d"]]
+    assert machine.ran == [["docker", "compose", "up", "-d", "postgres"]]
 
 
 def test_dbup_не_поднялась(prod, machine):

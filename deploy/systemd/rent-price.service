@@ -1,0 +1,10 @@
+[Unit]
+Description=rent_msk: недельное переобучение модели цены
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/rent_msk
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TZ=Europe/Moscow
+TimeoutStartSec=90min
+ExecStart=/bin/bash %h/rent_msk/scripts/box_price_weekly.sh

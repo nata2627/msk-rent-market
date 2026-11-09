@@ -160,10 +160,12 @@ def cmd_dbup(ctx: Ctx, p=None) -> None:
     if db_alive():
         ctx.reply("База и так отвечает, поднимать нечего. /status")
         return
-    compose = Path.home() / "rent_data"
-    if dry(ctx, "dbup", f"docker compose up -d в {compose}"):
+    # Compose-файл лежит в копии, где идет сбор. Прежний ~/rent_data жил
+    # только на боксе и исчез вместе с его SSD.
+    compose = ctx.settings.box_repo
+    if dry(ctx, "dbup", f"docker compose up -d postgres в {compose}"):
         return
-    _run(["docker", "compose", "up", "-d"], 120, cwd=compose)
+    _run(["docker", "compose", "up", "-d", "postgres"], 120, cwd=compose)
     time.sleep(10)
     if db_alive():
         ctx.note("dbup: база поднята")
