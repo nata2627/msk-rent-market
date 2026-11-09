@@ -45,7 +45,7 @@ notify() { bash "$REPO/scripts/box_notify.sh" "$@" >/dev/null 2>&1; }
 # времени за минуту, когда все задачи стояли в ожидании памяти или
 # диска. Пять процентов на памяти уже чувствуется, на диске при обходе
 # бывает до трех, сорок значит, что машина почти стоит.
-MEM_WARN_MB="${PULSE_MEM_WARN_MB:-2600}"
+MEM_WARN_MB="${PULSE_MEM_WARN_MB:-}"
 PSI_MEM_WARN="${PULSE_PSI_MEM_WARN:-5}"
 PSI_IO_WARN="${PULSE_PSI_IO_WARN:-40}"
 
@@ -54,15 +54,29 @@ psi() { awk -v k="$2" '$1 == k { split($3, a, "="); print a[2] }' "/proc/pressur
 # кэш, который ядро отдаст по первому требованию. 29.10.2026 копия базы
 # читала 2,7 ГБ файлов, memory.current показал 2763 МБ и поднял ложную
 # тревогу, а занято процессами было около 940 МБ.
-INACTIVE=$(awk '$1 == "inactive_file" { print $2 }' /sys/fs/cgroup/memory.stat 2>/dev/null)
-MEM_MB=$(( ( $(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0) - ${INACTIVE:-0} ) / 1048576 ))
+#
+# С 09.11.2026 бокса нет, пульс идет прямо на машине, а у корневой группы
+# memory.current нет вовсе: прежняя формула давала минус 6 ГБ, и тревога
+# не сработала бы никогда. Тогда берется вся машина по MemAvailable, тоже
+# без кэша, который ядро отдаст. Порог 85% объема, как 2600 из 3072 у бокса.
+if [ -r /sys/fs/cgroup/memory.current ]; then
+  WHO="бокса"
+  MEM_TOTAL_MB=3072
+  INACTIVE=$(awk '$1 == "inactive_file" { print $2 }' /sys/fs/cgroup/memory.stat 2>/dev/null)
+  MEM_MB=$(( ( $(cat /sys/fs/cgroup/memory.current) - ${INACTIVE:-0} ) / 1048576 ))
+else
+  WHO="машины"
+  MEM_TOTAL_MB=$(awk '$1 == "MemTotal:" { print int($2 / 1024) }' /proc/meminfo)
+  MEM_MB=$(awk '$1 == "MemTotal:" { t = $2 } $1 == "MemAvailable:" { a = $2 } END { print int((t - a) / 1024) }' /proc/meminfo)
+fi
+MEM_WARN_MB="${MEM_WARN_MB:-$(( MEM_TOTAL_MB * 85 / 100 ))}"
 OOM=$(awk '$1 == "oom_kill" { print $2 }' /sys/fs/cgroup/memory.events 2>/dev/null)
 CHROME_MB=$(ps -eo rss=,comm= 2>/dev/null | awk '$2 ~ /chrom/ { s += $1 } END { print int(s / 1024) }')
 MEM_SOME=$(psi memory some); MEM_FULL=$(psi memory full); IO_FULL=$(psi io full)
 FREE_MB=$(df -Pm "$REPO" | awk 'NR == 2 { print $4 }')
 LOAD=$(cut -d' ' -f1-3 /proc/loadavg)
 
-echo "$(date '+%d.%m %H:%M') бокс ${MEM_MB} МБ, chrome ${CHROME_MB} МБ, oom ${OOM:-?}; хост память ${MEM_SOME:-?}/${MEM_FULL:-?}%, диск ${IO_FULL:-?}%; нагрузка ${LOAD}; свободно ${FREE_MB} МБ" >>"$HEALTH"
+echo "$(date '+%d.%m %H:%M') память ${WHO} ${MEM_MB} из ${MEM_TOTAL_MB} МБ, chrome ${CHROME_MB} МБ, oom ${OOM:-?}; хост память ${MEM_SOME:-?}/${MEM_FULL:-?}%, диск ${IO_FULL:-?}%; нагрузка ${LOAD}; свободно ${FREE_MB} МБ" >>"$HEALTH"
 
 # Журнал пульса живет две недели: 288 строк в сутки.
 if [ "$(wc -l <"$HEALTH")" -gt 4100 ]; then
@@ -71,7 +85,7 @@ fi
 
 gt() { awk -v a="${1:-0}" -v b="$2" 'BEGIN { exit !(a > b) }'; }
 if [ "$MEM_MB" -gt "$MEM_WARN_MB" ]; then
-  notify mem-box "Память бокса ${MEM_MB} из 3072 МБ, Chrome ${CHROME_MB} МБ
+  notify mem-box "Память ${WHO} ${MEM_MB} из ${MEM_TOTAL_MB} МБ, Chrome ${CHROME_MB} МБ
 Еще немного, и ядро начнет убивать процессы. /status покажет, что идет. /unlock не нажимать, пока не ясно, что замок держит зависший обход: он же держит копию базы и выгрузку."
 fi
 if gt "$MEM_FULL" "$PSI_MEM_WARN"; then
@@ -89,7 +103,7 @@ if [ $(( 10#$(date +%M) % 15 )) -lt 5 ] && [ -d "$SITE/.git" ]; then
   export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/rent_site_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20"
   EMPTY=$(git -C "$SITE" mktree </dev/null)
   C=$(git -C "$SITE" -c user.name=box -c user.email=box@localhost \
-      commit-tree "$EMPTY" -m "пульс $(date '+%d.%m.%Y %H:%M') МСК, бокс ${MEM_MB} МБ, свободно ${FREE_MB} МБ")
+      commit-tree "$EMPTY" -m "пульс $(date '+%d.%m.%Y %H:%M') МСК, память ${WHO} ${MEM_MB} МБ, свободно ${FREE_MB} МБ")
   timeout 60 git -C "$SITE" push -q -f origin "$C:refs/heads/heartbeat" >/dev/null 2>&1 \
     || echo "$(date '+%d.%m %H:%M') отметка на GitHub не ушла" >>"$HEALTH"
 fi
