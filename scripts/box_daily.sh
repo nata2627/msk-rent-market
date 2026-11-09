@@ -186,8 +186,10 @@ COLLECT_ARGS="$COLLECT_ARGS --transport browser --resume --snapshot-date $SNAPSH
 # около 900 МБ на базу и систему.
 # С 09.11.2026 на новом SSD бокса нет, машина целиком наша (7,7 ГиБ, база
 # около 1,5), а Chrome 157 на пробном обходе за пять минут уперся в
-# 1,8 ГиБ, и страницы стали падать по таймауту. Лимит поднят до 3 ГиБ и
-# задается переменной COLLECT_MEMORY.
+# 1,8 ГиБ, и страницы стали падать по таймауту. С 3 ГиБ падали вкладки
+# (Page crashed). Замер памяти процессов без кеша: 2-4,2 ГиБ на обходе,
+# поэтому лимит 5 ГиБ, переменная COLLECT_MEMORY. База реально занимает
+# мегабайты, остальное у нее кеш, который ядро отдает.
 # --memory-swap равен --memory: свопа в боксе нет вовсе, и это просто
 # запрещает контейнеру рассчитывать на него.
 #
@@ -201,8 +203,8 @@ docker run --rm \
   --name rent_collect \
   --network host \
   --shm-size=1g \
-  --memory="${COLLECT_MEMORY:-3g}" \
-  --memory-swap="${COLLECT_MEMORY:-3g}" \
+  --memory="${COLLECT_MEMORY:-5g}" \
+  --memory-swap="${COLLECT_MEMORY:-5g}" \
   -v "$REPO":/work \
   -w /work \
   --user "$(id -u):$(id -g)" \
