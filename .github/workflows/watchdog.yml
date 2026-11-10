@@ -4,7 +4,7 @@
 # выключится или пропадет сеть, тревогу прислать будет некому. Здесь
 # проверка идет на серверах GitHub.
 #
-# Пульс. Бокс раз в пятнадцать минут перезаписывает ветку heartbeat
+# Пульс. Бокс раз в пятнадцать минут перезаписывает тег heartbeat
 # (scripts/box_pulse.sh). Сторож ходит раз в полчаса и пишет в телеграм,
 # если отметке больше часа. 29.10.2026 Mac mini завис в 08:15, а прежний
 # сторож, сверявший только витрину раз в сутки с порогом 36 часов,
@@ -45,6 +45,9 @@ jobs:
           EVENT: ${{ github.event_name }}
           BEAT_LATE_H: ${{ vars.BEAT_LATE_H }}
         run: |
-          git fetch -q --depth=1 origin heartbeat || true
+          # С 10.11.2026 отметка в теге heartbeat, ветка оставлена на
+          # время перехода: если тега нет, читается она.
+          git fetch -q --depth=1 origin refs/tags/heartbeat \
+            || git fetch -q --depth=1 origin heartbeat || true
           beat=$(git log -1 --format=%ct FETCH_HEAD 2>/dev/null || echo 0)
           python3 .github/watchdog.py "$beat"

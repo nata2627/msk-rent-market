@@ -18,12 +18,12 @@
 #    часа, даже если сама беда случится у соседа.
 # 2. Ранняя тревога в телеграм, пока машина еще способна ее отправить:
 #    память бокса у предела, хост ждет память или диск.
-# 3. Отметка на GitHub, ветка heartbeat, раз в пятнадцать минут. Ее
+# 3. Отметка на GitHub, тег heartbeat, раз в пятнадцать минут. Ее
 #    читает .github/workflows/watchdog.yml на серверах GitHub и пишет в
 #    телеграм, если отметки нет больше часа. Это единственная проверка,
 #    которая переживает смерть машины.
 #
-# Ветка heartbeat всегда из одного коммита без родителя и с пустым
+# Тег heartbeat всегда на одном коммите без родителя и с пустым
 # деревом: пушится с --force, история main не растет, сборки на нее не
 # реагируют (tests и pages слушают только main).
 #
@@ -104,7 +104,10 @@ if [ $(( 10#$(date +%M) % 15 )) -lt 5 ] && [ -d "$SITE/.git" ]; then
   EMPTY=$(git -C "$SITE" mktree </dev/null)
   C=$(git -C "$SITE" -c user.name=box -c user.email=box@localhost \
       commit-tree "$EMPTY" -m "пульс $(date '+%d.%m.%Y %H:%M') МСК, память ${WHO} ${MEM_MB} МБ, свободно ${FREE_MB} МБ")
-  timeout 60 git -C "$SITE" push -q -f origin "$C:refs/heads/heartbeat" >/dev/null 2>&1 \
+  # Тег, а не ветка: на ветку, в которую пушат каждые 15 минут, GitHub
+  # вешает на главной странице репозитория плашку «had recent pushes»
+  # (10.11.2026). Тег так не показывается, а сторож читает его так же.
+  timeout 60 git -C "$SITE" push -q -f origin "$C:refs/tags/heartbeat" >/dev/null 2>&1 \
     || echo "$(date '+%d.%m %H:%M') отметка на GitHub не ушла" >>"$HEALTH"
 fi
 exit 0

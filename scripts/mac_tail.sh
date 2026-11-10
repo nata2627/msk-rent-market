@@ -60,5 +60,5 @@ bash "$REPO/scripts/box_report.sh" >/dev/null 2>&1 || say "итог дня не 
 # Отметка «жив» для сторожа на GitHub, раз в сутки после хвоста: порог
 # сторожа на время макбука 30 часов (переменная BEAT_LATE_H).
 C=$(git -C "$SITE" commit-tree "$(git -C "$SITE" mktree </dev/null)" -m "пульс $(date '+%d.%m.%Y %H:%M') МСК, макбук")
-git -C "$SITE" push -q -f origin "$C:refs/heads/heartbeat" || say "отметка на GitHub не ушла"
+git -C "$SITE" push -q -f origin "$C:refs/tags/heartbeat" || say "отметка на GitHub не ушла"
 say "Конец"
