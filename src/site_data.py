@@ -116,11 +116,16 @@ def quality(cur) -> dict:
     """Качество сбора по дням. Здесь только счетчики прогонов и корзин,
     объявлений в ячейках нет, поэтому порог ячейки не нужен."""
     cur.execute("""select snapshot_date, is_covered, runs_failed, completeness_pct::float8,
-                          underfilled_pct::float8, offers_12
+                          underfilled_pct::float8, offers_12, got_12, claimed_12,
+                          seg_completeness_pct::float8, seg_1_pct::float8, seg_2_pct::float8
                      from marts.collection_quality order by snapshot_date""")
     days = [{"date": d.isoformat(), "covered": c, "runs_failed": f,
-             "completeness_pct": p, "underfilled_pct": u, "offers": n}
-            for d, c, f, p, u, n in cur.fetchall()]
+             "completeness_pct": p, "underfilled_pct": u, "offers": n,
+             "got": g, "claimed": cl, "seg_pct": s, "seg_1_pct": s1, "seg_2_pct": s2}
+            for d, c, f, p, u, n, g, cl, s, s1, s2 in cur.fetchall()]
+    # Полнота дня по сегменту, как в README: медиана по всем дням, где
+    # заявленное известно, включая прерванные (с 10.11.2026).
+    seg = sorted(d["seg_pct"] for d in days if d["seg_pct"] is not None)
     covered = [d for d in days if d["covered"]]
     pct = sorted(d["completeness_pct"] for d in covered if d["completeness_pct"] is not None)
     und = sorted(d["underfilled_pct"] for d in covered if d["underfilled_pct"] is not None)
@@ -138,6 +143,9 @@ def quality(cur) -> dict:
             "completeness_median": pct[len(pct) // 2] if pct else None,
             "completeness_min": pct[0] if pct else None,
             "underfilled_median": und[len(und) // 2] if und else None,
+            "seg_median": seg[(len(seg) - 1) // 2] if seg else None,
+            "seg_days": len(seg),
+            "seg_days_ge95": sum(v >= 95 for v in seg),
             "shortfall_median": short}
 
 
