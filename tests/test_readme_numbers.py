@@ -4,6 +4,7 @@
 потерять молча. Молчаливая потеря — это и есть исходная болезнь, от
 которой лечимся, и повторить её внутри лекарства было бы обидно.
 """
+from src import readme_numbers
 from src.readme_numbers import apply, block
 
 
@@ -88,3 +89,22 @@ def test_short_dates_one_month_names_it_once():
     assert short_dates([date(2026, 10, 13)]) == "13 октября"
     assert short_dates([date(2026, 9, 30), date(2026, 10, 1)]) == "30 сентября и 1 октября"
     assert short_dates([]) == "нет"
+
+
+def test_day_completeness_counts_broken_days_and_names_only_them():
+    from datetime import date
+    # Строки как из marts.collection_quality: день, заявлено, собрано,
+    # полнота, по комнатностям, заявленное с прошлого дня, прогонов, сбои.
+    days = [
+        (date(2026, 11, 4), 16996, 16941, 99.7, 99.9, 99.5, False, 2, ["прервано вручную"]),
+        (date(2026, 11, 3), 16745, 4006, 23.9, 54.1, 0.1, True, 1, ["прервано вручную"]),
+        (date(2026, 10, 9), 16879, 0, 0.0, 0.0, 0.0, True, 0, None),
+    ]
+    f = readme_numbers.day_completeness(lambda sql, p=None: days)
+    # Медиана по всем дням, провальные тянут ее вниз, а не выпадают.
+    assert f["q_completeness"] == "23,9"
+    assert (f["q_days"], f["q_days_ge95"]) == ("3", "1")
+    lines = f["q_days_table"].strip().splitlines()
+    assert lines[2] == "| 04.11 | 16\u00a0996 | 16\u00a0941 | 99,7 | 99,9 | 99,5 |  |"
+    assert lines[3].startswith("| **03.11** |") and "прерван снаружи" in lines[3]
+    assert "обход не запускался, заявлено взято за прошлый день" in lines[4]

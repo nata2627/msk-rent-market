@@ -46,6 +46,7 @@ def machine(monkeypatch):
     monkeypatch.setattr(heal, "_detach", lambda cmd: detached.append(cmd))
     monkeypatch.setattr(heal.time, "sleep", lambda s: None)
     monkeypatch.setattr(status, "gather_seg", lambda: 9000)
+    monkeypatch.setattr(status, "gather_claimed", lambda: 18000)
     alive = {"db": True}
     monkeypatch.setattr(db, "scalar", lambda sql, p=None: 1 if alive["db"] else None)
     return SimpleNamespace(ran=ran, detached=detached, alive=alive)
@@ -154,7 +155,7 @@ def test_dev_unlock_только_описывает(settings, machine):
 def test_dev_catchup_только_описывает(settings, machine):
     out = text_of(ask(settings, "/catchup 2026-11-02"))
     assert "Сделал бы: запустил бы" in out and "narrow 2026-11-02" in out
-    assert "собрано 9000 из 16500" in out
+    assert "собрано 9000 из 18000 заявленных ЦИАНом (50%)" in out
     assert machine.detached == []
 
 

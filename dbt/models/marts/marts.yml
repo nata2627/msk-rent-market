@@ -105,6 +105,12 @@ models:
                 value: 0
       - name: underfilled_pct
         description: Доля листьев без ошибки, где собрано меньше заявленного.
+      - name: seg_completeness_pct
+        description: Однушки и двушки дня против заявленного ЦИАНом в верхних корзинах, не больше 100.
+        data_tests:
+          - min_value:
+              arguments:
+                value: 0
 
   - name: exit_day
     description: Уходы по дням и комнатности.

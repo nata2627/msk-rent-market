@@ -6,9 +6,6 @@ from dataclasses import dataclass
 
 from bot import db, machine
 
-# Норма сегмента за день, та же, что в box_watch.sh.
-NORM = 16500
-
 
 # Вердикт свежести считается представлением marts.data_freshness за
 # полсекунды (максимум по marts.offer_scored), а меняется он раз в сутки,
@@ -42,6 +39,7 @@ def fresh() -> str | None:
 @dataclass
 class Facts:
     seg: int
+    claimed: int | None
     covered: str | None
     run: str | None
     fresh: str | None
@@ -58,14 +56,42 @@ SEG_SQL = """
      where s.snapshot_date = current_date and o.rooms_count in (1, 2)"""
 
 
+# Заявленное ЦИАНом по верхним корзинам однушек и двушек, как в
+# scripts/box_seg.sh. До 10.11.2026 здесь стояла норма 16 500, замер
+# 13-21.10, и за месяц она устарела. Пока обход не дошел до двушек,
+# заявлено только по однушкам, и собрано тоже: доля остается честной.
+CLAIMED_SQL = """
+    select sum(c) from (
+      select max(b.claimed_count) c
+        from raw.collection_run r join raw.bucket b using (run_id)
+       where r.source = 'cian' and r.snapshot_date = current_date
+         and b.depth = 0 and b.rooms in ('1', '2') and not b.pets_filter
+         and b.district is null and b.okrug is null
+         and b.price_min is null and b.price_max is null
+       group by b.rooms) t"""
+
+
 def gather_seg() -> int:
     """Собрано за сегодня по сегменту, однушки и двушки."""
     return db.scalar(SEG_SQL) or 0
 
 
+def gather_claimed() -> int | None:
+    """Сколько ЦИАН заявил сегодня по сегменту, None до начала обхода."""
+    value = db.scalar(CLAIMED_SQL)
+    return int(value) if value else None
+
+
+def of_claimed(seg: int, claimed: int | None) -> str:
+    if not claimed:
+        return f"{seg}, заявленного ЦИАНом за день еще нет"
+    return f"{seg} из {claimed} заявленных ЦИАНом ({seg * 100 // claimed}%)"
+
+
 def gather(settings) -> Facts:
     return Facts(
         seg=gather_seg(),
+        claimed=gather_claimed(),
         covered=db.scalar("""
             select coalesce(string_agg(distinct b.rooms, ', '), 'нет')
               from raw.collection_run r join raw.bucket b using (run_id)
@@ -85,7 +111,6 @@ def gather(settings) -> Facts:
 
 def text(role: str, f: Facts, now: time.struct_time | None = None) -> str:
     stamp = time.strftime("%d.%m, %H:%M", now or time.localtime())
-    pct = f.seg * 100 // NORM
     if not f.crawling:
         lock = "обход не идёт"
     elif role == "owner":
@@ -97,14 +122,14 @@ def text(role: str, f: Facts, now: time.struct_time | None = None) -> str:
     if role != "owner":
         return f"""Состояние на {stamp}
 
-Собрано за сегодня: {f.seg} объявлений 1-2 комнаты ({pct}% от обычного дня)
+Собрано за сегодня объявлений 1-2 комнаты: {of_claimed(f.seg, f.claimed)}
 Покрытые комнатности: {f.covered or ''}
 Свежесть витрин: {f.fresh or 'неизвестна'}
 
 {lock}"""
     return f"""Состояние на {stamp}
 
-Сегмент за сегодня: {f.seg} из {NORM} ({pct}%)
+Сегмент за сегодня: {of_claimed(f.seg, f.claimed)}
 Покрытые комнатности: {f.covered or ''}
 Витрины: {f.fresh or 'не ответили'}
 

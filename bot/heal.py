@@ -138,16 +138,16 @@ def cmd_catchup(ctx: Ctx, day: str) -> None:
 Посмотреть, как он идёт: /log
 Если он заклинил: /unlock""")
         return
-    seg = status.gather_seg()
+    seg = status.of_claimed(status.gather_seg(), status.gather_claimed())
     script = repo / "scripts" / "box_daily.sh"
     if dry(ctx, "catchup", f"запустил бы {script} narrow {day} (по сегменту собрано "
-           f"{seg} из {status.NORM})"):
+           f"{seg})"):
         return
     _detach([str(script), "narrow", day])
     ctx.note(f"catchup: запущен обход за {day}")
     ctx.reply(f"""Обход за {day} запущен
 
-Сейчас по сегменту собрано {seg} из {status.NORM}.
+Сейчас по сегменту собрано {seg}.
 Уже собранные корзины пропускаются, так что добор идёт быстрее полного.
 Ход: /log, итог придёт сам.""")
 

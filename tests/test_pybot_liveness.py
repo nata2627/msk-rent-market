@@ -49,7 +49,7 @@ def test_пульс_пишет_файл_и_сторож_выходит(tmp_path)
 # /status
 # ---------------------------------------------------------------------
 
-FACTS = status.Facts(seg=8250, covered="1, 2", run="207 narrow ok, начат 02.11 14:17",
+FACTS = status.Facts(seg=8250, claimed=16500, covered="1, 2", run="207 narrow ok, начат 02.11 14:17",
                      fresh="сегодня, 02.11", disk=51868, mem=1363,
                      crawling=True, last_line="корзина 330 из 600")
 NOW = time.strptime("02.11.2026 18:34", "%d.%m.%Y %H:%M")
@@ -58,7 +58,7 @@ NOW = time.strptime("02.11.2026 18:34", "%d.%m.%Y %H:%M")
 def test_status_владелице_как_у_старого_бота():
     assert status.text("owner", FACTS, NOW) == """Состояние на 02.11, 18:34
 
-Сегмент за сегодня: 8250 из 16500 (50%)
+Сегмент за сегодня: 8250 из 16500 заявленных ЦИАНом (50%)
 Покрытые комнатности: 1, 2
 Витрины: сегодня, 02.11
 
@@ -71,17 +71,18 @@ def test_status_владелице_как_у_старого_бота():
 
 def test_status_гостю_без_машины():
     text = status.text("guest", FACTS, NOW)
-    assert "Собрано за сегодня: 8250 объявлений 1-2 комнаты (50% от обычного дня)" in text
+    assert "Собрано за сегодня объявлений 1-2 комнаты: 8250 из 16500 заявленных ЦИАНом (50%)" in text
     assert text.endswith("сбор сейчас идёт")
     for leak in ("Диск:", "Память:", "Последний прогон", "корзина 330"):
         assert leak not in text
 
 
 def test_status_база_не_ответила():
-    f = status.Facts(seg=0, covered=None, run=None, fresh=None, disk=1, mem=None,
+    f = status.Facts(seg=0, claimed=None, covered=None, run=None, fresh=None, disk=1, mem=None,
                      crawling=False, last_line="")
     text = status.text("owner", f, NOW)
     assert "Витрины: не ответили" in text
+    assert "Сегмент за сегодня: 0, заявленного ЦИАНом за день еще нет" in text
     assert "Последний прогон: неизвестен" in text
     assert "обход не идёт" in text
     assert "Свежесть витрин: неизвестна" in status.text("guest", f, NOW)

@@ -46,22 +46,10 @@ say() { echo "$(date +%H:%M:%S) === $*"; }
 # глушится: он и так шёл бы в журнал прогона, а отправщик пишет свой.
 notify() { bash "$REPO/scripts/box_notify.sh" "$@" >/dev/null 2>&1; }
 
-# Сколько собрано по искомому сегменту за дату снимка. Нужно только в
-# сообщении о сбое: «сбой на шаге сбора» без числа не говорит, потерян
-# день целиком или только его хвост.
-collected() {
-  docker exec -i "$PG_CONTAINER" psql -qtA -U rent -d rent -c \
-    "select count(distinct s.offer_id)
-       from raw.offer_snapshot s
-       join core.offer o using (source, offer_id)
-      where s.snapshot_date = '$SNAPSHOT_DATE'
-        and o.rooms_count in (1, 2);" \
-    2>/dev/null | tr -d '[:space:]'
-}
-
-# Норма искомого сегмента за день, замер 13-21.10.2026. Та же величина в
-# box_watch.sh и box_report.sh.
-NORM=16500
+# Сколько собрано по искомому сегменту за дату снимка и сколько ЦИАН
+# заявил. Нужно только в сообщении о сбое: «сбой на шаге сбора» без числа
+# не говорит, потерян день целиком или только его хвост.
+seg_line() { bash "$REPO/scripts/box_seg.sh" "$SNAPSHOT_DATE"; }
 
 # Удаляются только файлы журналов прогона (data/logs/box_*.log), и
 # никогда данные: база живёт в отдельном томе Docker, а raw вообще только
@@ -280,20 +268,20 @@ say "Конец, сбоев: $FAILS"
 # Шаг сбора опознаётся по журналу, а не по коду: код у прогона один на
 # все пять шагов, а имя сбойного шага пишет сам контейнер.
 if [ "$FAILS" != 0 ]; then
-  COL="$(collected)"
+  COL="$(seg_line)"
   if tail -n "+$((LOG_MARK + 1))" "$LOG" | grep -q 'Сбор — СБОЙ'; then
     notify collect-fail "Сбор упал — день под угрозой
 $(date '+%d.%m, %H:%M')
 
 Режим $MODE, дата $SNAPSHOT_DATE, сбоев $FAILS.
-Собрано ${COL:-?} из $NORM по сегменту.
+Собрано по сегменту $COL.
 
 Несобранный день не вернуть. Догнать: /catchup $SNAPSHOT_DATE"
   else
     notify run-fails "Шаг после сбора упал
 $(date '+%d.%m, %H:%M')
 
-Сам сбор прошёл: ${COL:-?} из $NORM по сегменту.
+Сам сбор прошёл, по сегменту $COL.
 Сбоев в прогоне $MODE за $SNAPSHOT_DATE: $FAILS.
 
 Данные целы, пересчёт из raw не срочен. Посмотреть: /log"

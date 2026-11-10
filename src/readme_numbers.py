@@ -233,6 +233,20 @@ REASONS = (
 )
 
 
+# Те же причины короче, для таблицы полноты по дням: там их по нескольку
+# в одной клетке.
+SHORT_REASONS = {
+    "похоже на блокировку, обход остановил себя сам": "похоже на блокировку",
+    "прерван снаружи: сигнал, перерегистрация расписания, переезд": "прерван снаружи",
+    "завис без итога, закрыт задним числом": "завис без итога",
+    "пробный прогон с пределом запросов": "пробный предел запросов",
+    "пустой обход: ни одна корзина не прочиталась": "пустой обход",
+    "браузер закрылся посреди обхода": "браузер закрылся",
+    "страница не далась после трех попыток, обход продолжен следующим запуском":
+        "страница не далась",
+}
+
+
 def failure_reason(note: str | None) -> str:
     for pattern, label in REASONS:
         if note and re.search(pattern, note):
@@ -327,15 +341,60 @@ def operations(rows) -> dict[str, str]:
         tbl.append(f"| {label} | {n} |")
     f["ops_fail_table"] = block(tbl)
 
-    # Полнота закрытого дня, то же определение, что на витрине
-    # (marts.collection_quality): README и витрина не должны расходиться.
-    (comp, und), = rows("""
-        select percentile_disc(0.5) within group (order by completeness_pct),
-               percentile_disc(0.5) within group (order by underfilled_pct)
+    # Недобор внутри дня, по корзинам успешных прогонов, то же
+    # определение, что на витрине (marts.collection_quality).
+    (und,), = rows("""
+        select percentile_disc(0.5) within group (order by underfilled_pct)
         from marts.collection_quality where is_covered
     """)
-    f["q_completeness"] = pct(comp)
     f["q_underfilled"] = pct(und, 0)
+    f.update(day_completeness(rows))
+    return f
+
+
+def day_completeness(rows) -> dict[str, str]:
+    """Полнота дня по сегменту (marts.collection_quality.seg_completeness_pct):
+    однушки и двушки дня против заявленного ЦИАНом. В README медиана и
+    счет дней, таблица по каждому дню в methods/operations.md. Медиана
+    по всем дням, а не по покрытым: прерванный день должен тянуть ее
+    вниз, а не выпадать (до 10.11.2026 выпадал)."""
+    days = rows("""
+        select q.snapshot_date, q.claimed_12, q.got_12, q.seg_completeness_pct,
+               q.seg_1_pct, q.seg_2_pct, q.claimed_carried, q.runs,
+               (select array_agg(r.note) from raw.collection_run r
+                 where r.source = 'cian' and r.snapshot_date = q.snapshot_date
+                   and r.status in ('failed', 'aborted'))
+        from marts.collection_quality q
+        where q.seg_completeness_pct is not null
+        order by 1 desc
+    """)
+    def opt(v):
+        return "" if v is None else pct(v)
+
+    vals = sorted(d[3] for d in days)
+    f = {
+        # Нижняя медиана, как percentile_disc выше: число из ряда, а не
+        # середина между двумя днями.
+        "q_completeness": pct(vals[(len(vals) - 1) // 2]),
+        "q_days": str(len(days)),
+        "q_days_ge95": str(sum(v >= 95 for v in vals)),
+    }
+    tbl = ["| день | заявлено | собрано | полнота, % | 1 комн., % | 2 комн., % | что было |",
+           "|---|---:|---:|---:|---:|---:|---|"]
+    for day, claimed, got, p, p1, p2, carried, runs, notes in days:
+        # Причины только у провалов: у полного дня упавший и догнанный
+        # прогон обычное дело (methods/operations.md выше), а не событие.
+        why = []
+        if p < 95:
+            why = sorted({SHORT_REASONS.get(failure_reason(n), "прочее") for n in notes or []})
+            if not runs:
+                why.append("обход не запускался")
+        if carried:
+            why.append("заявлено взято за прошлый день")
+        mark = "**" if p < 95 else ""
+        tbl.append(f"| {mark}{day:%d.%m}{mark} | {thousands(claimed)} | {thousands(got)} "
+                   f"| {mark}{pct(p)}{mark} | {opt(p1)} | {opt(p2)} | {', '.join(why)} |")
+    f["q_days_table"] = block(tbl)
     return f
 
 
