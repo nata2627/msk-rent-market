@@ -7,6 +7,7 @@ select s.*
      , c.comparable_offers
      , c.med_price
      , c.med_area
+     , c.med_ppm
      , dl.ppm_vs_city
      -- ЦЕНА КАК СИГНАЛ КАЧЕСТВА, а не как выгода. Знак перевёрнут.
      --
@@ -28,8 +29,17 @@ select s.*
      -- ОГОВОРКА: составляющая отчасти тавтологична — «дорогое значит
      -- хорошее». Это заплатка на время, пока нет типа ремонта; он есть
      -- только на странице объявления.
+     --
+     -- 12.11.2026 цена заменена ценой метра, а наклон 250 смягчён до 100.
+     -- Под фильтром «цена до» почти всё дешевле похожих, и прежняя шкала
+     -- обнулялась уже на −20%: в моём отборе (2к до 90 тыс, метро до 10
+     -- минут, животные, внутри МКАД) ноль был у 33% из 528, и 56 м² за
+     -- 60 тыс в Лефортове (метр 0,53 от похожих) выглядели так же, как
+     -- 30 м² за те же деньги на Арбате (0,75). Цена целиком к тому же не
+     -- видит площади: большая дешёвая квартира дешевле метром, а не
+     -- ценой. Ноль теперь только у метра вдвое дешевле похожих.
      , coalesce(greatest(0, least(100,
-         50 + (s.price / nullif(c.med_price, 0) - 1) * 250)), 50) as score_price
+         50 + ((s.price / nullif(s.total_area, 0)) / nullif(c.med_ppm, 0) - 1) * 100)), 50) as score_price
      , coalesce(greatest(0, least(100,
          50 + (s.total_area / nullif(c.med_area, 0) - 1) * 250)), 50) as score_area
      -- УРОВЕНЬ РАЙОНА. Без него оценка сравнивала квартиру только с
@@ -47,7 +57,11 @@ select s.*
      -- Самая дешёвая эпоха вовсе не панель, а 1991-2009 (1451 за метр) —
      -- поздняя панель и блок без обаяния старого фонда и без качества
      -- новостроек.
-     , case when s.building_material in ('old', 'stalin')            then 100
+     --
+     -- 12.11.2026: дом под реновацию 10, ниже любой панели. Проверяется
+     -- первым, потому что снос перебивает и эпоху, и материал.
+     , case when r.is_renovation                                    then  10
+            when s.building_material in ('old', 'stalin')            then 100
             when s.build_year is not null and s.build_year < 1918    then 100
             when s.build_year between 1918 and 1960                  then  90
             when s.building_material = 'monolithBrick'               then  85
@@ -77,11 +91,12 @@ select s.*
             when s.large_park_distance_m <= 2000  then 50
             when s.large_park_distance_m <= 5000  then 25
             else 0 end as score_park
-     -- ЖИВОТНЫЕ. Явное разрешение и «по договорённости» почти равны:
-     -- разница в пять очков, так и задумано. «Не указано» —
-     -- середина, это 57% рынка и повод спросить, а не повод вычеркнуть.
+     -- ЖИВОТНЫЕ. «По договорённости» с 12.11.2026 стоит 70, а не 95:
+     -- это обещание разговора, а не разрешение, и отказать могут уже на
+     -- просмотре. «Не указано» — середина, это 57% рынка и повод
+     -- спросить, а не повод вычеркнуть.
      , case when s.pets_state = 'allowed'    then 100
-            when s.pets_state = 'negotiable' then  95
+            when s.pets_state = 'negotiable' then  70
             when s.pets_state = 'forbidden'  then   0
             else 50 end as score_pets
      -- Апартаменты — минимум очков, но НЕ исключение из подбора.
@@ -95,7 +110,24 @@ select s.*
             when s.floor = 1                               then 40
             when s.floor = s.floors_total                  then 70
             else 100 end as score_floor
+     -- РЕМОНТ по словам описания, шкала и замеры в offer_condition.
+     -- Слов нет у трёх четвертей объявлений, это середина, а не плохо.
+     , case r.repair_text
+            when 'дизайнерский'  then 100
+            when 'новый'         then  90
+            when 'евроремонт'    then  80
+            when 'косметический' then  25
+            when 'фото хуже'     then  25
+            when 'плохой'        then  10
+            -- Слов о ремонте нет и описание короткое: чуть ниже середины.
+            else case when r.is_short_description then 40 else 50 end
+            end as score_repair
+     , r.repair_text
+     , r.is_short_description
+     , r.is_renovation
 from {{ ref('offer_segment') }} s
+left join {{ ref('offer_condition') }} r
+       on r.source = s.source and r.offer_id = s.offer_id
 left join {{ ref('comparable_median') }} c
        on c.district = s.district and c.rooms_count = s.rooms_count
 left join {{ ref('district_level') }} dl
@@ -110,13 +142,21 @@ left join {{ ref('district_level') }} dl
 -- Веса спорны по построению, и спорить с ними нужно: опись полей с
 -- пустой колонкой под свои веса собирается командой
 -- `python -m etl.field_report > docs/fields.md`.
+--
+-- 12.11.2026 ремонт получил 10, взятые у площади (12→6) и парка (10→6).
+-- Площадь поощряла большое и дешёвое, а под фильтром «цена до» это
+-- чаще убитое. В моём отборе метро и животные у всех одинаковые, поэтому их
+-- вес порядок не меняет и трогать его незачем. Вес ремонта 20 проверен
+-- и отложен: это слова продавца, а агенты пишут «дизайнерский» ради
+-- рекламы.
 select scored.*
      , round( 0.18 * score_building
             + 0.15 * score_metro
             + 0.15 * score_district
             + 0.14 * score_price
-            + 0.12 * score_area
-            + 0.10 * score_park
+            + 0.10 * score_repair
+            + 0.06 * score_area
+            + 0.06 * score_park
             + 0.08 * score_pets
             + 0.05 * score_apartments
             + 0.03 * score_floor )::int as score

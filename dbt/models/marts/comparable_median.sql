@@ -7,6 +7,9 @@ select district
      , count(*)                                                          as comparable_offers
      , percentile_cont(0.5) within group (order by price)                as med_price
      , percentile_cont(0.5) within group (order by total_area)           as med_area
+     -- Медиана цены метра, а не отношение медиан: для балла за цену
+     -- нужно, дорог ли метр этой квартиры среди похожих.
+     , percentile_cont(0.5) within group (order by price / total_area)   as med_ppm
 from {{ ref('offer_segment') }}
 where source = 'cian'
   and price is not null and total_area > 0

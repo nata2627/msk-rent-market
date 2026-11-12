@@ -61,6 +61,19 @@ models:
               arguments:
                 value: 5
 
+  - name: offer_condition
+    description: Состояние квартиры и дома по последнему снимку выдачи (слова о ремонте, длина описания, реновация), по строке на объявление. Правила, а не модель.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [source, offer_id]
+    columns:
+      - name: repair_text
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [плохой, дизайнерский, евроремонт, косметический, новый, фото хуже]
+
   - name: offer_scored
     description: Оценка варианта. Личные предпочтения, а не модель рынка.
     data_tests:
