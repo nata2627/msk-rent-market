@@ -133,8 +133,10 @@ def test_разметка_та_же_что_у_box_notify():
     # выглядеть одинаково: первая строка жирная, строка с $ это команда,
     # голая ссылка становится словами.
     import subprocess
-    text = "Заголовок <x>\nстрока & ещё\n$ make up\nhttps://cian.ru/rent/flat/1?a=b"
+    text = ("Заголовок <x>\nстрока & ещё\n$ make up\nОтбор: цена до 90 тыс\n"
+            "https://cian.ru/rent/flat/1?a=b")
     assert render(text) == ('<b>Заголовок &lt;x&gt;</b>\nстрока &amp; ещё\n<code>make up</code>\n'
+                            '<i>Отбор: цена до 90 тыс</i>\n'
                             '<a href="https://cian.ru/rent/flat/1?a=b">Открыть объявление</a>')
     body = (ROOT / "scripts" / "box_notify.sh").read_text()
     to_html = body.split("to_html() {\n  python3 -c '")[1].split("'\n}")[0]

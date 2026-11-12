@@ -50,7 +50,21 @@ CARD_COLS = """o.offer_id, round(o.score)::int, o.district, o.rooms_count, round
            split_part(o.url, '?', 1),
            coalesce((select p.url from core.offer_photo p
                       where p.source = o.source and p.offer_id = o.offer_id
-                      order by p.photo_pos limit 1), '')"""
+                      order by p.photo_pos limit 1), ''),
+           -- Ближайшая пешком станция метро. Из последнего
+           -- снимка, а не из core.offer_metro: та копит станции всех
+           -- снимков и держит одну ветку на название, так что у пересадочных
+           -- ветка бывает чужой, а время прошлогодним. Отбор тот же, что у
+           -- metro_real_walk_min: только метрополитен, без МЦК и диаметров.
+           coalesce((select u->>'name'
+                       from raw.offer_snapshot s,
+                            jsonb_array_elements(s.payload->'geo'->'undergrounds') u
+                      where s.source = o.source and s.offer_id = o.offer_id
+                        and s.payload is not null
+                        and u->>'transportType' = 'walk' and u->>'lineType' is null
+                      order by s.snapshot_date desc, s.snapshot_id desc,
+                               (u->>'time')::numeric
+                      limit 1), '')"""
 
 
 @dataclass
@@ -68,12 +82,13 @@ class Row:
     active: bool
     url: str
     photo: str
+    station: str
 
 
 def to_row(values) -> Row:
     # Пустое поле psql у старого бота печатал пустой строкой.
     v = ["" if x is None else x for x in values]
-    return Row(str(v[0]), *(str(x) for x in v[1:10]), bool(v[10]), str(v[11]), str(v[12]))
+    return Row(str(v[0]), *(str(x) for x in v[1:10]), bool(v[10]), str(v[11]), str(v[12]), str(v[13]))
 
 
 # ---------------------------------------------------------------------
@@ -173,7 +188,17 @@ def keyboard(mode: str, is_saved: bool, price: str, rooms: str) -> Keyboard:
     ]
 
 
-def caption(head: str, r: Row, is_saved: bool, tail: str, role: str = "owner") -> str:
+# Ⓜ️ перед станцией: без него «Сокол» или «Аэропорт» читаются как район,
+# и однажды так и прочиталось. Цвет ветки пробовали кружками, но цветных
+# кружков девять, а веток шестнадцать, и похожие цвета сливались.
+def metro_line(r: Row) -> str:
+    if not r.station:
+        return f"метро 🚶 {r.metro} мин"
+    return f"Ⓜ️ {r.station} 🚶 {r.metro} мин"
+
+
+def caption(head: str, r: Row, is_saved: bool, tail: str, role: str = "owner",
+            pets: bool = True) -> str:
     # Балл считается по весам владелицы (что важно ей), гостю он ничего
     # не говорит о его квартире.
     score = f" · {r.score} баллов" if role == "owner" else ""
@@ -181,13 +206,16 @@ def caption(head: str, r: Row, is_saved: bool, tail: str, role: str = "owner") -
         tail += "\n\nСнято с публикации, по ссылке может не открыться."
     entry = ""
     if r.entry:
-        entry = f"\n\nПри заселении {r.entry} руб\n" + r.parts.replace("~", "\n")
+        entry = f"\n\nПри заселении {r.entry} руб\n- " + r.parts.replace("~", "\n- ")
     star = "\n★ отложено" if is_saved else ""
+    # Под фильтром по животным строка повторяла бы «Отбор» ниже: фильтр
+    # берет ровно одно состояние, и у всех карточек оно одно и то же.
+    pets_line = f"\nживотные {filters.pets_human(r.pets)}" if pets else ""
     return f"""{head}
 {r.district}{score}
 {r.rooms} комн., {r.area} м2
 {r.price} руб/мес
-метро {r.metro} мин пешком, животные {filters.pets_human(r.pets)}{entry}{star}{tail}
+{metro_line(r)}{pets_line}{entry}{star}{tail}
 
 {r.url}"""
 
@@ -220,8 +248,8 @@ def show(ctx: Ctx, mode: str, idx: int, msg_id: str = "") -> bool:
                         f"where {cond} {ORDER} limit 2 offset %s", [*params, idx])
         if not rows:
             return False
-        row = to_row(rows[0][:13])
-        head = f"{'Новое' if mode == 'new' else 'Вариант'} {idx + 1} из {rows[0][13]}"
+        row = to_row(rows[0][:14])
+        head = f"{'Новое' if mode == 'new' else 'Вариант'} {idx + 1} из {rows[0][14]}"
         tail = f"\n\nОтбор: {filters.human(f)}"
         if len(rows) > 1:
             prefetch = rows[1][12] or ""
@@ -240,8 +268,10 @@ def show(ctx: Ctx, mode: str, idx: int, msg_id: str = "") -> bool:
         tail = ""
     is_saved = row.offer_id in saved(s, chat)
     f = filters.load(s, chat)
+    # Отложенное показывается без фильтров, там строка нужна всегда.
+    pets_shown = mode == "saved" or "pets" not in f
     ctx.replies.append(Card(
-        caption=caption(head, row, is_saved, tail, ctx.role),
+        caption=caption(head, row, is_saved, tail, ctx.role, pets_shown),
         keyboard=keyboard(mode, is_saved, f.get("price", ""), f.get("rooms", "")),
         photo=row.photo, msg_id=msg_id, prefetch=prefetch,
         on_sent=partial(remember, s, chat, mode, idx, row.offer_id),

@@ -17,7 +17,7 @@ NOON = datetime(2026, 11, 6, 13, 0)
 
 def offer(i):
     return (str(1000 + i), 80 - i, f"Район {i}", 2, 45, "85 000", "", "", "7", "allowed", True,
-            f"https://www.cian.ru/rent/flat/{1000 + i}/", "")
+            f"https://www.cian.ru/rent/flat/{1000 + i}/", "", "")
 
 
 @pytest.fixture

@@ -23,7 +23,7 @@ def offer(i, price=70000, photo=True, active=True):
     return (str(1000 + i), 80 - i, f"Район {i}", 1, 40, f"{price:,}".replace(",", " "),
             "187 000", "оплата за 1 мес. 70 000~залог 75 000~комиссия 60% 42 000",
             "9", "allowed", active, f"https://www.cian.ru/rent/flat/{1000 + i}/",
-            f"https://img/{i}.jpg" if photo else "")
+            f"https://img/{i}.jpg" if photo else "", "ВДНХ")
 
 
 @pytest.fixture
@@ -158,12 +158,13 @@ def test_карточка_как_у_старого_бота(settings, base):
 Район 0 · 80 баллов
 1 комн., 40 м2
 70 000 руб/мес
-метро 9 мин пешком, животные можно
+Ⓜ️ ВДНХ 🚶 9 мин
+животные можно
 
 При заселении 187 000 руб
-оплата за 1 мес. 70 000
-залог 75 000
-комиссия 60% 42 000
+- оплата за 1 мес. 70 000
+- залог 75 000
+- комиссия 60% 42 000
 
 Отбор: цена до 77 тыс, комнаты 1,2
 
@@ -498,3 +499,26 @@ def test_старое_нажатие_не_мешает_показать_карт
     run(bot, FakePhotos({}), [Answer(None), a_card(msg_id="77", photo="", sent=sent)], query_id="q")
     assert [c[0] for c in bot.calls] == ["delete", "message"]
     assert sent == ["901"]
+
+
+def test_станция_со_значком_метро_и_без_нее():
+    r = cards.to_row(offer(0)[:13] + ("Авиамоторная",))
+    assert cards.metro_line(r) == "Ⓜ️ Авиамоторная 🚶 9 мин"
+    # Станции в снимке нет: одно время, но все равно видно, что это метро.
+    r = cards.to_row(offer(0)[:13] + ("",))
+    assert cards.metro_line(r) == "метро 🚶 9 мин"
+
+
+def test_животные_не_повторяются_под_фильтром(settings, base):
+    open_flats(settings)
+    filters.put(settings, "42", "pets", "allowed")
+    ctx = Ctx(settings, "42", "owner")
+    assert cards.show(ctx, "pick", 0)
+    text = ctx.replies[0].caption
+    assert "\nживотные можно" not in text
+    assert "животные можно" in text.split("Отбор:")[1]
+    # В отложенном фильтров нет, и строка на месте.
+    cards.toggle_saved(settings, "42", "1000")
+    ctx = Ctx(settings, "42", "owner")
+    assert cards.show(ctx, "saved", 0)
+    assert "\nживотные можно" in ctx.replies[0].caption
