@@ -85,6 +85,26 @@ TG_CHAT="${NOTIFY_TG_CHAT:-$(from_env NOTIFY_TG_CHAT)}"
 WINDOW_H="${NOTIFY_WINDOW_H:-$(from_env NOTIFY_WINDOW_H)}"
 WINDOW_H="${WINDOW_H:-6}"
 
+# Очередь недошедших. 15.11.2026 итог дня в 23:50 не ушел: DNS не
+# ответил за пять секунд, и сообщение осталось только в журнале, то есть
+# пропало. Теперь недошедшее ложится файлом в очередь, а пульс раз в пять
+# минут зовет `--flush`, и оно уходит, как только сеть вернется.
+OUTBOX="$STATE_DIR/outbox"
+
+if [ "${1:-}" = "--flush" ]; then
+  for f in "$OUTBOX"/*; do
+    [ -f "$f" ] || continue
+    # Сутки в очереди — это уже не новость, а шум: пропадает с пометкой.
+    if [ -n "$(find "$f" -mmin +1440 2>/dev/null)" ]; then
+      note "из очереди выброшено, лежало больше суток: $(tr '\n' ' ' <"$f")"
+      rm -f "$f"
+      continue
+    fi
+    NOTIFY_RESEND="$f" bash "$0" --always "$(head -n 1 "$f")" "$(tail -n +2 "$f")"
+  done
+  exit 0
+fi
+
 TEST=0
 ALWAYS=0
 if [ "${1:-}" = "--test" ]; then
@@ -231,7 +251,18 @@ rm -f "$ERR_FILE"
 # Отметка ставится, если дошло ХОТЯ БЫ ОДНО. Иначе упавший канал заглушил
 # бы беду на целое окно ровно тогда, когда каналу и без того нехорошо.
 [ "$ALWAYS" = 0 ] && [ "$DELIVERED" -gt 0 ] && touch "$STAMP"
-[ "$DELIVERED" = 0 ] && note "ни один канал не принял «${KEY}», сообщение осталось здесь: $TEXT"
+if [ -n "${NOTIFY_RESEND:-}" ]; then
+  # Повторная отправка из очереди: дошло — файл убирается, нет — лежит
+  # до следующего пульса. Новой записи в очередь не делается.
+  [ "$DELIVERED" -gt 0 ] && rm -f "$NOTIFY_RESEND"
+elif [ "$DELIVERED" = 0 ] && [ "$TEST" = 0 ]; then
+  mkdir -p "$OUTBOX" 2>/dev/null
+  # Время отправки в заголовок не попадает, поэтому дописывается к
+  # тексту: в очереди сообщение может пролежать часы.
+  printf '%s\n%s\n\n(не дошло в %s, отправлено повторно)' "$KEY" "$TEXT" "$(date '+%d.%m %H:%M')" \
+    >"$OUTBOX/$(date +%s)_$$" 2>/dev/null
+  note "ни один канал не принял «${KEY}», сообщение в очереди, уйдет с пульсом: $TEXT"
+fi
 
 if [ "$TEST" = 1 ]; then
   printf '%s' "$REPORT" | while IFS='|' read -r target code err; do

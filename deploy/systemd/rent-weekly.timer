@@ -1,8 +1,8 @@
 [Unit]
-Description=rent_msk: недельный добор в воскресенье 13:00
+Description=rent_msk: недельный добор в воскресенье 15:00
 
 [Timer]
-OnCalendar=Sun *-*-* 13:00:00
+OnCalendar=Sun *-*-* 15:00:00
 Persistent=true
 
 [Install]

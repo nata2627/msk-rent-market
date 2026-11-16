@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 
 from bot import cards, filters, heal, info, news, status, words
 from bot.actions import Action, Answer, Card, Ctx, Reply  # noqa: F401
@@ -122,24 +122,17 @@ def cmd_ask(ctx: Ctx, p: Parsed) -> None:
     words.cmd_ask(ctx, p.tail)
 
 
-DAY = re.compile(r"20[0-9][0-9]-[0-1][0-9]-[0-3][0-9]")
-DAYS_BACK = {"сегодня": 0, "вчера": 1, "позавчера": 2}
-
-
 def cmd_catchup(ctx: Ctx, p: Parsed) -> None:
-    # Дата проверяется образцом, а не подставляется: она уходит доводом
-    # в box_daily.sh. Слова дня считаются здесь же, в box_daily.sh
-    # попадает уже дата.
-    arg = p.arg.lower()
-    if not arg:
-        heal.cmd_catchup(ctx, date.today().isoformat())
-    elif arg in DAYS_BACK:
-        heal.cmd_catchup(ctx, (date.today() - timedelta(days=DAYS_BACK[arg])).isoformat())
-    elif DAY.fullmatch(arg):
-        heal.cmd_catchup(ctx, arg)
-    else:
-        ctx.reply("Дата должна выглядеть как 2026-10-22, или скажи вчера, позавчера. "
-                  "Без даты беру сегодня.")
+    # Только сегодня. Дата снимка означает день, когда объявление видели
+    # на площадке, и сегодняшняя выдача под вчерашней датой выдала бы
+    # сегодняшние объявления за вчерашние. До 16.11.2026 команда брала
+    # любую дату, а сообщение о сбое советовало /catchup с датой сбоя.
+    if p.arg and p.arg.lower() not in ("сегодня", date.today().isoformat()):
+        ctx.reply("Догнать можно только сегодняшний день. Прошедший не вернуть: "
+                  "сегодняшняя выдача под вчерашней датой исказила бы срок жизни "
+                  "объявлений. Без даты беру сегодня.")
+        return
+    heal.cmd_catchup(ctx, date.today().isoformat())
 
 
 # Команда и ее русские имена ведут в один обработчик, как в dispatch

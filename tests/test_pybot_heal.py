@@ -93,7 +93,7 @@ def cache(s):
 @pytest.mark.parametrize("cmd,head", [
     ("/clean", "Сейчас идёт обход — кеш не трогаю."),
     ("/catchup", "Обход уже идёт — второй не запускаю."),
-    ("/догнать 2026-11-02", "Обход уже идёт — второй не запускаю."),
+    ("/догнать сегодня", "Обход уже идёт — второй не запускаю."),
 ])
 def test_лечение_отказывает_посреди_обхода(request, machine, env, cmd, head):
     s = request.getfixturevalue("settings" if env == "dev" else "prod")
@@ -153,8 +153,8 @@ def test_dev_unlock_только_описывает(settings, machine):
 
 
 def test_dev_catchup_только_описывает(settings, machine):
-    out = text_of(ask(settings, "/catchup 2026-11-02"))
-    assert "Сделал бы: запустил бы" in out and "narrow 2026-11-02" in out
+    out = text_of(ask(settings, "/catchup"))
+    assert "Сделал бы: запустил бы" in out and f"narrow {date.today().isoformat()}" in out
     assert "собрано 9000 из 18000 заявленных ЦИАНом (50%)" in out
     assert machine.detached == []
 
@@ -203,23 +203,34 @@ def test_непустой_замок_не_сносится(prod, machine):
 def test_catchup_запускает_обход(prod, machine):
     out = text_of(ask(prod, "/catchup"))
     day = time.strftime("%Y-%m-%d")
-    assert out.startswith(f"Обход за {day} запущен")
+    assert out.startswith(f"Обход narrow за {day} запущен")
     assert machine.detached == [[str(prod.box_repo / "scripts" / "box_daily.sh"), "narrow", day]]
 
 
-@pytest.mark.parametrize("arg,back", [("сегодня", 0), ("вчера", 1), ("Позавчера", 2)])
-def test_catchup_понимает_слова_дня(prod, machine, arg, back):
-    day = (date.today() - timedelta(days=back)).isoformat()
-    out = text_of(ask(prod, f"/catchup {arg}"))
-    assert out.startswith(f"Обход за {day} запущен")
-    assert machine.detached == [[str(prod.box_repo / "scripts" / "box_daily.sh"), "narrow", day]]
+@pytest.mark.parametrize("arg", ["сегодня", date.today().isoformat()])
+def test_catchup_сегодня(prod, machine, arg):
+    day = date.today().isoformat()
+    assert text_of(ask(prod, f"/catchup {arg}")).startswith(f"Обход narrow за {day} запущен")
 
 
-@pytest.mark.parametrize("arg", ["завтра", "2026-11-2", "2026-11-02;id", "$(id)", "1999-01-01"])
-def test_catchup_дата_только_по_образцу(prod, machine, arg):
+def test_catchup_берет_оборванный_добор(prod, machine):
+    day = date.today().isoformat()
+    marks = prod.box_repo / "data" / "retry"
+    marks.mkdir(parents=True)
+    (marks / "weekly").write_text(day + "\nrun 16:00\n")
+    (marks / "narrow").write_text("2026-11-01\n")
+    out = text_of(ask(prod, "/catchup"))
+    assert out.startswith(f"Обход weekly за {day} запущен")
+    assert machine.detached[0][1:] == ["weekly", day]
+
+
+# Прошедший день не догоняется: сегодняшняя выдача под вчерашней датой
+# выдала бы сегодняшние объявления за вчерашние.
+@pytest.mark.parametrize("arg", ["вчера", "позавчера", (date.today() - timedelta(days=1)).isoformat(),
+                                 "завтра", "2026-11-02;id", "$(id)"])
+def test_catchup_только_сегодня(prod, machine, arg):
     out = text_of(ask(prod, f"/catchup {arg}"))
-    assert out == ("Дата должна выглядеть как 2026-10-22, или скажи вчера, позавчера. "
-                   "Без даты беру сегодня.")
+    assert out.startswith("Догнать можно только сегодняшний день.")
     assert machine.detached == []
 
 

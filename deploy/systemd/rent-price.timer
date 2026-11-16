@@ -1,8 +1,8 @@
 [Unit]
-Description=rent_msk: переобучение в воскресенье 16, 18, 20 часов
+Description=rent_msk: переобучение в воскресенье 18, 20, 22 часа
 
 [Timer]
-OnCalendar=Sun *-*-* 16,18,20:00:00
+OnCalendar=Sun *-*-* 18,20,22:00:00
 Persistent=true
 
 [Install]

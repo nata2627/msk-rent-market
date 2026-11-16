@@ -1,0 +1,9 @@
+[Unit]
+Description=rent_msk: добор после сбоя, раз в 30 минут
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

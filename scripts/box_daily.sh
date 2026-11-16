@@ -267,16 +267,69 @@ say "Конец, сбоев: $FAILS"
 #
 # Шаг сбора опознаётся по журналу, а не по коду: код у прогона один на
 # все пять шагов, а имя сбойного шага пишет сам контейнер.
+RUN_TAIL="$(tail -n "+$((LOG_MARK + 1))" "$LOG")"
+COLLECT_FAILED=0
+printf '%s\n' "$RUN_TAIL" | grep -q 'Сбор — СБОЙ' && COLLECT_FAILED=1
+
+# Отметка для добора (scripts/box_retry.sh): режим и дата, которые надо
+# пройти еще раз с --resume, пока не кончились сутки. Повторный сбой той
+# же даты только освежает время отметки, а счет попыток в ней остается:
+# иначе каждый новый сбой обнулял бы предел попыток. Удачный сбор снимает
+# отметку, за какую бы дату она ни стояла в этом режиме.
+RETRY_DIR="$REPO/data/retry"
+RETRY_FILE="$RETRY_DIR/$MODE"
+if [ "$COLLECT_FAILED" = 1 ]; then
+  mkdir -p "$RETRY_DIR"
+  if [ "$(head -n 1 "$RETRY_FILE" 2>/dev/null)" = "$SNAPSHOT_DATE" ]; then
+    touch "$RETRY_FILE"
+  else
+    echo "$SNAPSHOT_DATE" >"$RETRY_FILE"
+  fi
+elif [ -f "$RETRY_FILE" ]; then
+  rm -f "$RETRY_FILE"
+  if [ -n "${BOX_RETRY:-}" ]; then
+    notify retry-ok "Добор после сбоя прошел
+$(date '+%d.%m, %H:%M')
+
+Режим $MODE, дата $SNAPSHOT_DATE.
+Собрано по сегменту $(seg_line)."
+  fi
+fi
+
 if [ "$FAILS" != 0 ]; then
   COL="$(seg_line)"
-  if tail -n "+$((LOG_MARK + 1))" "$LOG" | grep -q 'Сбор — СБОЙ'; then
-    notify collect-fail "Сбор упал — день под угрозой
+  if [ "$COLLECT_FAILED" = 1 ]; then
+    # Итог обхода из журнала: «корзин 202 ... уникальных объявлений 4998».
+    # Для добора 3+ это единственное число, сегмент 1-2 его не видит.
+    TOTAL="$(printf '%s\n' "$RUN_TAIL" | grep 'INFO Итог:' | tail -n 1 \
+      | sed -n 's/.*Итог: корзин \([0-9]*\).*уникальных объявлений \([0-9]*\).*/корзин \1, объявлений \2/p')"
+    if printf '%s\n' "$RUN_TAIL" | grep -q 'Площадка закрыла доступ'; then
+      WHY="площадка закрыла доступ"
+    else
+      WHY="см. /log"
+    fi
+    RETRY_NOTE="Доберу сам: проба площадки раз в полчаса, обход с места
+обрыва, как только она откроется, до конца суток."
+    # Добор 3+ не трогает сегмент 1-2, и «день под угрозой» про него
+    # неправда: 15.11.2026 так выглядел сбой добора при срезе на 97%.
+    if [ "$MODE" = weekly ]; then
+      notify weekly-fail "Добор 3+ комнат оборван
+$(date '+%d.%m, %H:%M')
+
+Причина: $WHY. Собрано ${TOTAL:-неизвестно сколько}.
+Основной срез 1-2 комнат не задет, по сегменту $COL.
+
+$RETRY_NOTE"
+    else
+      notify collect-fail "Сбор упал — день под угрозой
 $(date '+%d.%m, %H:%M')
 
 Режим $MODE, дата $SNAPSHOT_DATE, сбоев $FAILS.
-Собрано по сегменту $COL.
+Причина: $WHY. Собрано по сегменту $COL.
 
-Несобранный день не вернуть. Догнать: /catchup $SNAPSHOT_DATE"
+$RETRY_NOTE
+Не ждать: /catchup"
+    fi
   else
     notify run-fails "Шаг после сбора упал
 $(date '+%d.%m, %H:%M')

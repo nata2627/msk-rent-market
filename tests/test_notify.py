@@ -21,6 +21,7 @@
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -282,3 +283,53 @@ def test_в_сообщениях_о_беде_нет_команд_для_терм
     for block in blocks:
         assert "ssh " not in block, f"{name}: в сообщении остался ssh"
         assert "rm -rf" not in block, f"{name}: в сообщении остался rm -rf"
+
+
+# ---------------------------------------------------------------------
+# Очередь недошедших: 15.11.2026 итог дня пропал из-за DNS на 5 секунд
+# ---------------------------------------------------------------------
+TG = {"NOTIFY_TG_TOKEN": "1:x", "NOTIFY_TG_CHAT": "42"}
+
+
+def outbox(tmp_path):
+    d = tmp_path / "state" / "outbox"
+    return sorted(d.iterdir()) if d.exists() else []
+
+
+def test_недошедшее_ложится_в_очередь(tmp_path):
+    bindir, _ = fake_curl(tmp_path, code="000", rc=28)
+    run(["pulse", "Итог дня 15.11"], tmp_path, bindir=bindir, env=TG)
+    (f,) = outbox(tmp_path)
+    assert f.read_text().startswith("pulse\nИтог дня 15.11")
+
+
+def test_flush_досылает_и_чистит(tmp_path):
+    bindir, _ = fake_curl(tmp_path, code="000", rc=28)
+    run(["pulse", "Итог дня 15.11"], tmp_path, bindir=bindir, env=TG)
+    bindir, calls = fake_curl(tmp_path, code="200")
+    run(["--flush"], tmp_path, bindir=bindir, env=TG)
+    assert outbox(tmp_path) == []
+    sent = calls.read_text()
+    assert "Итог дня 15.11" in sent and "отправлено повторно" in sent
+
+
+def test_flush_при_мертвой_сети_не_множит_очередь(tmp_path):
+    bindir, _ = fake_curl(tmp_path, code="000", rc=28)
+    run(["pulse", "Итог дня 15.11"], tmp_path, bindir=bindir, env=TG)
+    run(["--flush"], tmp_path, bindir=bindir, env=TG)
+    run(["--flush"], tmp_path, bindir=bindir, env=TG)
+    assert len(outbox(tmp_path)) == 1
+
+
+def test_flush_выбрасывает_старше_суток(tmp_path):
+    bindir, _ = fake_curl(tmp_path, code="000", rc=28)
+    run(["pulse", "старое"], tmp_path, bindir=bindir, env=TG)
+    (f,) = outbox(tmp_path)
+    old = time.time() - 25 * 3600
+    os.utime(f, (old, old))
+    bindir, calls = fake_curl(tmp_path, code="200")
+    calls.unlink()
+    run(["--flush"], tmp_path, bindir=bindir, env=TG)
+    assert outbox(tmp_path) == []
+    assert not calls.exists() or "старое" not in calls.read_text()
+    assert "больше суток" in notify_log(tmp_path)

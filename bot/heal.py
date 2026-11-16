@@ -130,6 +130,22 @@ def cmd_unlock(ctx: Ctx, p=None) -> None:
 отдаст выдачу. Не ждать — /catchup.""")
 
 
+def catchup_mode(repo: Path, day: str) -> str:
+    """Какой обход догонять: тот, что оборвался сегодня, иначе срез.
+
+    Отметки кладет box_daily.sh при сбое сбора (data/retry/<режим>).
+    Раньше догон всегда шел срезом 1-2, и при оборванном доборе 3+ он
+    видел покрытый срез и молча выходил, ничего не собрав (15.11.2026)."""
+    for mode in ("narrow", "full", "weekly"):
+        f = repo / "data" / "retry" / mode
+        try:
+            if f.read_text().splitlines()[0] == day:
+                return mode
+        except (OSError, IndexError):
+            continue
+    return "narrow"
+
+
 def cmd_catchup(ctx: Ctx, day: str) -> None:
     repo = ctx.settings.box_repo
     if machine.crawl_running(repo):
@@ -140,12 +156,13 @@ def cmd_catchup(ctx: Ctx, day: str) -> None:
         return
     seg = status.of_claimed(status.gather_seg(), status.gather_claimed())
     script = repo / "scripts" / "box_daily.sh"
-    if dry(ctx, "catchup", f"запустил бы {script} narrow {day} (по сегменту собрано "
+    mode = catchup_mode(repo, day)
+    if dry(ctx, "catchup", f"запустил бы {script} {mode} {day} (по сегменту собрано "
            f"{seg})"):
         return
-    _detach([str(script), "narrow", day])
-    ctx.note(f"catchup: запущен обход за {day}")
-    ctx.reply(f"""Обход за {day} запущен
+    _detach([str(script), mode, day])
+    ctx.note(f"catchup: запущен обход {mode} за {day}")
+    ctx.reply(f"""Обход {mode} за {day} запущен
 
 Сейчас по сегменту собрано {seg}.
 Уже собранные корзины пропускаются, так что добор идёт быстрее полного.
