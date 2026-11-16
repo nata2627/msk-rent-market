@@ -81,6 +81,16 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
+# После включения машины systemd догоняет пропущенную копию сразу, а
+# postgres в контейнере еще не принимает соединения: 11.11 в 21:32 так
+# упала полная копия. Ждем до двух минут.
+for _ in $(seq 24); do
+  docker exec rent_pg pg_isready -U rent -d rent -q 2>/dev/null && break
+  sleep 5
+done
+docker exec rent_pg pg_isready -U rent -d rent -q 2>/dev/null \
+  || fail "база rent_pg не ответила за две минуты"
+
 # Поток в облако со сверкой md5. Первый аргумент срок в секундах, он
 # ставится на источник и на загрузку. pipefail ловит упавший pg_dump, а не
 # только упавший rclone.
