@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -21,10 +22,10 @@ from telegram.error import BadRequest, TelegramError
 from telegram.ext import (Application, CallbackQueryHandler, ContextTypes, MessageHandler,
                           TypeHandler, filters)
 
-from bot import config, menu, news, status
+from bot import config, link, menu, news, status
 from bot.access import handle_button, handle_message
 from bot.commands import TIMEOUT_S, parse
-from bot.actions import Action, Answer, Card, Keyboard, Reply
+from bot.actions import Action, Answer, Card, Fetch, Keyboard, Reply
 from bot.liveness import HANDLER_TIMEOUT_S, ChatLocks, Pulse, guarded
 from bot.photos import Photos
 from bot.render import render
@@ -178,6 +179,12 @@ async def execute(context: ContextTypes.DEFAULT_TYPE, chat: str, actions: list[A
             if query_id and not answered:
                 await answer(context, query_id, a.text)
                 answered = True
+        elif isinstance(a, Fetch):
+            # Открытие страницы идет без замка чата: человек может листать
+            # подбор, пока ждет карточку.
+            task = asyncio.get_running_loop().create_task(fetch_link(context, chat, a))
+            context.bot_data.setdefault("tasks", set()).add(task)
+            task.add_done_callback(context.bot_data["tasks"].discard)
         elif isinstance(a, Card):
             msg_id = await show_card(context, chat, a)
             if a.on_sent:
@@ -194,8 +201,59 @@ async def execute(context: ContextTypes.DEFAULT_TYPE, chat: str, actions: list[A
         await answer(context, query_id, None)
 
 
+# Страница открывается в контейнере сбора; две сразу означали бы два
+# браузера и двойной темп запросов к площадке, поэтому по одной.
+FETCH_TIMEOUT_S = 180
+_fetch_lock: asyncio.Lock | None = None
+
+
+async def run_link_script(settings: config.Settings, offer_id: str) -> dict:
+    proc = await asyncio.create_subprocess_exec(
+        "bash", str(settings.repo / "scripts" / "box_link.sh"), offer_id,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), FETCH_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        proc.kill()
+        return {"status": "error", "message": "скрипт не ответил"}
+    lines = out.decode(errors="replace").strip().splitlines()
+    try:
+        return json.loads(lines[-1])
+    except (IndexError, ValueError):
+        return {"status": "error", "message": "скрипт ответил не JSON"}
+
+
+async def fetch_link(context, chat: str, fetch: Fetch) -> None:
+    global _fetch_lock
+    settings: config.Settings = context.bot_data["settings"]
+    if _fetch_lock is None:
+        _fetch_lock = asyncio.Lock()
+    try:
+        async with _fetch_lock:
+            started = time.monotonic()
+            result = await run_link_script(settings, fetch.offer_id)
+        actions = await asyncio.to_thread(link.after_fetch, settings, chat, fetch.role,
+                                          fetch.offer_id, result, note)
+        locks = context.bot_data.get("locks")
+        if locks is None:
+            await execute(context, chat, actions)
+        else:
+            async with locks(chat):
+                await execute(context, chat, actions)
+        note(f"ссылка {fetch.offer_id} в чат {chat}: {first_line(actions)} "
+             f"| {time.monotonic() - started:.1f} с")
+    except Exception:
+        # Задача фоновая, и упавшая молча оставила бы человека ждать.
+        link.PENDING.discard(fetch.offer_id)
+        log.exception(f"ссылка {fetch.offer_id} не обработана")
+        await context.bot.send_message(chat_id=chat, text=render(
+            "Страница не открылась\n\nПопробуйте позже."), parse_mode="HTML")
+
+
 def first_line(actions: list[Action]) -> str:
     for a in actions:
+        if isinstance(a, Fetch):
+            continue
         text = a.caption if isinstance(a, Card) else a.text
         if text:
             return text.splitlines()[0]
@@ -348,8 +406,11 @@ def run_once(settings: config.Settings, text: str) -> int:
         async with app:
             # execute ждет от контекста только бота и общие данные.
             ctx = SimpleNamespace(bot=app.bot,
-                                  bot_data={"photos": Photos(settings.state_dir / "photos")})
+                                  bot_data={"photos": Photos(settings.state_dir / "photos"),
+                                            "settings": settings})
             await execute(ctx, settings.owner, replies)
+            # Ссылка открывается в фоне: процесс дожидается карточки.
+            await asyncio.gather(*ctx.bot_data.get("tasks", ()))
 
     asyncio.run(go())
     print(f"команда «{text}» выполнена, ответ ушёл в чат")

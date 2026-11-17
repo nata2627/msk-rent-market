@@ -261,11 +261,19 @@ def show(ctx: Ctx, mode: str, idx: int, msg_id: str = "") -> bool:
         # фильтров. Поэтому ищется без фильтров, по одному id.
         rows = db.query(f"select {CARD_COLS} from marts.offer_pick o "
                         "where o.source = 'cian' and o.offer_id = %s limit 1", [ids[idx]])
-        if not rows:
-            return False
-        row = to_row(rows[0])
-        head = f"Отложенное {idx + 1} из {len(ids)}"
         tail = ""
+        if rows:
+            row = to_row(rows[0])
+        else:
+            # Отложенное с карточки по ссылке: в базе его нет, пока обход
+            # не встретит его сам, а у бота оно сохранено.
+            from bot import link
+            c = link.cached(s, ids[idx])
+            if c is None:
+                return False
+            row = to_row(c["row"])
+            tail = "\n\n" + "\n".join(link.fetched_notes(c))
+        head = f"Отложенное {idx + 1} из {len(ids)}"
     is_saved = row.offer_id in saved(s, chat)
     f = filters.load(s, chat)
     # Отложенное показывается без фильтров, там строка нужна всегда.

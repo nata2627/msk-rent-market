@@ -76,29 +76,56 @@ def _balanced(text: str, start: int) -> str | None:
     return None
 
 
+def _config_value(html: str, assignment: re.Pattern, key: str) -> dict:
+    """Запись key из _cianConfig микрофронтенда, найденного по assignment.
+
+    Присваиваний одного микрофронтенда в странице бывает несколько, и
+    нужная запись лежит не обязательно в первом: у карточки объявления
+    первый массив это переключатели, а состояние во втором.
+    """
+    found = False
+    for match in assignment.finditer(html):
+        found = True
+        bracket = html.find("[", match.end() - 1)
+        if bracket == -1:
+            raise SerpNotFound("Не найдено начало массива настроек")
+
+        chunk = _balanced(html, bracket)
+        if chunk is None:
+            raise SerpNotFound("Массив настроек не закрывается — страница обрезана")
+
+        try:
+            entries = json.loads(chunk)
+        except json.JSONDecodeError as err:
+            raise SerpNotFound(f"Настройки не разбираются как JSON: {err}") from err
+
+        for entry in entries:
+            if isinstance(entry, dict) and entry.get("key") == key:
+                return entry.get("value") or {}
+    if not found:
+        raise SerpNotFound("В странице нет _cianConfig с состоянием")
+    raise SerpNotFound(f"Среди настроек нет {key}")
+
+
 def extract_state(html: str) -> dict:
     """HTML страницы -> состояние приложения (initialState)."""
-    match = _ASSIGNMENT.search(html)
-    if not match:
-        raise SerpNotFound("В странице нет _cianConfig с состоянием выдачи")
+    return _config_value(html, _ASSIGNMENT, "initialState")
 
-    bracket = html.find("[", match.end() - 1)
-    if bracket == -1:
-        raise SerpNotFound("Не найдено начало массива настроек")
 
-    chunk = _balanced(html, bracket)
-    if chunk is None:
-        raise SerpNotFound("Массив настроек не закрывается — страница обрезана")
+# Страница одного объявления устроена так же, только микрофронтенд
+# другой и состояние лежит под ключом defaultState, а не initialState.
+_CARD_ASSIGNMENT = re.compile(
+    r"_cianConfig\[['\"](frontend-offer-card)['\"]\]\s*=\s*\([^)]*\)\s*\.concat\(",
+)
 
-    try:
-        entries = json.loads(chunk)
-    except json.JSONDecodeError as err:
-        raise SerpNotFound(f"Настройки не разбираются как JSON: {err}") from err
 
-    for entry in entries:
-        if isinstance(entry, dict) and entry.get("key") == "initialState":
-            return entry.get("value") or {}
-    raise SerpNotFound("Среди настроек нет initialState")
+def extract_offer_card(html: str) -> dict:
+    """HTML страницы объявления -> offerData: само объявление в offer,
+    автор в agent. Поля offer почти те же, что у объявления в выдаче."""
+    data = _config_value(html, _CARD_ASSIGNMENT, "defaultState").get("offerData") or {}
+    if not isinstance(data.get("offer"), dict):
+        raise SerpNotFound("В состоянии страницы нет объявления")
+    return data
 
 
 def extract_offers(html: str) -> tuple[list[dict], int]:

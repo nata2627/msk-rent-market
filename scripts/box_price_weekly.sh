@@ -77,8 +77,14 @@ $(date '+%d.%m, %H:%M')
   exit "$CODE"
 fi
 echo "$WEEK" > "$MARK"
-# Модели старше восьми последних не нужны: в MLflow остаются их метрики.
-ls -1t "$REPO"/data/models/price-*.cbm 2>/dev/null | tail -n +9 | xargs -r rm -f
+# Недели старше восьми последних не нужны: в MLflow остаются их метрики.
+# У недели три файла: модель цены, модель ухода (-exit) и описание для
+# ежедневного пересчета (.json), поэтому список идет по описаниям, а
+# старые модели без описания (до 17.11.2026) по самим моделям.
+for OLD in $(ls -1t "$REPO"/data/models/price-*.json 2>/dev/null | tail -n +9); do
+  rm -f "${OLD%.json}.json" "${OLD%.json}.cbm" "${OLD%.json}-exit.cbm"
+done
+ls -1t "$REPO"/data/models/price-????????.cbm 2>/dev/null | tail -n +9 | xargs -r rm -f
 
 # Дрейф: последняя неделя против порога. Первые четыре недели порога нет,
 # тревоги тогда нет и быть не может, это записано в README.

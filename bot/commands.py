@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from bot import cards, filters, heal, info, news, status, words
+from bot import cards, filters, heal, info, link, news, status, words
 from bot.actions import Action, Answer, Card, Ctx, Reply  # noqa: F401
 
 
@@ -42,6 +42,7 @@ HELP_GUEST = """Что я умею
 /status — собрано ли сегодня и насколько свежи данные
 
 Подбор можно задать словами, без команды: двушка до 90 у метро с котом
+Ссылка на объявление ЦИАНа без команды: карточка с баллом, даже если его ещё нет в базе
 
 Фильтры у вас свои: что ни выставите, у владелицы ничего не изменится.
 Команды, которые что-то делают на машине сбора, мне недоступны."""
@@ -62,6 +63,7 @@ HELP_OWNER = """Что я умею
 /pulse — прислать итог дня прямо сейчас
 
 Подбор можно задать словами, без команды: двушка до 90 у метро с котом
+Ссылка на объявление ЦИАНа без команды: карточка с баллом, даже если его ещё нет в базе
 
 починить
 
@@ -183,6 +185,11 @@ def dispatch(ctx: Ctx, text: str) -> list[Action]:
     handler = HANDLERS.get(p.cmd)
     if handler:
         handler(ctx, p)
+    elif not p.cmd.startswith("/") and link.offer_id(text):
+        # Ссылка на объявление без команды: карточка, а не фраза подбора.
+        # Разбор фразы на ней тратил бы суточный лимит GigaChat и отвечал
+        # «не понял».
+        link.cmd_link(ctx, link.offer_id(text))
     elif not p.cmd.startswith("/"):
         # Подбор словами: «двушка до 90 у метро с котом».
         words.cmd_phrase(ctx, text)
@@ -196,7 +203,8 @@ UNKNOWN_BUTTON = "не знаю такой кнопки"
 
 def press(ctx: Ctx, data: str, msg_id: str) -> list[Action]:
     """Нажатие кнопки. Белый список: неизвестное ничего не меняет."""
-    if cards.button(ctx, data, msg_id) or filters.button(ctx, data, msg_id):
+    if (cards.button(ctx, data, msg_id) or link.button(ctx, data, msg_id)
+            or filters.button(ctx, data, msg_id)):
         pass
     elif data == "noop":
         ctx.answer("это просто надпись")

@@ -67,7 +67,11 @@ $(date '+%d.%m, %H:%M')
   exit "$CODE"
 fi
 echo "$WEEK" > "$MARK"
-ls -1t "$REPO"/data/models/price-*.cbm 2>/dev/null | tail -n +9 | xargs -r rm -f
+# У недели три файла (модель, -exit и .json), как в box_price_weekly.sh.
+for OLD in $(ls -1t "$REPO"/data/models/price-*.json 2>/dev/null | tail -n +9); do
+  rm -f "${OLD%.json}.json" "${OLD%.json}.cbm" "${OLD%.json}-exit.cbm"
+done
+ls -1t "$REPO"/data/models/price-????????.cbm 2>/dev/null | tail -n +9 | xargs -r rm -f
 
 # Порог выводится из первых недель, до него тревоги нет и быть не может.
 ROW="$(docker exec -i rent_pg psql -qtA -F'|' -U rent -d rent -c \

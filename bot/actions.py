@@ -44,7 +44,17 @@ class Card:
     label: str = ""
 
 
-Action = Reply | Answer | Card
+@dataclass
+class Fetch:
+    """Открыть объявление на площадке и прислать карточку потом.
+
+    Страница открывается десятки секунд, поэтому это не ответ, а задача:
+    app запускает ее в фоне, а чат тем временем свободен."""
+    offer_id: str
+    role: str
+
+
+Action = Reply | Answer | Card | Fetch
 
 
 @dataclass

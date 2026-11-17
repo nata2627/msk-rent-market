@@ -454,6 +454,31 @@ def grid_rows(clean, model, q, version):
             for (d, r, a, n), e in zip(out, est)]
 
 
+def serving_rows(live, final, final_exit, q, days, version, model_day):
+    """Строки ml.price_estimate: оценка, интервал, цена ухода, срок.
+
+    Одна функция на недельное переобучение и на ежедневный пересчет
+    (serve), чтобы оценка не зависела от того, кто ее посчитал."""
+    e = np.exp(final.predict(live))
+    ex = np.exp(final_exit.predict(live))
+    out = []
+    for r, est, exv in zip(live, e, ex):
+        rel = r["last_price"] / est
+        b = "дешевле" if rel < 0.95 else "дороже" if rel > 1.05 else "в рынке"
+        out.append((r["offer_id"], version, model_day, r["rooms"], r["district"],
+                    round(r["total_area"], 1), round(r["last_price"]), round(est),
+                    round(est * math.exp(-q)), round(est * math.exp(q)), round(exv),
+                    r["cian_low"], r["cian_high"], days.get((r["rooms"], b))))
+    return out
+
+
+def live_rows(conn, clean):
+    with conn.cursor() as cur:
+        cur.execute("select offer_id from core.offer where source='cian' and is_active")
+        active = {r[0] for r in cur.fetchall()}
+    return [r for r in clean if r["offer_id"] in active]
+
+
 def write_tables(conn, version, today, est_rows, grid, drift, threshold):
     sql = (ROOT / "sql" / "schema" / "05_ml.sql").read_text()
     with conn.cursor() as cur:
@@ -508,13 +533,71 @@ def append_runs(version, report, drift, threshold):
                         threshold if threshold is not None else ""])
 
 
+def latest_saved(models_dir=MODELS_DIR):
+    """Последняя неделя, у которой сохранено все для пересчета."""
+    for meta in sorted(models_dir.glob("price-*.json"), reverse=True):
+        version = meta.stem
+        if ((models_dir / f"{version}.cbm").exists()
+                and (models_dir / f"{version}-exit.cbm").exists()):
+            return version, json.loads(meta.read_text())
+    return None
+
+
+def loaded(path) -> "Boost":
+    from catboost import CatBoostRegressor
+    m = Boost()
+    m.model = CatBoostRegressor()
+    m.model.load_model(str(path))
+    return m
+
+
+def serve(write: bool = True) -> int:
+    """Оценки по объявлениям сегодняшней выдачи моделью последней недели.
+
+    Переобучение раз в неделю, а объявления приходят каждый день: без
+    пересчета вышедшее после воскресенья оставалось без оценки до
+    следующего, 17.11.2026 это было 2 521 из 16 567 однушек и двушек
+    выдачи. Модель та же, признаки те же, меняется только список.
+    """
+    from etl import db
+    found = latest_saved()
+    if found is None:
+        log.error("Нет сохраненной недели с моделью ухода, пересчитать нечем. "
+                  "Нужен прогон переобучения: python -m src.price_model")
+        return 1
+    version, meta = found
+    final = loaded(MODELS_DIR / f"{version}.cbm")
+    final_exit = loaded(MODELS_DIR / f"{version}-exit.cbm")
+    days = {(int(k.split("|")[0]), k.split("|")[1]): v
+            for k, v in meta["typical_days"].items()}
+    with db.connect() as conn:
+        rows, _ = load(conn)
+        clean = [r for r in rows if not is_outlier(r["price"], r["total_area"])]
+        est_rows = serving_rows(live_rows(conn, clean), final, final_exit, meta["q"], days,
+                                version, date.fromisoformat(meta["model_day"]))
+        log.info("Модель %s, оценок %d", version, len(est_rows))
+        if write:
+            with conn.cursor() as cur:
+                # Одной транзакцией: бот видит либо прежние оценки, либо
+                # новые, но не пустую таблицу посередине.
+                cur.execute("delete from ml.price_estimate")
+                cur.executemany("""insert into ml.price_estimate values
+                    (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", est_rows)
+            conn.commit()
+    return 0
+
+
 def main() -> int:
     import argparse
     from etl import db
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-write", action="store_true", help="не писать в схему ml")
+    ap.add_argument("--serve", action="store_true",
+                    help="без переобучения: оценки выдачи моделью последней недели")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if args.serve:
+        return serve(write=not args.no_write)
     with db.connect() as conn:
         rows, last_day = load(conn)
         version = f"price-{last_day:%Y%m%d}"
@@ -540,20 +623,8 @@ def main() -> int:
         days, _ = typical_days(clean, ratio)
         report["typical_days"] = {f"{k[0]}|{k[1]}": v for k, v in days.items()}
 
-        with conn.cursor() as cur:
-            cur.execute("select offer_id from core.offer where source='cian' and is_active")
-            active = {r[0] for r in cur.fetchall()}
-        live = [r for r in clean if r["offer_id"] in active]
-        e = np.exp(final.predict(live))
-        ex = np.exp(final_exit.predict(live))
-        est_rows = []
-        for r, est, exv in zip(live, e, ex):
-            rel = r["last_price"] / est
-            b = "дешевле" if rel < 0.95 else "дороже" if rel > 1.05 else "в рынке"
-            est_rows.append((r["offer_id"], version, last_day, r["rooms"], r["district"],
-                             round(r["total_area"], 1), round(r["last_price"]), round(est),
-                             round(est * math.exp(-q)), round(est * math.exp(q)), round(exv),
-                             r["cian_low"], r["cian_high"], days.get((r["rooms"], b))))
+        est_rows = serving_rows(live_rows(conn, clean), final, final_exit, q, days,
+                                version, last_day)
         grid = grid_rows(clean, final, q, version)
         report["serving"] = {"estimates": len(est_rows), "grid_cells": len(grid)}
         if not args.no_write:
@@ -561,6 +632,13 @@ def main() -> int:
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     final.model.save_model(str(MODELS_DIR / f"{version}.cbm"))
+    # Для ежедневного пересчета (serve): модель ухода и то, что к оценке
+    # прикладывается, лежат рядом с моделью цены той же недели.
+    final_exit.model.save_model(str(MODELS_DIR / f"{version}-exit.cbm"))
+    (MODELS_DIR / f"{version}.json").write_text(json.dumps(
+        {"q": q, "model_day": last_day.isoformat(),
+         "typical_days": {f"{k[0]}|{k[1]}": v for k, v in days.items()}},
+        ensure_ascii=False))
     RESULTS.mkdir(exist_ok=True)
     report["version"] = version
     (RESULTS / "price_model.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))

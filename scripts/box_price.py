@@ -89,20 +89,27 @@ def rooms_label(r) -> str:
     return "студия" if int(r) == 0 else f"{int(r)}к"
 
 
+def verdict(ask, est) -> str:
+    diff = round(100 * (float(ask) / float(est) - 1))
+    if abs(diff) < 5:
+        return "в рынке"
+    if diff > 0:
+        return f"дороже похожих на {diff}%"
+    return f"дешевле похожих на {-diff}%"
+
+
+def short_line(ask, est, lo, hi) -> str:
+    """Оценка одной строкой, для карточки объявления в боте."""
+    return (f"Модель цены {thousands(est)} тыс (80%: {thousands(lo)}-{thousands(hi)}), "
+            f"{verdict(ask, est)}")
+
+
 def offer_card(row: list[str]) -> str:
     (rooms, district, area, ask, est, lo, hi, exit_est, cl, ch, days, on) = row
-    ask_f, est_f = float(ask), float(est)
-    diff = round(100 * (ask_f / est_f - 1))
-    if abs(diff) < 5:
-        verdict = "в рынке"
-    elif diff > 0:
-        verdict = f"дороже похожих на {diff}%"
-    else:
-        verdict = f"дешевле похожих на {-diff}%"
     lines = [f"{rooms_label(rooms)}, {round(float(area))} м2, {district}",
              f"Просят {thousands(ask)} тыс, модель {thousands(est)} тыс "
              f"(80%: {thousands(lo)}-{thousands(hi)})",
-             verdict.capitalize()]
+             verdict(ask, est).capitalize()]
     if cl and ch:
         lines.append(f"Оценка ЦИАНа {thousands(cl)}-{thousands(ch)} тыс")
     else:
@@ -128,6 +135,21 @@ HELP = ("Пришлите ссылку на объявление или квар
         "/price 2к 45 м2 Хамовники")
 
 
+def no_estimate(found: list[list[str]]) -> str:
+    """Почему по ссылке нет оценки. Оценки пересчитываются после каждого
+    сбора, так что «вышло после пересчета» уже не причина."""
+    if not found:
+        return ("Этого объявления нет в базе\n\nОно вышло после сегодняшнего обхода "
+                "или это не Москва. Пришлите ссылку без /price: я открою его на ЦИАНе "
+                "и покажу карточку с баллом. Цену модель оценит, когда объявление "
+                "попадет в обход.")
+    if found[0][0] != "t":
+        return ("Объявление снято с публикации\n\nМодель оценивает только то, что сейчас "
+                "в выдаче.")
+    return ("Оценки нет\n\nМодель берет студии и квартиры до четырех комнат, без "
+            "посуточных и без цен, похожих на ошибку.")
+
+
 def answer(text: str, query=psql) -> str:
     if not text.strip():
         return HELP
@@ -143,8 +165,8 @@ def answer(text: str, query=psql) -> str:
                          from ml.price_estimate where offer_id = '{q['offer_id']}'""")
         if rows:
             return offer_card(rows[0])
-        return ("Этого объявления нет среди тех, что сейчас в выдаче. "
-                "На площадку по запросу я не хожу, оцениваю только собранное.\n\n" + HELP)
+        return no_estimate(query(f"""select is_active from core.offer
+                                     where source = 'cian' and offer_id = '{q['offer_id']}'"""))
     missing = [w for w, k in (("комнатность", "rooms"), ("площадь", "area"),
                               ("район", "district")) if q[k] is None]
     if missing:

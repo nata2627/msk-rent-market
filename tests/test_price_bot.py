@@ -63,9 +63,25 @@ def test_offer_card():
 
 
 def test_offer_not_in_base_is_said_plainly():
-    out = bp.answer("312345678", Fake(GRID))
-    assert "нет среди тех, что сейчас в выдаче" in out
-    assert "не хожу" in out
+    f = Fake(GRID)
+    out = bp.answer("312345678", f)
+    assert "нет в базе" in out and "без /price" in out
+    # Есть ли объявление в базе, спрашивается по номеру, а номер только
+    # из цифр: текст человека в запрос не попадает.
+    assert "offer_id = '312345678'" in f.sql[-1]
+
+
+def test_offer_in_base_without_estimate_says_why():
+    gone = bp.answer("312345678", Fake({**GRID, "from core.offer": [["f"]]}))
+    assert "снято с публикации" in gone
+    live = bp.answer("312345678", Fake({**GRID, "from core.offer": [["t"]]}))
+    assert "до четырех комнат" in live
+
+
+def test_short_line_for_link_card():
+    assert bp.short_line(85000, 78000, 70000, 87000) == \
+        "Модель цены 78 тыс (80%: 70-87), дороже похожих на 9%"
+    assert bp.short_line(80000, 78000, 70000, 87000).endswith("в рынке")
 
 
 def test_words_card_and_missing_parts():

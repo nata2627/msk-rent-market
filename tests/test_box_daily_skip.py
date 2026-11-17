@@ -53,3 +53,11 @@ def test_full_is_never_skipped(tmp_path):
     _, log, calls = run_daily(tmp_path, "9", mode="full")
     assert "уже покрыты" not in log
     assert "rent-collector" in calls
+
+
+def test_price_estimates_follow_every_collection(tmp_path):
+    # Модель недельная, а оценки выдачи пересчитываются после каждого
+    # сбора: иначе вышедшее после воскресенья ждало бы оценки неделю.
+    _, log, calls = run_daily(tmp_path, "1")
+    assert "rent-price:latest python -m src.price_model --serve" in calls
+    assert "=== Оценки цены" in log
