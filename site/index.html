@@ -59,7 +59,14 @@ footer { margin-top: 48px; font-size: 13px; color: var(--muted); }
 a { color: var(--s1); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 20px; }
 .kpi { background: var(--surface); border: 1px solid var(--grid); border-radius: 12px; padding: 12px 14px; }
-.kpi .k { font-size: 13px; color: var(--muted); }
+/* Подписи в одну и в две строки сдвигали крупные числа по высоте: строки
+   плиток общие, и число стоит на одном уровне во всем ряду. Без subgrid
+   хватает запаса под две строки подписи. */
+.kpi .k { font-size: 13px; color: var(--muted); line-height: 1.3; min-height: 2.6em; }
+@supports (grid-template-rows: subgrid) {
+  .kpi { display: grid; grid-template-rows: subgrid; grid-row: span 3; row-gap: 0; }
+  .kpi .k { min-height: 0; }
+}
 .kpi .v { font-size: 26px; font-weight: 650; line-height: 1.2; margin-top: 4px; }
 .kpi .s { font-size: 13px; color: var(--ink2); margin-top: 2px; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
