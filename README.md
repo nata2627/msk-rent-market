@@ -90,8 +90,11 @@ GigaChat выбирает одну из семи функций-запросов
 вызовов <!--n:ask_lite-->58<!--/n-->, правило выбора модели записано до замера.
 
 <p>
-<img src="figures/bot/demo.gif" width="40%" alt="Подбор, отложенные и фильтры, запись экрана в 2,5 раза быстрее">
-<img src="figures/bot/phrase.png" width="48%" alt="Подбор по фразе">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/bot/demo_dark.gif">
+  <img src="figures/bot/demo.gif" width="40%" alt="Подбор, листание, цена и комнаты кнопками, отложенные и фильтры">
+</picture>
+<img src="figures/bot/phrase.png" width="44%" alt="Подбор по фразе: «Двушка до 90 у метро с котом»">
 </p>
 
 ```
