@@ -2,12 +2,16 @@
 # site/index.html, агрегаты site/data/site.json и контуры районов. Базы и
 # машины сбора сборке не нужно, поэтому витрина переживает их остановку и
 # показывает последнюю дату данных.
+#
+# Здесь же рисуются обложка README (cover.png) и превью ссылки на витрину
+# (social.png): с каждой выгрузкой витрины, из тех же чисел. Закоммиченная
+# картинка отставала от текста README на недели.
 name: pages
 
 on:
   push:
     branches: [main]
-    paths: ["site/**", "sql/geo/**", ".github/workflows/pages.yml"]
+    paths: ["site/**", "sql/geo/**", "src/cover.py", "src/figures.py", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -30,6 +34,20 @@ jobs:
       # Контуры лежат в sql/geo ради карты Metabase. Копия в site/data
       # делается здесь, чтобы не хранить в репозитории второй экземпляр.
       - run: cp sql/geo/moscow_districts.geojson site/data/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m src.cover --out site
+      # Превью ссылки сверстано страницей site/social.html и снимается
+      # Chrome, который на раннере уже стоит. Страница берет данные через
+      # fetch, поэтому нужен сервер, а не file://.
+      - run: |
+          (cd site && python -m http.server 8765 >/dev/null 2>&1 &)
+          sleep 1
+          google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1280,640 \
+            --virtual-time-budget=15000 --screenshot=site/social.png http://localhost:8765/social.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

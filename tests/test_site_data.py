@@ -48,3 +48,13 @@ def test_quality_days_complete():
     assert dates == sorted(set(dates))
     assert q["days_total"] == len(dates)
     assert q["days_covered"] + len(q["missed"]) == q["days_total"]
+
+
+def test_district_layers_respect_thresholds():
+    # Слои карты появились 17.11.2026, в файле до первой выгрузки их нет.
+    d = json.loads(SITE.read_text())
+    for x in d["districts"]:
+        assert x.get("cut_n", 50) >= 50
+        assert all(n >= 10 for _, n, _ in x.get("weeks", []))
+        for k in ("pets_allowed_pct", "pets_negotiable_pct", "pets_forbidden_pct"):
+            assert 0 <= x.get(k, 0) <= 100

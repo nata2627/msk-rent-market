@@ -1,9 +1,15 @@
-"""Обложка README: шесть главных результатов одной картинкой.
+"""Обложка README.
 
-    make cover
+    make cover                       # в figures/, посмотреть локально
+    python -m src.cover --out site   # так собирает GitHub Pages
 
-Рисуется из файлов репозитория (site/data/site.json и results/), без
-базы, поэтому пересобирается где угодно и не расходится с витриной.
+Рисуется из файлов репозитория (site/data/site.json, results/ и контуров
+районов), без базы. Pages пересобирает обе картинки с каждой выгрузкой
+витрины, и README берет обложку оттуда же, поэтому числа на ней не
+отстают от витрины, как отстала закоммиченная картинка (на 17.11.2026 на
+ней висели −0,3% индекса против −1,44% в тексте).
+
+Превью ссылки рисует site/social.html (make social).
 Исключение одно, оценки надбавки за животных: команда make hedonic
 пишет их в журнал, а не в файл, и здесь стоят числа снимка 04.10.2026
 из раздела README о животных. Если оценка будет пересчитана, числа
@@ -11,6 +17,7 @@
 """
 from __future__ import annotations
 
+import argparse
 import json
 from datetime import date
 from pathlib import Path
@@ -21,7 +28,7 @@ matplotlib.use("Agg")
 import matplotlib.dates as mdates  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
-from src.figures import AXIS, INK, INK_2, MUTED, S1, S2, SURFACE, save  # noqa: E402
+from src.figures import AXIS, INK, INK_2, MUTED, S1, S2, SURFACE  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site" / "data" / "site.json"
@@ -111,19 +118,21 @@ def drops(ax, site):
     owner = next(r for r in rows if r["seller"] == "собственник")["share_pct"]
     gap = f"{agency - owner:+.1f}".replace(".", ",")
     head(ax, f"{gap} п.п.", "агентства снижают цену чаще собственников",
-         f"{sum(r['offers'] for r in rows):,} объявлений".replace(",", " ")
-         + ", поправки на район и квартиру разрыв не меняют")
+         f"{sum(r['offers'] for r in rows):,} объявлений от недели в выдаче".replace(",", " ")
+         + ", поправки на район и квартиру разрыв почти не двигают")
 
 
-def index(ax):
+def index(ax, site):
+    """Индекс из витрины, а не из results/: на машине сбора он
+    пересчитывается каждый день и в клон репозитория не попадает."""
     style(ax)
-    d = json.loads((RESULTS / "panel_index.json").read_text())
-    hed = d["hedonic"]
+    ix = site["panel_index"]
+    hed = [{"date": d, "index": v, "lo95": lo, "hi95": hi} for d, v, lo, hi in ix["hedonic"]]
     xs = [date.fromisoformat(p["date"]) for p in hed]
     ax.fill_between(xs, [p["lo95"] for p in hed], [p["hi95"] for p in hed],
                     color=S1, alpha=0.18, lw=0)
     ax.plot(xs, [p["index"] for p in hed], color=S1, lw=2)
-    ch = [(xs[0], 100.0)] + [(date.fromisoformat(p["date"]), p["index"]) for p in d["chain"]]
+    ch = [(date.fromisoformat(d), v) for d, v in ix["chain"]]
     ax.plot([x for x, _ in ch], [v for _, v in ch], color=S2, lw=2)
     ax.annotate("рынок", (xs[-1], hed[-1]["index"]), xytext=(4, 0),
                 textcoords="offset points", va="center", color=INK_2, fontsize=8.5)
@@ -133,9 +142,11 @@ def index(ax):
     ax.xaxis.set_major_locator(mdates.DayLocator(interval=10))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
     ax.set_ylabel("первый день = 100", color=MUTED, fontsize=8.5)
-    last = f"{hed[-1]['index'] - 100:+.1f}%".replace(".", ",")
-    head(ax, last, "рынок за месяц почти стоит",
-         "гедонический индекс по панели, полоса 95%")
+    last = f"{hed[-1]['index'] - 100:+.1f}%".replace(".", ",").replace("-", "−")
+    flat = ix.get("total", {}).get("flat")
+    title = (f"ставка с {xs[0]:%d.%m}, в пределах шума" if flat else
+             f"запрашиваемая ставка с {xs[0]:%d.%m}")
+    head(ax, last, title, "гедонический индекс по панели, полоса 95%")
 
 
 def forecast(ax, site):
@@ -191,19 +202,29 @@ def ru_month(ym: str) -> str:
     return f"{MONTHS_GEN[int(m) - 1]} {y}"
 
 
-def main() -> int:
-    site = json.loads(SITE.read_text())
+def cover(site, out: Path) -> None:
     fig, axes = plt.subplots(2, 3, figsize=(15, 8.6), dpi=130)
     fig.patch.set_facecolor(SURFACE)
     pets(axes[0][0])
     survival(axes[0][1], site)
     drops(axes[0][2], site)
-    index(axes[1][0])
+    index(axes[1][0], site)
     forecast(axes[1][1], site)
     model(axes[1][2])
     fig.subplots_adjust(left=0.08, right=0.97, top=0.84, bottom=0.07,
                         wspace=0.42, hspace=0.95)
-    save(fig, "cover.png")
+    fig.savefig(out / "cover.png", facecolor=SURFACE, bbox_inches="tight")
+    plt.close(fig)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Обложка README")
+    parser.add_argument("--out", type=Path, default=ROOT / "figures")
+    args = parser.parse_args()
+    args.out.mkdir(parents=True, exist_ok=True)
+    site = json.loads(SITE.read_text())
+    cover(site, args.out)
+    print(f"{args.out}/cover.png")
     return 0
 
 

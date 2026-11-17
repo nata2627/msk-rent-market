@@ -31,3 +31,8 @@ personal/
 notes/
 
 .DS_Store
+
+# Обложку и превью рисует GitHub Pages из site.json, README берет обложку
+# оттуда. Локальная копия из make cover только посмотреть.
+figures/cover.png
+figures/social.png

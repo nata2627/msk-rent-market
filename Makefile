@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: nl-eval ask-dev ask-eval backup-check backup-restore cover hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: nl-eval ask-dev ask-eval backup-check backup-restore cover social hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -287,8 +287,15 @@ backup-check: ## прочитать последнюю облачную копи
 backup-restore: ## развернуть облачную копию в отдельную базу, DB=rent_restore
 	./scripts/backup_restore.sh restore $(or $(DB),rent_restore)
 
-cover: ## обложка README из site/data и results, без базы
+cover: ## обложка README в figures/, без базы; на сайте ее рисует Pages
 	$(PY) -m src.cover
+
+social: ## превью ссылки figures/social.png из site/social.html через Chrome, для Settings → Social preview
+	cp sql/geo/moscow_districts.geojson site/data/
+	(cd site && $(abspath $(PY)) -m http.server 8765 >/dev/null 2>&1 & echo $$! > /tmp/rent_social.pid); sleep 1
+	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars \
+	  --window-size=1280,640 --virtual-time-budget=15000 --screenshot=$(CURDIR)/figures/social.png http://localhost:8765/social.html
+	kill $$(cat /tmp/rent_social.pid); rm -f site/data/moscow_districts.geojson
 
 index: ## индекс по панели, цепной и гедонический
 	$(PY) -m src.panel_index

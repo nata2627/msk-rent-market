@@ -59,6 +59,7 @@ select o.offer_id,
        o.disappeared_date                 as disappeared,
        o.is_active,
        o.rooms_count,
+       o.district,
        obs.seller_type,
        obs.pets_state
 from core.offer o

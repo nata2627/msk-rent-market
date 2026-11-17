@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Аренда в Москве: превью</title>
+<!-- Превью ссылки 1280 на 640. Рисуется из тех же site.json и контуров,
+     что витрина, и снимается безголовым Chrome в social.png (сборка Pages,
+     make social). Картинка не для чтения, а для узнавания: заголовок, три
+     медленных числа и карта, ничего мелкого. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=block" rel="stylesheet">
+<style>
+:root { --bg: #0e1522; --ink: #f4f6fa; --ink2: #a9b4c6; --muted: #6f7b8f; --line: #223047;
+  --accent: #7fb2ff; --seq0: #1c2b44; --seq1: #9cc6ff; }
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1280px; height: 640px; overflow: hidden; background: var(--bg); }
+body { font-family: Manrope, sans-serif; color: var(--ink); position: relative; }
+.glow { position: absolute; right: -120px; top: -80px; width: 820px; height: 820px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(90, 150, 255, .16), rgba(90, 150, 255, 0)); }
+.left { position: absolute; left: 72px; top: 64px; width: 600px; }
+.eyebrow { font-size: 15px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+h1 { font-size: 76px; line-height: 1.02; font-weight: 800; letter-spacing: -.025em; margin-top: 22px; }
+.lead { font-size: 21px; line-height: 1.45; color: var(--ink2); margin-top: 22px; max-width: 520px; }
+.stats { position: absolute; left: 72px; bottom: 92px; display: flex; gap: 0; }
+.stat { padding-right: 34px; margin-right: 34px; border-right: 1px solid var(--line); max-width: 230px; }
+.stat:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
+.stat b { display: block; font-size: 44px; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+.stat span { display: block; font-size: 15px; line-height: 1.35; color: var(--ink2); margin-top: 10px; }
+.foot { position: absolute; left: 72px; right: 56px; bottom: 34px; display: flex; justify-content: space-between;
+  align-items: center; font-size: 15px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+.foot .scale { display: flex; align-items: center; gap: 10px; }
+.foot .scale i { width: 120px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--seq0), var(--seq1)); }
+#map { position: absolute; right: 40px; top: 28px; width: 560px; height: 520px; }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<svg id="map" viewBox="0 0 560 520"></svg>
+<div class="left">
+  <div class="eyebrow">Открытая панель данных · с 22.09.2026</div>
+  <h1>Аренда<br>в Москве</h1>
+  <p class="lead">Выдача длительной аренды ЦИАНа каждый день: цены, сроки жизни объявлений, снижения.</p>
+</div>
+<div class="stats" id="stats"></div>
+<div class="foot">
+  <span>nata2627.github.io/msk-rent-market</span>
+  <span class="scale">цена метра <i></i></span>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script>
+(async () => {
+  const [data, geo] = await Promise.all([
+    fetch("data/site.json").then(r => r.json()),
+    fetch("data/moscow_districts.geojson").then(r => r.json())]);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  // Надбавка за животных: оценка снимка 04.10.2026 со всеми контролями
+  // (−0,3%, интервал накрывает ноль), та же, что на обложке README.
+  const med = data.survival.find(p => p.surv <= 0.5).age;
+  const share = s => data.drops.find(r => r.seller === s).share_pct;
+  const gap = Math.round(share("агентство") - share("собственник"));
+  document.getElementById("stats").innerHTML = [
+    ["0%", "надбавка за разрешение держать животных"],
+    [`${med} дней`, "живет объявление до снятия, медиана"],
+    [`+${gap} п.п.`, "агентства снижают цену чаще собственников"],
+  ].map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join("");
+
+  geo.features = geo.features.filter(ft => ft.properties.name);
+  // Кольца OpenStreetMap идут против часовой стрелки, D3 читает такое
+  // кольцо как весь мир без района. Переворачиваются, как на витрине.
+  for (const ft of geo.features) if (d3.geoArea(ft) > 2 * Math.PI) {
+    const polys = ft.geometry.type === "Polygon" ? [ft.geometry.coordinates] : ft.geometry.coordinates;
+    for (const poly of polys) for (const ring of poly) ring.reverse();
+  }
+  const byName = new Map(data.districts.map(d => [d.district, d.ppm]));
+  const vals = [...byName.values()].sort(d3.ascending);
+  const color = d3.scaleSequential(d3.interpolateRgb(css("--seq0"), css("--seq1")))
+    .domain([d3.quantile(vals, 0.05), d3.quantile(vals, 0.95)]).clamp(true);
+  // Кадр витрины: старая Москва, Зеленоград и дальняя Новая Москва за краем.
+  const frame = {type: "MultiPoint", coordinates: [[37.33, 55.55], [37.89, 55.915]]};
+  const path = d3.geoPath(d3.geoMercator().fitExtent([[0, 0], [560, 520]], frame));
+  const fade = d3.select("#map").append("defs").append("radialGradient").attr("id", "fade");
+  fade.append("stop").attr("offset", "70%").attr("stop-color", "#fff");
+  fade.append("stop").attr("offset", "100%").attr("stop-color", "#000");
+  d3.select("#map defs").append("mask").attr("id", "m")
+    .append("rect").attr("width", 560).attr("height", 520).attr("fill", "url(#fade)");
+  d3.select("#map").append("g").attr("mask", "url(#m)")
+    .selectAll("path").data(geo.features).join("path").attr("d", path)
+    .attr("fill", ft => byName.has(ft.properties.name) ? color(byName.get(ft.properties.name)) : css("--seq0"))
+    .attr("stroke", css("--bg")).attr("stroke-width", 0.9);
+  await document.fonts.ready;
+  document.body.dataset.ready = "1";
+})();
+</script>
+</body>
+</html>
