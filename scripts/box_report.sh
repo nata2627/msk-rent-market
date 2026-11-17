@@ -143,7 +143,17 @@ COVERED="$(q "select count(*)
                 from raw.collection_run r join raw.bucket b using (run_id)
                where r.source = 'cian' and r.status = 'ok'
                  and r.snapshot_date = '$DAY' and b.error is null;" | tr -d '[:space:]')"
-GONE="$(q "select count(*) from core.offer where disappeared_date = '$DAY';" | tr -d '[:space:]')"
+# Снятие подтверждается тремя собранными днями отсутствия, а дата снятия
+# это первый день, когда объявления не было. Поэтому за сегодня снятий еще
+# нет никогда, и строка «Снятий за день: 0» стояла каждый вечер (до
+# 17.11.2026). Показывается последний день, снятия которого уже
+# подтверждены, и только 1-2 комнаты, как в строке выше.
+GONE_ROW="$(q "select to_char(disappeared_date, 'DD.MM') || '|' || count(*) from core.offer
+                where source = 'cian' and rooms_count in (1, 2)
+                  and disappeared_date = (select max(disappeared_date) from core.offer
+                                           where source = 'cian' and disappeared_date <= '$DAY')
+                group by disappeared_date;" | tr -d '[:space:]')"
+GONE_DAY="${GONE_ROW%%|*}"; GONE="${GONE_ROW##*|}"
 
 DAY_SHORT="${DAY:8:2}.${DAY:5:2}"
 
@@ -167,7 +177,7 @@ else
   PULSE="Итог дня $DAY_SHORT: $COVER
 
 1-2 комнаты: $OF
-Снятий за день: ${GONE:-0}"
+${GONE_ROW:+Снято с публикации $GONE_DAY: $GONE (видно через три дня)}"
   # Ниже семидесяти процентов заявленного день стоит догонять руками,
   # выше он содержателен и гонять обход ради последних процентов незачем.
   if [ "${COVERED:-0}" = 0 ] || [ "$PCT" -lt 70 ]; then
