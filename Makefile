@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: nl-eval ask-dev ask-eval backup-check backup-restore cover social hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: nl-eval ask-dev ask-eval backup-check backup-restore cover shots hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -290,12 +290,16 @@ backup-restore: ## развернуть облачную копию в отде�
 cover: ## обложка README в figures/, без базы; на сайте ее рисует Pages
 	$(PY) -m src.cover
 
-social: ## превью ссылки figures/social.png из site/social.html через Chrome, для Settings → Social preview
-	cp sql/geo/moscow_districts.geojson site/data/
-	(cd site && $(abspath $(PY)) -m http.server 8765 >/dev/null 2>&1 & echo $$! > /tmp/rent_social.pid); sleep 1
-	"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars \
-	  --window-size=1280,640 --virtual-time-budget=15000 --screenshot=$(CURDIR)/figures/social.png http://localhost:8765/social.html
-	kill $$(cat /tmp/rent_social.pid); rm -f site/data/moscow_districts.geojson
+shots: ## превью ссылки и витрина в окне (figures/social.png, figures/showcase.png) через Chrome
+	@cp sql/geo/moscow_districts.geojson site/data/
+	@cd site && { $(abspath $(PY)) -m http.server 8765 >/dev/null 2>&1 & srv=$$!; sleep 1; \
+	  chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; \
+	  "$$chrome" --headless=new --disable-gpu --hide-scrollbars --window-size=1280,640 \
+	    --virtual-time-budget=15000 --screenshot=$(CURDIR)/figures/social.png http://localhost:8765/social.html; \
+	  "$$chrome" --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1180 --force-device-scale-factor=2 \
+	    --virtual-time-budget=15000 --screenshot=$(CURDIR)/figures/showcase.png http://localhost:8765/showcase.html; \
+	  kill $$srv; }
+	@rm -f site/data/moscow_districts.geojson
 
 index: ## индекс по панели, цепной и гедонический
 	$(PY) -m src.panel_index

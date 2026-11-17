@@ -40,14 +40,17 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python -m src.cover --out site
-      # Превью ссылки сверстано страницей site/social.html и снимается
-      # Chrome, который на раннере уже стоит. Страница берет данные через
-      # fetch, поэтому нужен сервер, а не file://.
+      # Превью ссылки (site/social.html) и витрина в окне браузера для начала
+      # README (site/showcase.html) снимаются Chrome, который на раннере уже
+      # стоит. Страницы берут данные через fetch, поэтому нужен сервер.
       - run: |
           (cd site && python -m http.server 8765 >/dev/null 2>&1 &)
           sleep 1
           google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1280,640 \
             --virtual-time-budget=15000 --screenshot=site/social.png http://localhost:8765/social.html
+          google-chrome --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1180 \
+            --force-device-scale-factor=2 --virtual-time-budget=15000 \
+            --screenshot=site/showcase.png http://localhost:8765/showcase.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
