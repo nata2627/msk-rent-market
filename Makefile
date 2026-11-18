@@ -292,6 +292,7 @@ cover: ## обложка README в figures/, без базы; на сайте е
 
 shots: ## превью ссылки и витрина в окне (figures/social.png, figures/showcase.png) через Chrome
 	@cp sql/geo/moscow_districts.geojson site/data/
+	@cp results/drops.json site/data/
 	@cd site && { $(abspath $(PY)) -m http.server 8765 >/dev/null 2>&1 & srv=$$!; sleep 1; \
 	  chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; \
 	  "$$chrome" --headless=new --disable-gpu --hide-scrollbars --window-size=1280,640 \
@@ -299,7 +300,7 @@ shots: ## превью ссылки и витрина в окне (figures/socia
 	  "$$chrome" --headless=new --disable-gpu --hide-scrollbars --window-size=1400,1180 --force-device-scale-factor=2 \
 	    --virtual-time-budget=15000 --screenshot=$(CURDIR)/figures/showcase.png http://localhost:8765/showcase.html; \
 	  kill $$srv; }
-	@rm -f site/data/moscow_districts.geojson
+	@rm -f site/data/moscow_districts.geojson site/data/drops.json
 
 index: ## индекс по панели, цепной и гедонический
 	$(PY) -m src.panel_index

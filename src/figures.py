@@ -16,6 +16,8 @@
 from __future__ import annotations
 
 import logging
+import math
+from datetime import date
 from pathlib import Path
 
 import matplotlib
@@ -148,52 +150,38 @@ def fig_expiry(spans_) -> None:
     save(fig, "expiry.png")
 
 
-def fig_who_cuts(rows) -> None:
-    """Доля снизивших цену по типу продавца. Акцент на собственнике."""
-    names = {"realtor_based": "агентство",
-             "realtor_not_commerce": "частный риелтор",
-             "homeowner": "собственник"}
-    buckets: dict[str, list] = {}
-    for r in rows:
-        if r["seller_type"] in names:
-            buckets.setdefault(r["seller_type"], []).append(r)
-    data = [(names[k], 100 * sum(1 for x in v if x["cut"]) / len(v), len(v))
-            for k, v in buckets.items()]
-    data.sort(key=lambda t: t[1])
+def fig_who_cuts(d: dict) -> None:
+    """Доля снизивших цену по типу продавца. Акцент на собственнике.
+    Из снимка results/drops.json, как README и обложка."""
+    data = sorted(((r["value"], r["share_pct"], r["offers"]) for r in d["shares"]["seller"]
+                   if r["value"] in ("агентство", "частный агент", "собственник")),
+                  key=lambda t: t[1])
 
     fig, ax = canvas(height=3.4)
     ax.grid(False, axis="y")
     ax.grid(True, axis="x", color=AXIS, linewidth=0.6, alpha=0.7)
     ys = range(len(data))
     colors = [S1 if i == 0 else MUTED for i in ys]
-    ax.barh(list(ys), [d[1] for d in data], height=0.42, color=colors)
+    ax.barh(list(ys), [t[1] for t in data], height=0.42, color=colors)
+    top = max(t[1] for t in data)
     for i, (name, share, n) in enumerate(data):
-        ax.text(share + 0.6, i, f"{share:.1f}%", va="center",
+        ax.text(share + 0.6, i, f"{share:.1f}%".replace(".", ","), va="center",
                 color=INK if i == 0 else INK_2, fontsize=10)
-        ax.text(share + 5.2, i, f"({n} объявлений)", va="center",
-                color=MUTED, fontsize=9)
-    ax.set_yticks(list(ys), [d[0] for d in data], color=INK_2, fontsize=10)
-    ax.set_xlim(0, 48)
+        ax.text(share + 0.12 * top, i, f"({n:,} объявлений)".replace(",", " "),
+                va="center", color=MUTED, fontsize=9)
+    ax.set_yticks(list(ys), [t[0] for t in data], color=INK_2, fontsize=10)
+    ax.set_xlim(0, top * 1.45)
     ax.set_xlabel("снизили цену хотя бы раз, %", color=INK_2, fontsize=10)
+    when = date.fromisoformat(d["data_date"])
     titles(ax, "Собственники держат цену, агентства уступают",
-           "Только объявления, прожившие в наблюдении не меньше недели")
+           f"Объявления, прожившие в наблюдении не меньше недели, данные на {when:%d.%m.%Y}")
     save(fig, "who_cuts.png")
 
 
-def fig_trap(rows) -> None:
+def fig_trap(d: dict) -> None:
     """Одна и та же величина, посчитанная до и после снижения."""
-    def shares(value):
-        vals = sorted(((value(r), r) for r in rows if value(r) is not None),
-                      key=lambda t: t[0])
-        size = len(vals) // 5
-        out = []
-        for i in range(5):
-            chunk = vals[i * size: (i + 1) * size if i < 4 else len(vals)]
-            out.append(100 * sum(1 for _, r in chunk if r["cut"]) / len(chunk))
-        return out
-
-    wrong = shares(lambda r: r["last_to_market"])
-    right = shares(lambda r: r["first_to_market"])
+    wrong = [q["share_pct"] for q in d["quintiles"]["last"]]
+    right = [q["share_pct"] for q in d["quintiles"]["first"]]
     xs = [1, 2, 3, 4, 5]
 
     fig, ax = canvas(height=4.2)
@@ -207,12 +195,14 @@ def fig_trap(rows) -> None:
             fontsize=9.5, va="center")
     ax.set_xticks(xs, ["дешевле\nвсех", "2", "3", "4", "дороже\nвсех"],
                   color=INK_2, fontsize=9.5)
-    ax.set_ylim(20, 44)
+    # Пределы по данным: на снимке 04.10 доли были 24-39%, на 18.11 уже 46-59%.
+    lo, hi = min(wrong + right), max(wrong + right)
+    ax.set_ylim(5 * math.floor((lo - 3) / 5), 5 * math.ceil((hi + 3) / 5))
     ax.set_xlim(0.7, 6.6)
     ax.set_xlabel("пятина по цене относительно похожих квартир", color=INK_2, fontsize=10)
     ax.set_ylabel("снизили цену, %", color=INK_2, fontsize=10)
     titles(ax, "Почему цену нельзя мерить после снижения",
-           "Один вопрос, два способа счёта: наклон меняет знак и почти исчезает")
+           "Один вопрос, два способа счета: по последней цене наклон меняет знак")
     save(fig, "price_trap.png")
 
 
@@ -227,12 +217,6 @@ def main() -> int:
     sp = surv.spans(life_rows, cutoff)
     curve_life = surv.km(sp, max_age=60)
 
-    for r in drop_rows:
-        r["cut"] = r["cuts"] > 0
-        r["days_seen"] = (r["last_seen_date"] - r["first_seen_date"]).days
-        r["first_to_market"] = float(r["first_price"]) / float(r["med_price"])
-        r["last_to_market"] = float(r["last_price"]) / float(r["med_price"])
-
     cut_spans = []
     for r in drop_rows:
         entry = (r["first_seen_date"] - r["published"]).days
@@ -243,12 +227,10 @@ def main() -> int:
         cut_spans.append((entry, exit_, r["first_cut_date"] is not None))
     curve_cut = surv.km(cut_spans, max_age=60)
 
-    long = [r for r in drop_rows if r["days_seen"] >= drops_mod.MIN_DAYS]
-
     fig_survival(curve_life, curve_cut)
     fig_expiry(sp)
-    fig_who_cuts(long)
-    fig_trap(long)
+    # Картинки разбора снижений рисует make drops-analysis из своего
+    # снимка: отсюда они разошлись бы с числами в methods/drops.md.
     return 0
 
 

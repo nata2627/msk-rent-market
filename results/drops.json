@@ -1,0 +1,285 @@
+{
+ "data_date": "2026-11-18",
+ "computed_on": "2026-11-18",
+ "rooms": [
+  1,
+  2
+ ],
+ "panel_days": 58,
+ "offers": 56540,
+ "cuts": 33739,
+ "raises": 3382,
+ "depth_median_pct": -6.0,
+ "depth_q25_pct": -8.2,
+ "min_days": 7,
+ "long_offers": 35713,
+ "shares": {
+  "seller": [
+   {
+    "value": "частный агент",
+    "offers": 8628,
+    "share_pct": 56.1
+   },
+   {
+    "value": "агентство",
+    "offers": 19236,
+    "share_pct": 55.4
+   },
+   {
+    "value": "собственник",
+    "offers": 7807,
+    "share_pct": 44.8
+   }
+  ],
+  "rooms": [
+   {
+    "value": "1 комн.",
+    "offers": 16589,
+    "share_pct": 53.2
+   },
+   {
+    "value": "2 комн.",
+    "offers": 19124,
+    "share_pct": 53.2
+   }
+  ],
+  "pets": [
+   {
+    "value": "разрешено",
+    "offers": 9321,
+    "share_pct": 55.6
+   },
+   {
+    "value": "запрещено",
+    "offers": 5633,
+    "share_pct": 54.1
+   },
+   {
+    "value": "по договоренности",
+    "offers": 748,
+    "share_pct": 52.7
+   },
+   {
+    "value": "не указано",
+    "offers": 20011,
+    "share_pct": 51.8
+   }
+  ],
+  "district": [
+   {
+    "value": "дорогой",
+    "offers": 17520,
+    "share_pct": 55.0
+   },
+   {
+    "value": "средний",
+    "offers": 13464,
+    "share_pct": 52.6
+   },
+   {
+    "value": "дешевый",
+    "offers": 4729,
+    "share_pct": 48.1
+   }
+  ]
+ },
+ "gap": {
+  "adjusted_pp": 12.4,
+  "lo95": 10.54,
+  "hi95": 14.25,
+  "raw_pp": 10.6
+ },
+ "lpm": {
+  "n": 35671,
+  "k": 159,
+  "r2": 0.068,
+  "terms": {
+   "продавец:realtor_based": {
+    "pp": 12.4,
+    "se": 0.95,
+    "t": 13.1,
+    "lo95": 10.54,
+    "hi95": 14.25
+   },
+   "продавец:realtor_not_commerce": {
+    "pp": 13.12,
+    "se": 0.81,
+    "t": 16.1,
+    "lo95": 11.52,
+    "hi95": 14.71
+   },
+   "комнат:2": {
+    "pp": 3.32,
+    "se": 0.9,
+    "t": 3.7,
+    "lo95": 1.56,
+    "hi95": 5.08
+   },
+   "животные:allowed": {
+    "pp": 4.8,
+    "se": 0.63,
+    "t": 7.6,
+    "lo95": 3.57,
+    "hi95": 6.04
+   },
+   "животные:forbidden": {
+    "pp": 2.49,
+    "se": 0.72,
+    "t": 3.4,
+    "lo95": 1.07,
+    "hi95": 3.91
+   },
+   "животные:negotiable": {
+    "pp": 1.11,
+    "se": 1.62,
+    "t": 0.7,
+    "lo95": -2.07,
+    "hi95": 4.29
+   },
+   "первая цена:пятина 2": {
+    "pp": 5.42,
+    "se": 1.18,
+    "t": 4.6,
+    "lo95": 3.11,
+    "hi95": 7.73
+   },
+   "первая цена:пятина 3": {
+    "pp": 9.99,
+    "se": 1.5,
+    "t": 6.7,
+    "lo95": 7.05,
+    "hi95": 12.92
+   },
+   "первая цена:пятина 4": {
+    "pp": 12.93,
+    "se": 1.48,
+    "t": 8.7,
+    "lo95": 10.03,
+    "hi95": 15.83
+   },
+   "первая цена:пятина 5": {
+    "pp": 11.86,
+    "se": 1.82,
+    "t": 6.5,
+    "lo95": 8.29,
+    "hi95": 15.44
+   }
+  }
+ },
+ "quintiles": {
+  "last": [
+   {
+    "quintile": 1,
+    "from": 0.244,
+    "to": 0.846,
+    "offers": 7142,
+    "share_pct": 58.8
+   },
+   {
+    "quintile": 2,
+    "from": 0.846,
+    "to": 0.967,
+    "offers": 7142,
+    "share_pct": 56.8
+   },
+   {
+    "quintile": 3,
+    "from": 0.967,
+    "to": 1.08,
+    "offers": 7142,
+    "share_pct": 53.5
+   },
+   {
+    "quintile": 4,
+    "from": 1.08,
+    "to": 1.25,
+    "offers": 7142,
+    "share_pct": 50.2
+   },
+   {
+    "quintile": 5,
+    "from": 1.25,
+    "to": 14.694,
+    "offers": 7145,
+    "share_pct": 46.7
+   }
+  ],
+  "first": [
+   {
+    "quintile": 1,
+    "from": 0.002,
+    "to": 0.887,
+    "offers": 7142,
+    "share_pct": 45.9
+   },
+   {
+    "quintile": 2,
+    "from": 0.887,
+    "to": 1.0,
+    "offers": 7142,
+    "share_pct": 50.8
+   },
+   {
+    "quintile": 3,
+    "from": 1.0,
+    "to": 1.127,
+    "offers": 7142,
+    "share_pct": 54.2
+   },
+   {
+    "quintile": 4,
+    "from": 1.127,
+    "to": 1.32,
+    "offers": 7142,
+    "share_pct": 57.0
+   },
+   {
+    "quintile": 5,
+    "from": 1.32,
+    "to": 1307.692,
+    "offers": 7145,
+    "share_pct": 58.0
+   }
+  ]
+ },
+ "first_cut": {
+  "median_day": 16,
+  "curve": [
+   {
+    "age": 3,
+    "at_risk": 25243,
+    "not_cut_pct": 90.5
+   },
+   {
+    "age": 7,
+    "at_risk": 17383,
+    "not_cut_pct": 74.0
+   },
+   {
+    "age": 14,
+    "at_risk": 9803,
+    "not_cut_pct": 52.6
+   },
+   {
+    "age": 16,
+    "at_risk": 8607,
+    "not_cut_pct": 48.5
+   },
+   {
+    "age": 21,
+    "at_risk": 6663,
+    "not_cut_pct": 40.6
+   },
+   {
+    "age": 30,
+    "at_risk": 3902,
+    "not_cut_pct": 31.0
+   },
+   {
+    "age": 45,
+    "at_risk": 1860,
+    "not_cut_pct": 20.0
+   }
+  ]
+ }
+}

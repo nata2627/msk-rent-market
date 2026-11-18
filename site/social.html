@@ -49,16 +49,19 @@ h1 { font-size: 76px; line-height: 1.02; font-weight: 800; letter-spacing: -.025
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <script>
 (async () => {
-  const [data, geo] = await Promise.all([
+  const [data, geo, drops] = await Promise.all([
     fetch("data/site.json").then(r => r.json()),
-    fetch("data/moscow_districts.geojson").then(r => r.json())]);
+    fetch("data/moscow_districts.geojson").then(r => r.json()),
+    fetch("data/drops.json").then(r => r.json())]);
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
   // Надбавка за животных: оценка снимка 04.10.2026 со всеми контролями
   // (−0,3%, интервал накрывает ноль), та же, что на обложке README.
+  // Разрыв в снижениях из снимка results/drops.json, того же, что в README
+  // и на обложке. До 18.11.2026 он считался здесь по витрине и расходился
+  // с текстом README.
   const med = data.survival.find(p => p.surv <= 0.5).age;
-  const share = s => data.drops.find(r => r.seller === s).share_pct;
-  const gap = Math.round(share("агентство") - share("собственник"));
+  const gap = drops.gap.raw_pp.toFixed(1).replace(".", ",");
   document.getElementById("stats").innerHTML = [
     ["0%", "надбавка за разрешение держать животных"],
     [`${med} дней`, "живет объявление до снятия, медиана"],

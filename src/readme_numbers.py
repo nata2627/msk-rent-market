@@ -491,6 +491,10 @@ def results_facts() -> dict[str, str]:
                        f"{pct(m['test']['mape_pct'], 1)} | {pct(m['test']['median_ape_pct'], 1)} | "
                        f"{pct(m['coverage80'], 2)} | {pct(m['interval_halfwidth_pct'], 0)} |")
         f["pm_table"] = block(tbl)
+        # Для таблицы результатов README, с тем же округлением, что на
+        # обложке: переобучение раз в неделю меняет оба места сразу.
+        f["pm_cb_mape"] = pct(d["models"]["catboost"]["test"]["mape_pct"], 1)
+        f["pm_hed_mape"] = pct(d["models"]["hedonic"]["test"]["mape_pct"], 1)
         rooms_lbl = {"0": "студия", "1": "1", "2": "2", "3": "3", "4": "4"}
         cb, hd = d["models"]["catboost"], d["models"]["hedonic"]
         tbl = ["| комнат | объявлений | MAPE регрессии, % | MAPE CatBoost, % | покрытие 80% |",
@@ -557,6 +561,7 @@ def results_facts() -> dict[str, str]:
         f["ce_plc_age"] = pct(pa["mean_effect_pp"], 2, sign=True)
         f["ce_plc_age_cover"] = str(round(100 * pa["share_ci_covering_zero"]))
         f["ce_plc_reps"] = str(pa["reps"])
+    f.update(drops_facts())
     nl_path = RESULTS / "nl_eval.json"
     if nl_path.exists():
         from datetime import date
@@ -581,6 +586,90 @@ def results_facts() -> dict[str, str]:
             f[f"ask_{k}"] = str(r["exact"])
             f[f"ask_{k}_pct"] = pct(r["exact_pct"], 1)
             f[f"ask_{k}_latency"] = pct(r["latency_median_s"], 2)
+    return f
+
+
+def drops_facts() -> dict[str, str]:
+    """Разбор снижений из снимка results/drops.json (make drops-analysis).
+
+    Тот же файл читают обложка и превью ссылки. До 18.11.2026 README
+    держал разрыв снимка 04.10 (+9,0), а обложка считала его по витрине
+    (+10,6), и читатель видел два ответа на один вопрос."""
+    import json
+    from datetime import date
+    path = RESULTS / "drops.json"
+    if not path.exists():
+        return {}
+    d = json.loads(path.read_text())
+    f: dict[str, str] = {}
+    when = date.fromisoformat(d["data_date"])
+    f["dr_date"] = ru_date(when)
+    f["dr_days"] = str(d["panel_days"])
+    f["dr_cuts"] = thousands(d["cuts"])
+    f["dr_raises"] = thousands(d["raises"])
+    f["dr_ratio"] = str(round(d["cuts"] / max(d["raises"], 1)))
+    f["dr_depth_med"] = pct(abs(d["depth_median_pct"]), 1)
+    f["dr_depth_q25"] = pct(abs(d["depth_q25_pct"]), 1)
+    f["dr_long"] = thousands(d["long_offers"])
+
+    g = d["gap"]
+    f["dr_raw"] = pct(g["raw_pp"], 1)
+    f["dr_adj"] = pct(g["adjusted_pp"], 1)
+    f["dr_adj_ci"] = f"{pct(g['lo95'], 1)}-{pct(g['hi95'], 1)}"
+
+    names = {"seller": "продавец", "rooms": "комнат", "pets": "животные",
+             "district": "район"}
+    tbl = ["| признак | значение | объявлений | снизили цену |", "|---|---|---:|---:|"]
+    for key, title in names.items():
+        for r in d["shares"][key]:
+            value = r["value"].replace(" комн.", "")
+            bold = value in ("агентство", "собственник")
+            share = f"**{pct(r['share_pct'])}%**" if bold else f"{pct(r['share_pct'])}%"
+            tbl.append(f"| {title} | {'**' + value + '**' if value == 'собственник' else value} "
+                       f"| {thousands(r['offers'])} | {share} |")
+    f["dr_shares_table"] = block(tbl)
+
+    lpm = d["lpm"]
+    f["dr_lpm_n"] = thousands(lpm["n"])
+    terms = (("продавец:realtor_based", "**агентство** против собственника"),
+             ("продавец:realtor_not_commerce", "частный агент против собственника"),
+             ("животные:allowed", "животные разрешены"),
+             ("животные:forbidden", "животные запрещены"),
+             ("комнат:2", "две комнаты против одной"),
+             ("первая цена:пятина 5", "первая цена дороже всех против дешевле всех"))
+    tbl = ["| признак | эффект, п.п. | ошибка | t |", "|---|---:|---:|---:|"]
+    for key, name in terms:
+        t = lpm["terms"].get(key)
+        if t is None:
+            continue
+        b = pct(t["pp"], 1, sign=True)
+        tbl.append(f"| {name} | {'**' + b + '**' if key.endswith('realtor_based') else b} "
+                   f"| {pct(t['se'], 1)} | {pct(t['t'], 1)} |")
+    f["dr_lpm_table"] = block(tbl)
+    q5 = lpm["terms"].get("первая цена:пятина 5")
+    f["dr_q5_adj"] = pct(q5["pp"], 1, sign=True) if q5 else "нет"
+
+    last, first = d["quintiles"]["last"], d["quintiles"]["first"]
+    labels = ["дешевле всех", "2", "3", "4", "дороже всех"]
+    tbl = ["| пятина по цене к похожим | по последней цене (неверно) | по первой цене (верно) |",
+           "|---|---:|---:|"]
+    for name, a, b in zip(labels, last, first):
+        tbl.append(f"| {name} | {pct(a['share_pct'])}% | {pct(b['share_pct'])}% |")
+    f["dr_trap_table"] = block(tbl)
+    f["dr_first_lo"] = pct(first[0]["share_pct"])
+    f["dr_first_hi"] = pct(first[-1]["share_pct"])
+    f["dr_last_lo"] = pct(last[0]["share_pct"])
+    f["dr_last_hi"] = pct(last[-1]["share_pct"])
+
+    fc = d["first_cut"]
+    tbl = ["| возраст, дней | еще не снижали цену |", "|---:|---:|"]
+    for p in fc["curve"]:
+        if p["age"] == fc["median_day"]:
+            tbl.append(f"| **{p['age']}** | **{pct(p['not_cut_pct'])}%** |")
+        else:
+            tbl.append(f"| {p['age']} | {pct(p['not_cut_pct'])}% |")
+    f["dr_cut_table"] = block(tbl)
+    f["dr_cut_median"] = str(fc["median_day"])
     return f
 
 

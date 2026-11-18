@@ -30,13 +30,28 @@
 наблюдении не меньше MIN_DAYS дней, а срок до снижения — Каплан-Мейером,
 который с разной длиной наблюдения умеет обращаться сам.
 
+Снимок
+------
+
+Числа разбора живут в results/drops.json с датой данных. Оттуда их берут
+README и methods/drops.md (make readme-numbers), обложка README, превью
+ссылки и обе картинки разбора. До 18.11.2026 README и methods держали
+числа 04.10, а обложка считала разрыв по витрине на свежих данных, и
+рядом стояли +9,0 и +10,6 п.п. одного и того же вопроса. Пересчет
+осознанный, как у модельных чисел: свежие данные меняли здесь вывод, а
+не только число (наклон по первой цене).
+
 Запуск: `make drops-analysis` или `python -m src.drops`.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import math
+from datetime import date
+from pathlib import Path
+
 import numpy as np
 
 from etl import db
@@ -45,6 +60,16 @@ from src.linreg import fit
 from src.survival import km
 
 log = logging.getLogger("drops")
+
+RESULTS = Path(__file__).resolve().parents[1] / "results"
+OUT = RESULTS / "drops.json"
+
+# Подписи как на витрине (src/site_data.py SELLERS), чтобы одно и то же
+# называлось одинаково на обложке, в README и на сайте.
+LABELS = {"homeowner": "собственник", "realtor_based": "агентство",
+          "realtor_not_commerce": "частный агент",
+          "allowed": "разрешено", "forbidden": "запрещено",
+          "negotiable": "по договоренности", "unknown": "не указано"}
 
 # Сколько дней объявление должно у нас прожить, чтобы попасть в доли.
 # Семь, а не три: за три дня снижают единицы, и группы различались бы
@@ -106,7 +131,7 @@ def load(conn, rooms: list[int]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------
-def share_table(rows, key, title, order_by_share=True) -> None:
+def share_table(rows, key, title, order_by_share=True) -> list[dict]:
     """Доля снизивших цену в разрезе одного признака."""
     buckets: dict[str, list] = {}
     for r in rows:
@@ -118,27 +143,44 @@ def share_table(rows, key, title, order_by_share=True) -> None:
     print(f"    {'значение':<24} {'объявлений':>11} {'снизили':>9}")
     for name, n, share in items:
         print(f"    {name:<24} {n:>11} {share:>8.1f}%")
+    return [{"value": LABELS.get(name, name), "offers": n, "share_pct": round(share, 1)}
+            for name, n, share in items]
 
 
-def quintiles(rows, value, title) -> None:
+def quintile_of(rows, value) -> dict[int, int]:
+    """Номер пятины (0-4) по признаку для каждого объявления, id(r) -> пятина.
+    Тот же разрез, что в таблице пятин, чтобы модель и таблица говорили об
+    одних и тех же группах."""
+    vals = sorted(((value(r), r) for r in rows if value(r) is not None),
+                  key=lambda t: t[0])
+    size = len(vals) // 5
+    return {id(r): min(i // size, 4) for i, (_, r) in enumerate(vals)}
+
+
+def quintiles(rows, value, title) -> list[dict]:
     """Доля снизивших по пятинам числового признака."""
     # Ключ сортировки задан явно: при равных значениях Python иначе
     # полезет сравнивать сами словари и упадёт.
     vals = sorted(((value(r), r) for r in rows if value(r) is not None),
                   key=lambda t: t[0])
     if len(vals) < 500:
-        return
+        return []
     size = len(vals) // 5
     print(f"\n  {title}")
     print(f"    {'пятина':<8} {'от':>7} {'до':>7} {'объявлений':>11} {'снизили':>9}")
+    out = []
     for i in range(5):
         chunk = vals[i * size: (i + 1) * size if i < 4 else len(vals)]
         share = 100 * sum(1 for _, r in chunk if r["cut"]) / len(chunk)
         print(f"    {i + 1:<8} {chunk[0][0]:>7.2f} {chunk[-1][0]:>7.2f} "
               f"{len(chunk):>11} {share:>8.1f}%")
+        out.append({"quintile": i + 1, "from": round(chunk[0][0], 3),
+                    "to": round(chunk[-1][0], 3), "offers": len(chunk),
+                    "share_pct": round(share, 1)})
+    return out
 
 
-def lpm_report(rows) -> None:
+def lpm_report(rows) -> dict:
     """Линейная вероятностная модель с фиксированными эффектами района.
 
     Зависимая переменная — ноль или единица, поэтому коэффициент читается
@@ -172,8 +214,15 @@ def lpm_report(rows) -> None:
     cols += c; names += n
     c, n = _numeric_with_missing([r["metro_real_walk_min"] for r in rows], "до метро")
     cols += c; names += n
-    cols.append(np.array([float(r["first_to_market"]) for r in rows]))
-    names.append("первая цена к похожим")
+    # Первая цена к похожим пятинами, а не числом. Числом ее держали до
+    # 18.11.2026, и на свежей панели хвост до отношения 1300 (цена с
+    # лишними нулями) делал коэффициент бессмысленным: «+0,1 п.п. на
+    # единицу отношения». Пятины к хвосту равнодушны и читаются так же,
+    # как таблица ловушки.
+    q = quintile_of(rows, lambda r: r["first_to_market"])
+    c, n = _dummies([f"пятина {q[id(r)] + 1}" for r in rows],
+                    base="пятина 1", prefix="первая цена")
+    cols += c; names += n
 
     districts = [r["district"] or "не указан" for r in rows]
     c, n = fixed_effects(districts, "район")
@@ -183,8 +232,9 @@ def lpm_report(rows) -> None:
     print(f"\n  наблюдений {f.n}, признаков {f.k}, R² {f.r2:.3f}, "
           f"база — собственник")
     print(f"    {'признак':<26} {'п.п.':>8} {'ошибка':>8} {'t':>7}  {'95% интервал':>18}")
+    terms = {}
     for name in names:
-        if not (name.startswith("продавец") or name == "первая цена к похожим"
+        if not (name.startswith("продавец") or name.startswith("первая цена")
                 or name.startswith("животные") or name.startswith("комнат")):
             continue
         if name not in f.names:
@@ -193,6 +243,10 @@ def lpm_report(rows) -> None:
         t = b / se if se else float("nan")
         print(f"    {name:<26} {100 * b:>+8.1f} {100 * se:>8.1f} {t:>7.1f}  "
               f"[{100 * (b - 1.96 * se):>+7.1f}; {100 * (b + 1.96 * se):>+7.1f}]")
+        terms[name] = {"pp": round(100 * b, 2), "se": round(100 * se, 2),
+                       "t": round(t, 1), "lo95": round(100 * (b - 1.96 * se), 2),
+                       "hi95": round(100 * (b + 1.96 * se), 2)}
+    return {"n": f.n, "k": f.k, "r2": round(f.r2, 3), "terms": terms}
 
 
 # ---------------------------------------------------------------------
@@ -212,14 +266,15 @@ def main() -> int:
         r["first_to_market"] = float(r["first_price"]) / float(r["med_price"])
         r["last_to_market"] = float(r["last_price"]) / float(r["med_price"])
 
+    snapshot = max(r["last_seen_date"] for r in rows)
     total_cuts = sum(r["cuts"] for r in rows)
     total_raises = sum(r["raises"] for r in rows)
     print(f"Комнатность {args.rooms}. Объявлений {len(rows)}.")
     print(f"Снижений {total_cuts}, повышений {total_raises} — "
           f"{total_cuts / max(total_raises, 1):.1f} к одному.")
-    deep = [float(r["deepest_pct"]) for r in rows if r["deepest_pct"] is not None]
+    # Глубина со знаком минус, поэтому четверть самых глубоких внизу списка.
+    deep = sorted(float(r["deepest_pct"]) for r in rows if r["deepest_pct"] is not None)
     if deep:
-        deep.sort()
         print(f"Глубина снижения: медиана {deep[len(deep) // 2]:.1f}%, "
               f"четверть глубже {deep[len(deep) // 4]:.1f}%.")
 
@@ -232,29 +287,31 @@ def main() -> int:
     print("ЛОВУШКА. Один и тот же вопрос, два способа посчитать.")
     print("=" * 78)
     print("\n  Вопрос: чаще ли снижают те, кто просил выше рынка?")
-    quintiles(long, lambda r: r["last_to_market"],
-              "НЕВЕРНО — по ПОСЛЕДНЕЙ цене (она уже учла снижение)")
-    quintiles(long, lambda r: r["first_to_market"],
-              "ВЕРНО — по ПЕРВОЙ увиденной цене")
-    print("\n  Первый расчёт даёт сильный наклон и неверный знак: снизившие")
-    print("  объявления из-за самого снижения попадают в дешёвые пятины.")
-    print("  Во втором наклон почти исчезает. Это не слабый результат, а")
-    print("  правильный: цена относительно рынка почти не говорит о торге.")
+    q_last = quintiles(long, lambda r: r["last_to_market"],
+                       "НЕВЕРНО — по ПОСЛЕДНЕЙ цене (она уже учла снижение)")
+    q_first = quintiles(long, lambda r: r["first_to_market"],
+                        "ВЕРНО — по ПЕРВОЙ увиденной цене")
+    print("\n  Первый расчёт завышает долю снизивших в дешёвых пятинах:")
+    print("  объявление попадает туда именно потому, что снизило цену.")
+    print("  Сравнивать надо наклоны двух таблиц, а не одну из них.")
 
     print("\n" + "=" * 78)
     print("КТО СНИЖАЕТ")
     print("=" * 78)
-    share_table(long, lambda r: r["seller_type"] or "не указан", "По типу продавца")
-    share_table(long, lambda r: f'{r["rooms_count"]} комн.', "По комнатности")
-    share_table(long, lambda r: r["pets_state"] or "нет данных", "По животным")
-    share_table(long, lambda r: ("дорогой район" if (r["ppm_vs_city"] or 1) >= 1.1
-                                 else "дешёвый район" if (r["ppm_vs_city"] or 1) < 0.9
-                                 else "средний район"), "По уровню района")
+    shares = {
+        "seller": share_table(long, lambda r: r["seller_type"] or "не указан",
+                              "По типу продавца"),
+        "rooms": share_table(long, lambda r: f'{r["rooms_count"]} комн.', "По комнатности"),
+        "pets": share_table(long, lambda r: r["pets_state"] or "нет данных", "По животным"),
+        "district": share_table(long, lambda r: ("дорогой" if (r["ppm_vs_city"] or 1) >= 1.1
+                                                 else "дешевый" if (r["ppm_vs_city"] or 1) < 0.9
+                                                 else "средний"), "По уровню района"),
+    }
 
     print("\n" + "=" * 78)
     print("ВЫДЕРЖИВАЕТ ЛИ РАЗРЫВ ПОПРАВКУ НА ВСЁ ОСТАЛЬНОЕ")
     print("=" * 78)
-    lpm_report([r for r in long if r["total_area"] and r["seller_type"]])
+    lpm = lpm_report([r for r in long if r["total_area"] and r["seller_type"]])
 
     print("\n" + "=" * 78)
     print("ЧЕРЕЗ СКОЛЬКО ДНЕЙ")
@@ -278,6 +335,7 @@ def main() -> int:
         if age in (3, 7, 14, 21, 30, 45, 60) and n > 0:
             print(f"  {age:>8} {n:>9} {d:>9} {100 * s:>15.1f}%")
     half = next((a for a, n, d, sv in curve if sv <= 0.5 and n > 0), None)
+    ages = sorted({3, 7, 14, 21, 30, 45} | ({half} if half else set()))
     if half:
         print(f"\n  Половина объявлений доходит до первого снижения к {half}-му дню.")
     print("  Читать это надо так: среди тех, кто ДОЖИЛ, снижение — обычное дело.")
@@ -286,6 +344,36 @@ def main() -> int:
 
     print("\nЧто из этого нельзя говорить: что агентство «готово торговаться».")
     print("Мы видим изменение цены в объявлении, а не разговор с арендатором.")
+
+    seller = {r["value"]: r["share_pct"] for r in shares["seller"]}
+    agency = lpm["terms"]["продавец:realtor_based"]
+    payload = {
+        "data_date": snapshot.isoformat(),
+        "computed_on": date.today().isoformat(),
+        "rooms": rooms,
+        "panel_days": (snapshot - min(r["first_seen_date"] for r in rows)).days + 1,
+        "offers": len(rows),
+        "cuts": total_cuts, "raises": total_raises,
+        "depth_median_pct": round(deep[len(deep) // 2], 1) if deep else None,
+        "depth_q25_pct": round(deep[len(deep) // 4], 1) if deep else None,
+        "min_days": MIN_DAYS, "long_offers": len(long),
+        "shares": shares,
+        # Главное число вопроса. Разрыв с поправками, а сырой рядом: так
+        # видно, что поправки его почти не двигают.
+        "gap": {"adjusted_pp": agency["pp"], "lo95": agency["lo95"], "hi95": agency["hi95"],
+                "raw_pp": round(seller["агентство"] - seller["собственник"], 1)},
+        "lpm": lpm,
+        "quintiles": {"last": q_last, "first": q_first},
+        "first_cut": {"median_day": half,
+                      "curve": [{"age": a, "at_risk": n, "not_cut_pct": round(100 * s, 1)}
+                                for a, n, _, s in curve if a in ages and n > 0]},
+    }
+    RESULTS.mkdir(exist_ok=True)
+    OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=1))
+    print(f"\n{OUT}")
+    from src import figures
+    figures.fig_who_cuts(payload)
+    figures.fig_trap(payload)
     return 0
 
 

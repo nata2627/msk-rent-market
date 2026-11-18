@@ -11,10 +11,12 @@
 
 Превью ссылки и витрину в окне для README рисуют site/social.html и
 site/showcase.html (make shots).
-Исключение одно, оценки надбавки за животных: команда make hedonic
+Исключения два. Оценки надбавки за животных: команда make hedonic
 пишет их в журнал, а не в файл, и здесь стоят числа снимка 04.10.2026
 из раздела README о животных. Если оценка будет пересчитана, числа
-меняются здесь и в methods/pets.md вместе.
+меняются здесь и в methods/pets.md вместе. Разрыв в снижениях цены
+берется из снимка results/drops.json (make drops-analysis), а не из
+витрины: из того же файла его подставляет в README make readme-numbers.
 """
 from __future__ import annotations
 
@@ -101,26 +103,31 @@ def survival(ax, site):
          f"Каплан-Мейер с поздним вхождением, данные на {ru(site['data_date'])}")
 
 
-def drops(ax, site):
+def drops(ax):
+    """Из снимка results/drops.json, того же, что в README и
+    methods/drops.md. До 18.11.2026 столбцы шли из витрины, и обложка
+    показывала +10,6 п.п. при +9,0 в тексте."""
     style(ax)
     ax.grid(True, axis="x", color=AXIS, linewidth=0.6, alpha=0.7)
     ax.grid(False, axis="y")
-    rows = [r for r in site["drops"] if r["seller"] != "не указан"][::-1]
+    d = json.loads((RESULTS / "drops.json").read_text())
+    rows = sorted([r for r in d["shares"]["seller"] if r["value"] != "не указан"],
+                  key=lambda r: r["share_pct"])
     ys = range(len(rows))
-    colors = [S2 if r["seller"] == "собственник" else S1 for r in rows]
+    colors = [S2 if r["value"] == "собственник" else S1 for r in rows]
     ax.barh(list(ys), [r["share_pct"] for r in rows], color=colors, height=0.6)
     for y, r in zip(ys, rows):
         ax.text(r["share_pct"] + 0.6, y, f"{r['share_pct']:.1f}%".replace(".", ","),
                 va="center", color=INK_2, fontsize=8.5)
-    ax.set_yticks(list(ys), [r["seller"] for r in rows])
-    ax.set_xlim(0, 45)
+    ax.set_yticks(list(ys), [r["value"] for r in rows])
+    ax.set_xlim(0, 5 * round(max(r["share_pct"] for r in rows) * 1.25 / 5))
     ax.set_xlabel("снизили цену хотя бы раз, %", color=MUTED, fontsize=8.5)
-    agency = next(r for r in rows if r["seller"] == "агентство")["share_pct"]
-    owner = next(r for r in rows if r["seller"] == "собственник")["share_pct"]
-    gap = f"{agency - owner:+.1f}".replace(".", ",")
-    head(ax, f"{gap} п.п.", "агентства снижают цену чаще собственников",
-         f"{sum(r['offers'] for r in rows):,} объявлений от недели в выдаче".replace(",", " ")
-         + ", поправки на район и квартиру разрыв почти не двигают")
+    g = d["gap"]
+    num = lambda v: f"{v:+.1f}".replace(".", ",")
+    n = f"{sum(r['offers'] for r in rows):,}".replace(",", " ")
+    head(ax, f"{num(g['raw_pp'])} п.п.", "агентства снижают цену чаще собственников",
+         f"{n} объявлений от недели в выдаче, {ru(d['data_date'])}; "
+         f"с поправками {num(g['adjusted_pp'])}")
 
 
 def index(ax, site):
@@ -208,7 +215,7 @@ def cover(site, out: Path) -> None:
     fig.patch.set_facecolor(SURFACE)
     pets(axes[0][0])
     survival(axes[0][1], site)
-    drops(axes[0][2], site)
+    drops(axes[0][2])
     index(axes[1][0], site)
     forecast(axes[1][1], site)
     model(axes[1][2])
