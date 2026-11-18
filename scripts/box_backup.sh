@@ -48,7 +48,10 @@ find "$LOG_DIR" -name 'backup_*.log' -mtime +60 -delete 2>/dev/null
 
 RECIPIENT="$(grep -E '^BACKUP_AGE_RECIPIENT=' "$REPO/.env" | cut -d= -f2-)"
 REMOTE="${BACKUP_REMOTE:-gdrive:rent_backup}"
-RC=(rclone --drive-chunk-size 8M --stats 0 --log-level NOTICE)
+# Удаление мимо корзины. Иначе снятые ротацией полные лежат в корзине
+# Drive еще 30 дней и занимают квоту: 18.11 корзина держала 7.7 ГБ из 15,
+# и полная копия не влезла.
+RC=(rclone --drive-chunk-size 8M --drive-use-trash=false --stats 0 --log-level NOTICE)
 
 fail() {
   say "СБОЙ: $1"
@@ -113,19 +116,25 @@ RAW_ROWS='docker exec -i rent_pg psql -qtA -v ON_ERROR_STOP=1 -U rent -d rent -c
 
 if [ "$MODE" = "full" ] || { [ "$(cat "$STATE/full" 2>/dev/null)" != "$WEEK" ] && [ "$(date +%u)" -ge 3 ]; }; then
   say "Полная копия, неделя $WEEK"
-  upload 10800 "$REMOTE/full/rent_${TODAY}.dump.age" \
-    nice -n 10 docker exec -i rent_pg pg_dump -U rent -d rent -Fc -Z 6 \
-    || fail "полная копия не загрузилась, подробности в $(basename "$LOG")"
-  echo "$WEEK" >"$STATE/full"
-  # Хранятся две последние полные. Ночные старше более старой из них не
-  # нужны: восстановление начинается с полной копии.
-  "${RC[@]}" lsf "$REMOTE/full" | sort | head -n -2 | while read -r old; do
-    "${RC[@]}" deletefile "$REMOTE/full/$old" && say "удалена старая полная $old"
-  done
-  OLDEST="$("${RC[@]}" lsf "$REMOTE/full" | sort | head -1 | sed 's/rent_\(.*\)\.dump\.age/\1/')"
-  "${RC[@]}" lsf --dirs-only "$REMOTE/daily" 2>/dev/null | tr -d / | while read -r d; do
-    [[ "$d" < "$OLDEST" ]] && "${RC[@]}" purge "$REMOTE/daily/$d" && say "удалена старая ночная $d"
-  done
+  # Сбой полной не отменяет ночную: 18.11 полная упала на квоте Drive, и
+  # выход сразу оставил без копии и сырые строки дня. Тревога после ночной,
+  # полная повторится в следующий вечер: отметки недели в state нет.
+  if upload 10800 "$REMOTE/full/rent_${TODAY}.dump.age" \
+    nice -n 10 docker exec -i rent_pg pg_dump -U rent -d rent -Fc -Z 6; then
+    echo "$WEEK" >"$STATE/full"
+    # Хранятся две последние полные. Ночные старше более старой из них не
+    # нужны: восстановление начинается с полной копии.
+    "${RC[@]}" lsf "$REMOTE/full" | sort | head -n -2 | while read -r old; do
+      "${RC[@]}" deletefile "$REMOTE/full/$old" && say "удалена старая полная $old"
+    done
+    OLDEST="$("${RC[@]}" lsf "$REMOTE/full" | sort | head -1 | sed 's/rent_\(.*\)\.dump\.age/\1/')"
+    "${RC[@]}" lsf --dirs-only "$REMOTE/daily" 2>/dev/null | tr -d / | while read -r d; do
+      [[ "$d" < "$OLDEST" ]] && "${RC[@]}" purge "$REMOTE/daily/$d" && say "удалена старая ночная $d"
+    done
+  else
+    FULL_FAILED=1
+    say "полная копия не загрузилась, иду к ночной"
+  fi
 fi
 
 say "Ночная копия сырых строк за три даты снимка до $TODAY"
@@ -136,5 +145,6 @@ for t in collection_run bucket offer_snapshot pets_hit; do
     || fail "ночная копия таблицы raw.$t не загрузилась"
 done
 echo "$TODAY" >"$STATE/daily"
+[ -n "${FULL_FAILED:-}" ] && fail "полная копия не загрузилась, ночная загружена, подробности в $(basename "$LOG")"
 say "Готово"
 exit 0
