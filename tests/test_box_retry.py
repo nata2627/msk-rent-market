@@ -33,7 +33,7 @@ def fake_docker(tmp_path, probe_ok=True, collect_fails=False):
     collect = (
         "echo '13:58:09 INFO Итог: корзин 202, пропущено собранных 0, недобрано в 66, "
         "переделено по недобору 0, не прочиталось 0, уникальных объявлений 4998, запросов 516, статус aborted'\n"
-        "    echo '13:58:09 ERROR Площадка закрыла доступ (HTTP 200). Сбор остановлен.'\n"
+        "    echo '13:58:09 ERROR Площадка закрыла доступ (HTTP 200, запрос 516 сеанса за 52 мин, всего 516, «Captcha - база объявлений ЦИАН»). Сбор остановлен.'\n"
         "    echo '13:58:10 === Сбор — СБОЙ (код 1), иду дальше'; exit 1"
         if collect_fails else "echo '=== Сбор — готово'; exit 0")
     (bindir / "docker").write_text(f"""#!/bin/bash
@@ -186,7 +186,7 @@ def test_сбой_сбора_ставит_отметку(tmp_path):
     assert f.read_text().strip() == TODAY
     msg = read(sent)
     assert msg.startswith("weekly-fail|Добор 3+ комнат оборван")
-    assert "площадка закрыла доступ" in msg
+    assert "площадка закрыла доступ, запрос 516 сеанса за 52 мин, всего 516, «Captcha - база объявлений ЦИАН»." in msg
     assert "корзин 202, объявлений 4998" in msg
     assert "под угрозой" not in msg
 

@@ -120,6 +120,14 @@ RESPLIT_MIN_MISSING = 100
 # ---------------------------------------------------------------------
 PAUSE_MIN = float(os.getenv("CIAN_PAUSE_MIN", "2.0"))
 PAUSE_MAX = float(os.getenv("CIAN_PAUSE_MAX", "3.5"))
+# Перерыв в обходе: после BREAK_AFTER страниц браузер закрывается на
+# BREAK_MINUTES, потом сеанс начинается заново с главной. Проверка с
+# 18.11.2026: блоки участились с 12.11 и приходят на 188-966 запросе
+# одного сеанса, а темп снижать не хочется. Помогает ли, видно по заметкам
+# запусков; если за две недели не изменится, перерыв убрать (docs/status.md).
+# 0 выключает.
+BREAK_AFTER = int(os.getenv("CIAN_BREAK_AFTER", "500"))
+BREAK_MINUTES = float(os.getenv("CIAN_BREAK_MINUTES", "25"))
 REQUEST_TIMEOUT = 40
 MAX_RETRIES = 4
 BACKOFF_BASE = 5.0      # секунды: 5, 10, 20, 40

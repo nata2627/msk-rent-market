@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import time
 import urllib.parse
 
@@ -62,6 +63,8 @@ class BrowserClient:
         self._playwright = None
         self._context = None
         self._page = None
+        self._started = 0.0
+        self._at_break = 0
 
     # ------------------------------------------------------------------
     def _ensure_browser(self):
@@ -76,6 +79,7 @@ class BrowserClient:
             ) from err
 
         PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+        self._started = time.monotonic()
         self._playwright = sync_playwright().start()
         # channel="chrome" — настоящий установленный Chrome, а не Chromium
         # из комплекта Playwright: у них разные отпечатки, и проходит
@@ -126,14 +130,34 @@ class BrowserClient:
     def _sleep(self) -> None:
         time.sleep(random.uniform(self.pause_min, self.pause_max))
 
+    def _block_detail(self, html: str) -> str:
+        """На каком запросе сеанса и чем закрыли: с 12.11.2026 блоки участились,
+        и без этого не понять, помогает ли темп и перерыв. Текст идет в
+        заметку запуска, по ней и считается."""
+        m = re.search(r"<title>([^<]{0,80})", html, re.I)
+        title = m.group(1).strip() if m else "без заголовка"
+        minutes = (time.monotonic() - self._started) / 60 if self._started else 0
+        return (f"запрос {self.requests_made - self._at_break} сеанса за {minutes:.0f} мин, "
+                f"всего {self.requests_made}, «{title}»")
+
     # ------------------------------------------------------------------
     def describe_query(self, bucket: Bucket, page: int = 1,
                        pets_only: bool = False) -> dict:
         return {"transport": "browser", "url": config.SERP_URL,
                 "params": build_url_params(bucket, page, pets_only)}
 
+    def _maybe_break(self) -> None:
+        if not config.BREAK_AFTER or self.requests_made - self._at_break < config.BREAK_AFTER:
+            return
+        log.info("Перерыв %.0f мин после %d запросов сеанса", config.BREAK_MINUTES,
+                 self.requests_made - self._at_break)
+        self.close()
+        time.sleep(config.BREAK_MINUTES * 60)
+        self._at_break = self.requests_made
+
     def search(self, bucket: Bucket, page: int = 1,
                pets_only: bool = False) -> tuple[list[dict], int]:
+        self._maybe_break()
         self._ensure_browser()
         params = build_url_params(bucket, page, pets_only)
         url = f"{config.SERP_URL}?{urllib.parse.urlencode(params)}"
@@ -163,7 +187,8 @@ class BrowserClient:
                 continue
 
             if status == 403 or self._looks_blocked(html):
-                raise Blocked(f"Площадка закрыла доступ (HTTP {status}). Сбор остановлен.")
+                raise Blocked(f"Площадка закрыла доступ (HTTP {status}, {self._block_detail(html)}). "
+                              "Сбор остановлен.")
 
             try:
                 offers, total = extract_offers(html)
