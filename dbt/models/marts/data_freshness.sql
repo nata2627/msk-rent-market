@@ -25,7 +25,14 @@ with m as (
 ),
 c as (select max(snapshot_date) as collected_day from {{ source('raw', 'offer_snapshot') }}),
 r as (select max(period) as rosstat_month from {{ source('core', 'rosstat_rent') }}),
-t as (select (now() at time zone 'Europe/Moscow')::date as today)
+t as (select (now() at time zone 'Europe/Moscow')::date as today),
+-- Прогон, который сейчас идет. Витрины собираются после сбора, поэтому
+-- пока он идет, сбор впереди витрин на день, и это не авария. Окно 12 ч
+-- длиннее самого долгого прогона (9,5 ч), а прогоны, упавшие без
+-- закрытия, висят в running неделями и не должны глушить тревогу.
+p as (select exists(select 1 from {{ source('raw', 'collection_run') }}
+                     where status = 'running'
+                       and started_at > now() - interval '12 hours') as crawling)
 select m.mart_day,
        c.collected_day,
        r.rosstat_month,
@@ -46,6 +53,9 @@ select m.mart_day,
        -- raw. Именно это и было в копии: raw и core на 12.10, а
        -- offer_scored на 10.10. Переливом такое не лечится.
        || case
+              when c.collected_day > m.mart_day and p.crawling
+                  then ' · идёт сбор за ' || to_char(c.collected_day, 'DD.MM')
+                       || ', витрины пересоберутся после него'
               when c.collected_day > m.mart_day
                   then ' · ВИТРИНЫ НЕ ПЕРЕСОБРАНЫ: сбор дошёл до '
                        || to_char(c.collected_day, 'DD.MM')
@@ -62,4 +72,4 @@ select m.mart_day,
                   + (date_part('month', t.today) - date_part('month', r.rosstat_month)))::int
                 || ' мес. назад'
        end as rosstat_verdict
-  from m, c, r, t
+  from m, c, r, t, p
