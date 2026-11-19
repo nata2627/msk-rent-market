@@ -342,16 +342,16 @@ function kpis(data) {
 const METRICS = [
   {id: "ppm", label: "Цена метра", unit: "руб./м² в месяц", get: d => d.ppm, fmt: ru, city: c => c.ppm,
    top: "Дороже всего", bottom: "Дешевле всего",
-   note: "Медиана запрашиваемой цены квадратного метра в месяц. Район от десяти объявлений."},
+   note: "Медиана запрашиваемой цены квадратного метра в месяц. Районы, где меньше 10-и объявлений, серые."},
   {id: "pets", label: "Можно с животными", unit: "% объявлений, где прямо разрешают", get: d => d.pets_allowed_pct,
    fmt: pctS, city: c => c.pets_allowed_pct, top: "Чаще разрешают", bottom: "Реже разрешают",
    note: "«По договоренности» и «не указано» в долю не входят: молчание о животных не равно ни разрешению, ни запрету."},
   {id: "life", label: "Срок жизни", unit: "дней до снятия, медиана", get: d => d.life_days,
    fmt: v => v + " дн.", city: c => c.life_days, top: "Висят дольше", bottom: "Уходят быстрее",
-   note: "Каплан-Мейер с поздним вхождением, район от пятидесяти объявлений. Снятие объявления не равно сдаче квартиры."},
+   note: "Каплан-Мейер с поздним вхождением. Районы, где меньше 50-и объявлений, серые. Снятие объявления не равно сдаче квартиры."},
   {id: "cuts", label: "Снижают цену", unit: "% снизивших хотя бы раз", get: d => d.cut_pct,
    fmt: pctS, city: c => c.cut_pct, top: "Снижают чаще", bottom: "Снижают реже",
-   note: "Среди объявлений, которые панель видела неделю и дольше, иначе район с долгими объявлениями выглядел бы районом, где чаще снижают. Район от пятидесяти объявлений."},
+   note: "Среди объявлений, которые панель видела неделю и дольше, иначе район с долгими объявлениями выглядел бы районом, где чаще снижают. Районы, где меньше 50-и объявлений, серые."},
 ];
 
 async function mapSection(data) {
@@ -446,7 +446,7 @@ async function mapSection(data) {
     const rows = data.districts.filter(d => metric.get(d) != null).sort((x, y) => metric.get(y) - metric.get(x));
     const li = d => `<li><button data-d="${d.district}"><span>${d.district}</span><span>${metric.fmt(metric.get(d))}</span></button></li>`;
     const el = document.getElementById("rank");
-    el.innerHTML = `<ul class="rank"><li class="h">${metric.top}</li>${rows.slice(0, 5).map(li).join("")}` +
+    el.innerHTML = `<div class="sub">${metric.unit}</div><ul class="rank"><li class="h">${metric.top}</li>${rows.slice(0, 5).map(li).join("")}` +
       `<li class="h">${metric.bottom}</li>${rows.slice(-5).reverse().map(li).join("")}</ul>`;
     el.querySelectorAll("button").forEach(b => b.addEventListener("click", () => select(b.dataset.d)));
   }
@@ -465,7 +465,7 @@ async function mapSection(data) {
     const c = data.city || {}, el = document.getElementById("card"), d = sel;
     const row = (k, v, s) => `<div class="r"><span>${k}</span><b>${v}</b></div>${s ? `<div class="n">${s}</div>` : ""}`;
     if (!d) {
-      el.innerHTML = `<h3>Москва</h3><div class="sub">однушки и двушки, все районы</div>` +
+      el.innerHTML = `<h3>Москва</h3><div class="sub">однушки и двушки, все районы, за все ${data.panel_days} дней панели</div>` +
         (c.ppm ? row("Цена метра, руб.", ru(c.ppm)) : "") +
         (c.pets_allowed_pct != null ? row("Можно с животными", pctS(c.pets_allowed_pct)) : "") +
         (c.life_days != null ? row("Срок жизни", c.life_days + " дн.") : "") +
