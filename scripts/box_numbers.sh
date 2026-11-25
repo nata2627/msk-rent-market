@@ -24,7 +24,15 @@ export TZ=Europe/Moscow
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO" || exit 1
 PY="$REPO/.venv/bin/python"
-say() { echo "$(date +%H:%M:%S) === $*"; }
+# Простой хоста за шаг в строке «готово», как в box_daily.sh.
+. "$REPO/scripts/psi.sh"
+psi_mark
+say() {
+  local tail=""
+  case "$*" in *"— готово"*|*"— СБОЙ"*) tail="$(psi_since)" ;; esac
+  echo "$(date +%H:%M:%S) === $*$tail"
+  psi_mark
+}
 notify() { bash "$REPO/scripts/box_notify.sh" "$@" >/dev/null 2>&1; }
 export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/rent_site_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20"
 REMOTE="git@github.com:nata2627/msk-rent-market.git"
@@ -53,7 +61,11 @@ $DAY
 fi
 
 say "Индекс"
-"$PY" -m src.panel_index >/dev/null 2>&1 || say "Индекс — СБОЙ, подставляю что есть"
+if "$PY" -m src.panel_index >/dev/null 2>&1; then
+  say "Индекс — готово"
+else
+  say "Индекс — СБОЙ, подставляю что есть"
+fi
 say "Числа README"
 if ! "$PY" -m src.readme_numbers >/dev/null 2>&1; then
   git checkout -- "${NUM_PATHS[@]}" 2>/dev/null

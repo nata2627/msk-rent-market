@@ -39,7 +39,16 @@ mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/box_$(date +%Y%m%d_%H%M).log"
 exec >>"$LOG" 2>&1
 
-say() { echo "$(date +%H:%M:%S) === $*"; }
+# Строка «готово» или «СБОЙ» несет простой хоста с прошлой строки, то
+# есть за сам шаг (scripts/psi.sh).
+. "$REPO/scripts/psi.sh"
+psi_mark
+say() {
+  local tail=""
+  case "$*" in *"— готово"*|*"— СБОЙ"*) tail="$(psi_since)" ;; esac
+  echo "$(date +%H:%M:%S) === $*$tail"
+  psi_mark
+}
 
 # Доклад наружу о сбое прогона. Отправщик сам молчит, если канал не
 # настроен, и сам не падает — поэтому вызов ничем не обёрнут. Вывод
@@ -207,17 +216,19 @@ docker run --rm \
     sleep 3
     export DISPLAY=:99
 
+    . /work/scripts/psi.sh
     step() {
       local name=\"\$1\"; shift
       echo \"\$(date +%H:%M:%S) === \$name\"
+      psi_mark
       \"\$@\"
       # Код снимается первой же строкой: любая подстановка, включая
       # \$(date), затёрла бы его собственным кодом возврата.
       local code=\$?
       if [ \"\$code\" = 0 ]; then
-        echo \"\$(date +%H:%M:%S) === \$name — готово\"
+        echo \"\$(date +%H:%M:%S) === \$name — готово\$(psi_since)\"
       else
-        echo \"\$(date +%H:%M:%S) === \$name — СБОЙ (код \$code), иду дальше\"
+        echo \"\$(date +%H:%M:%S) === \$name — СБОЙ (код \$code), иду дальше\$(psi_since)\"
         return 1
       fi
     }
