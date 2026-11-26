@@ -14,6 +14,14 @@
 -- а ошибка площадки — сама по себе наблюдение. Но в регрессию их пускать
 -- нельзя: на медиану один выброс не влияет, а на МНК влияет сильно.
 -- Границы взяты по распределению с запасом, а не назначены круглыми.
+--
+-- Дни обходов по комнатности считаются один раз на запрос, а не на каждое
+-- объявление. Без materialized Postgres разворачивал представление внутри
+-- lateral ниже и пересчитывал его для каждой из 98 тысяч строк: 25.11.2026
+-- выборка отсюда шла 460 с против 22 с без счетчика пропущенных обходов,
+-- и на этом стояла вся offer_scored (526 с из 13 мин витрин).
+with crawl_day as materialized (
+    select room_code, snapshot_date from {{ ref('room_crawl_day') }})
 select l.*
      , (   l.price < 10000
         or l.price > 5000000
@@ -126,7 +134,7 @@ left join {{ ref('room_coverage') }} rc
                          end
 left join lateral (
     select count(*) as crawls_missed
-      from {{ ref('room_crawl_day') }} cd
+      from crawl_day cd
      where cd.room_code = case when l.rooms_count between 1 and 6
                                     then l.rooms_count::text
                                when l.flat_type = 'studio'   then '7'
