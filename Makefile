@@ -3,7 +3,7 @@ PY   := $(VENV)/bin/python
 PG   := docker compose exec -T postgres psql -v ON_ERROR_STOP=1 \
           -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}
 
-.PHONY: nl-eval ask-dev ask-eval backup-check backup-restore cover shots hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
+.PHONY: nl-eval ask-dev ask-eval backup-check backup-restore cover shots hedonic hedonic-full pets-backfill disappeared-backfill terms-backfill fields districts-geo scrub weekly schedule-weekly unschedule-weekly schedule unschedule schedule-status catchup survival drops-analysis figures readme-numbers daily districts-ref dashboard pull-box index forecast cut-effect price-model site-data dbt-venv dbt-build dbt-test dbt-docs dbt-reconcile db-check notify-test notify-tg bot-run dedup help venv up down schema access narrow full dryrun xlsx pets-calibrate wayback parks marts checks report flats drops districts psql logs test selftest clean
 
 help:
 	@echo "make venv    — создать окружение и поставить зависимости"
@@ -42,6 +42,7 @@ help:
 	@echo "make forecast — бэктест и прогноз по Росстату: results/forecast.json и график"
 	@echo "make dbt-build — собрать витрины dbt в схеме dbt_marts и прогнать их тесты"
 	@echo "make dbt-reconcile — сверить витрины dbt со старыми построчно"
+	@echo "make db-check — проверить целостность таблиц и индексов (только чтение)"
 	@echo "make dbt-docs — документация и граф зависимостей витрин"
 	@echo "make checks  — проверки качества собранных данных"
 	@echo "make flats   — показать лучшие варианты в моём сегменте"
@@ -375,6 +376,9 @@ dashboard:
 # перелива он показывает данные на день переезда. Подробности в скрипте.
 pull-box:
 	bash scripts/pull_box.sh
+
+db-check: ## целостность таблиц raw/core и индексов, только чтение, около минуты
+	scripts/db_check.sh
 
 psql:
 	docker compose exec postgres psql -U $${POSTGRES_USER:-rent} -d $${POSTGRES_DB:-rent}

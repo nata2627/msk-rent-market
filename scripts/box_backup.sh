@@ -94,20 +94,50 @@ done
 docker exec rent_pg pg_isready -U rent -d rent -q 2>/dev/null \
   || fail "база rent_pg не ответила за две минуты"
 
+# Целостность базы до копии, минута чтения (scripts/db_check.sh). Порча
+# страницы не отменяет копию: ночные сырые строки обычно целы и нужны
+# больше всего, а полная на испорченной странице упадет сама. Тревога
+# уходит из самой проверки, с таблицей и номером страницы.
+if ! "$REPO/scripts/db_check.sh" --notify; then
+  say "проверка целостности нашла повреждения, копия идет дальше"
+fi
+
 # Поток в облако со сверкой md5. Первый аргумент срок в секундах, он
 # ставится на источник и на загрузку. pipefail ловит упавший pg_dump, а не
 # только упавший rclone.
+#
+# Грузится в .part и получает настоящее имя только после сверки. rcat
+# заливает все, что успел прочитать, и при упавшем источнике в облаке
+# остается обрубок под рабочим именем: 25.11.2026 pg_dump упал на
+# испорченной странице, и в full/ легли 810 МБ вместо 3 ГБ. Ротация
+# оставляет две последние полные и следующей удачной копией стерла бы
+# целую за 18.11, сохранив обрубок.
 upload() {
   local tmo="$1" dest="$2"; shift 2
-  local sum="$STATE/upload.md5"
-  timeout "$tmo" "$@" | age -r "$RECIPIENT" | tee >(md5sum | cut -d' ' -f1 >"$sum") \
-    | timeout "$tmo" "${RC[@]}" rcat "$dest" || return 1
+  local part="$dest.part" sum="$STATE/upload.md5"
+  if ! timeout "$tmo" "$@" | age -r "$RECIPIENT" | tee >(md5sum | cut -d' ' -f1 >"$sum") \
+    | timeout "$tmo" "${RC[@]}" rcat "$part"; then
+    "${RC[@]}" deletefile "$part" 2>/dev/null
+    return 1
+  fi
   sleep 2
   local theirs
-  theirs="$("${RC[@]}" md5sum "$dest" | cut -d' ' -f1)"
+  theirs="$("${RC[@]}" md5sum "$part" | cut -d' ' -f1)"
   [ -n "$theirs" ] && [ "$theirs" = "$(cat "$sum")" ] || {
-    say "md5 не сошелся: у нас $(cat "$sum"), в облаке ${theirs:-пусто}"; return 1; }
+    say "md5 не сошелся: у нас $(cat "$sum"), в облаке ${theirs:-пусто}"
+    "${RC[@]}" deletefile "$part" 2>/dev/null
+    return 1; }
+  "${RC[@]}" moveto "$part" "$dest" || return 1
   say "$dest: $("${RC[@]}" size --json "$dest" | sed 's/.*"bytes":\([0-9]*\).*/\1/') байт, md5 сошелся"
+}
+
+# Причина сбоя из журнала копии для тревоги. «Полная копия не загрузилась»
+# без причины 25.11.2026 стоила 16 часов: pg_dump уже тогда упал на
+# испорченной странице, а узнали об этом, только когда на ней же упал
+# сбор следующего дня.
+reason_since() {
+  tail -n "+$(( $1 + 1 ))" "$LOG" | grep -E 'pg_dump: (error|detail)|ERROR|rclone|Failed' \
+    | tail -n 2 | cut -c1-300
 }
 
 # Сырые строки одной таблицы за окно прогонов, сжатые. Отдельным bash,
@@ -116,6 +146,7 @@ RAW_ROWS='docker exec -i rent_pg psql -qtA -v ON_ERROR_STOP=1 -U rent -d rent -c
 
 if [ "$MODE" = "full" ] || { [ "$(cat "$STATE/full" 2>/dev/null)" != "$WEEK" ] && [ "$(date +%u)" -ge 3 ]; }; then
   say "Полная копия, неделя $WEEK"
+  FULL_MARK=$(wc -l <"$LOG")
   # Сбой полной не отменяет ночную: 18.11 полная упала на квоте Drive, и
   # выход сразу оставил без копии и сырые строки дня. Тревога после ночной,
   # полная повторится в следующий вечер: отметки недели в state нет.
@@ -133,6 +164,7 @@ if [ "$MODE" = "full" ] || { [ "$(cat "$STATE/full" 2>/dev/null)" != "$WEEK" ] &
     done
   else
     FULL_FAILED=1
+    FULL_WHY="$(reason_since "$FULL_MARK")"
     say "полная копия не загрузилась, иду к ночной"
   fi
 fi
@@ -145,6 +177,9 @@ for t in collection_run bucket offer_snapshot pets_hit; do
     || fail "ночная копия таблицы raw.$t не загрузилась"
 done
 echo "$TODAY" >"$STATE/daily"
-[ -n "${FULL_FAILED:-}" ] && fail "полная копия не загрузилась, ночная загружена, подробности в $(basename "$LOG")"
+[ -n "${FULL_FAILED:-}" ] && fail "полная копия не загрузилась, ночная загружена, подробности в $(basename "$LOG")${FULL_WHY:+
+
+Причина:
+$FULL_WHY}"
 say "Готово"
 exit 0

@@ -302,6 +302,20 @@ RUN_TAIL="$(tail -n "+$((LOG_MARK + 1))" "$LOG")"
 COLLECT_FAILED=0
 printf '%s\n' "$RUN_TAIL" | grep -q 'Сбор — СБОЙ' && COLLECT_FAILED=1
 
+# raw собран, core нет (etl/collect.py, _store). Сбоем прогона это не
+# считается, добор не нужен, но витрины и бот видят неполный день, пока
+# core не пересобран. Причина почти всегда в самой базе: 26.11.2026 это
+# была испорченная страница, починка в docs/operations.md.
+CORE_LINE="$(printf '%s\n' "$RUN_TAIL" | grep 'CORE НЕ ПОЛОН' | tail -n 1 | sed 's/.*CORE НЕ ПОЛОН: //' | cut -c1-500)"
+if [ -n "$CORE_LINE" ]; then
+  notify core-partial "Сбор прошел, но core записан не весь
+$(date '+%d.%m, %H:%M')
+
+$CORE_LINE
+
+Сырые данные целы. Проверить базу (make db-check) и пересобрать core из raw."
+fi
+
 # Отметка для добора (scripts/box_retry.sh): режим и дата, которые надо
 # пройти еще раз с --resume, пока не кончились сутки. Повторный сбой той
 # же даты только освежает время отметки, а счет попыток в ней остается:

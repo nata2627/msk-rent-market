@@ -17,6 +17,8 @@ import math
 import sys
 from datetime import date
 
+import psycopg
+
 from etl import config, db
 from etl.browser_client import BrowserClient
 from etl.cian_client import Blocked, CianClient, PageWithoutData
@@ -24,6 +26,11 @@ from etl.parse import parse_offer
 from etl.partition import Bucket, root_buckets, split
 
 log = logging.getLogger("collect")
+
+# Сколько страниц выдачи легли в raw, но не легли в core. Модульный
+# счетчик, а не аргумент: _store зовут из основного прохода, из прохода с
+# животными и из добора недобранных корзин.
+_core_failed = {"pages": 0, "first": None}
 
 # Сколько сбойных корзин терпеть, прежде чем признать происходящее
 # блокировкой. Одна-две — обычные сетевые неприятности; десяток подряд
@@ -109,6 +116,7 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
         buckets_failed = 0
         buckets_skipped = 0
         status, note = "ok", None
+        _core_failed.update(pages=0, first=None)
 
         # Продолжение прерванного обхода. Пока площадка отдаёт выдачу
         # рывками, обход падает через несколько минут, и без этого каждый
@@ -340,6 +348,13 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
             status = "failed"
             note = f"{type(err).__name__}: {err}"
             log.exception("Непредвиденная ошибка, обход остановлен")
+            # Ошибка базы оставляет транзакцию прерванной, и finish_run ниже
+            # падал следом: 26.11.2026 прогон так и остался в 'running'.
+            if not dry_run:
+                try:
+                    conn.rollback()
+                except psycopg.Error:
+                    pass
 
         # Обход, где не прочиталась ни одна корзина, успешным не считается.
         # Иначе день попадает в покрытие: прогон 149 от 12.10.2026 закрылся
@@ -352,6 +367,17 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
             note = (f"ни одна из {buckets_total} корзин не прочиталась — "
                     f"собирать было нечего")
             log.error(note)
+
+        # raw полон, core нет. Статус остается ok: день собран, и добор
+        # повторять нечего. Но и снятия по такому дню не считаются: у
+        # объявлений, чья страница не легла в core, last_seen_date
+        # не сдвинулась, и они выглядели бы пропавшими.
+        if _core_failed["pages"]:
+            core_note = (f"core не записан для {_core_failed['pages']} страниц, "
+                         f"raw полон, нужен make rebuild; первая ошибка "
+                         f"{_core_failed['first']}")
+            note = f"{note}; {core_note}" if note else core_note
+            log.error("CORE НЕ ПОЛОН: %s", core_note)
 
         if not dry_run and pets_pass and status == "ok":
             db.set_pets_pass_complete(conn, run_id, pets_complete)
@@ -384,7 +410,7 @@ def run(mode: str, snapshot_date: date, max_requests: int | None,
             # двухкомнатные целиком, и вывод об их исчезновении столь же
             # законен; а вот записать в снятые трёхкомнатные, на которые
             # не смотрели, нельзя — это и защищает список комнатностей.
-            if status == "ok":
+            if status == "ok" and not _core_failed["pages"]:
                 collected_rooms = rooms or (config.NARROW_ROOM_CODES
                                             if mode == "narrow"
                                             else config.ROOM_CODES)
@@ -485,11 +511,26 @@ def _store(conn, run_id, bucket_id, snapshot_date, offers, page, dry_run) -> int
         return len(offers)
 
     db.save_snapshots(conn, run_id, bucket_id, snapshot_date, offers, page)
-    parsed = [p for p in (parse_offer(o, snapshot_date) for o in offers) if p]
-    db.upsert_offers(conn, parsed, snapshot_date)
-    db.upsert_observations(conn, parsed, run_id)
-    db.upsert_metro(conn, parsed)
-    db.upsert_photos(conn, parsed)
+    # Сбой записи в core не останавливает обход. raw уже записан и
+    # закоммичен выше, а core целиком пересобирается из raw (make rebuild),
+    # тогда как несобранный день не вернуть. 26.11.2026 испорченная
+    # страница core.offer_photo уронила обход на 76% сегмента, хотя ни
+    # одной строки raw она не задевала.
+    try:
+        parsed = [p for p in (parse_offer(o, snapshot_date) for o in offers) if p]
+        db.upsert_offers(conn, parsed, snapshot_date)
+        db.upsert_observations(conn, parsed, run_id)
+        db.upsert_metro(conn, parsed)
+        db.upsert_photos(conn, parsed)
+    except psycopg.Error as err:
+        conn.rollback()
+        _core_failed["pages"] += 1
+        if _core_failed["first"] is None:
+            _core_failed["first"] = f"{type(err).__name__}: {err}"[:300]
+            log.exception("core не записан, raw записан, обход идет дальше")
+        else:
+            log.error("core не записан (%d-я страница): %s",
+                      _core_failed["pages"], type(err).__name__)
     return len(offers)
 
 
