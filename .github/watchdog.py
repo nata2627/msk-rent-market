@@ -33,8 +33,18 @@ def send(text: str) -> None:
     if not token or not chat:
         print("::warning::секретов телеграма нет, сообщение не отправлено")
         return
-    data = urllib.parse.urlencode({"chat_id": chat, "text": text}).encode()
-    urllib.request.urlopen(f"https://api.telegram.org/bot{token}/sendMessage", data, timeout=20)
+    # Дежурный (секрет NOTIFY_TG_ALERT_CHATS, через запятую) получает то же.
+    # Его недоступный чат не должен глушить сообщение владелице.
+    extra = [c.strip() for c in os.environ.get("TG_ALERT_CHATS", "").split(",") if c.strip()]
+    for i, c in enumerate([chat, *[c for c in extra if c != chat]]):
+        data = urllib.parse.urlencode({"chat_id": c, "text": text}).encode()
+        try:
+            urllib.request.urlopen(f"https://api.telegram.org/bot{token}/sendMessage",
+                                   data, timeout=20)
+        except OSError as err:
+            if i == 0:
+                raise
+            print(f"::warning::дежурному не ушло: {err}")
 
 
 def beat_problem(beat: int, now: datetime) -> tuple[str | None, bool]:

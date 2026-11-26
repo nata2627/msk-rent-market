@@ -333,3 +333,31 @@ def test_flush_выбрасывает_старше_суток(tmp_path):
     assert outbox(tmp_path) == []
     assert not calls.exists() or "старое" not in calls.read_text()
     assert "больше суток" in notify_log(tmp_path)
+
+
+# ---------------------------------------------------------------------
+# Дежурный: дополнительные чаты в NOTIFY_TG_ALERT_CHATS
+# ---------------------------------------------------------------------
+TG = {"NOTIFY_TG_TOKEN": "123:secret", "NOTIFY_TG_CHAT": "111"}
+
+
+def test_дежурный_получает_то_же(tmp_path):
+    bindir, calls = fake_curl(tmp_path)
+    run(["disk-low", "мало места"], tmp_path, bindir=bindir,
+        env={**TG, "NOTIFY_TG_ALERT_CHATS": "222, 333"})
+    sent = calls.read_text()
+    for chat in ("111", "222", "333"):
+        assert f"chat_id={chat}" in sent
+
+
+def test_без_дежурного_только_владелица(tmp_path):
+    bindir, calls = fake_curl(tmp_path)
+    run(["disk-low", "мало места"], tmp_path, bindir=bindir, env=TG)
+    assert calls.read_text().count("chat_id=") == 1
+
+
+def test_владелица_в_списке_дежурных_не_дублируется(tmp_path):
+    bindir, calls = fake_curl(tmp_path)
+    run(["disk-low", "мало места"], tmp_path, bindir=bindir,
+        env={**TG, "NOTIFY_TG_ALERT_CHATS": "111"})
+    assert calls.read_text().count("chat_id=111") == 1

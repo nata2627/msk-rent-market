@@ -153,3 +153,22 @@ def test_токен_не_попадает_в_журнал(settings, tmp_path):
     app.setup_logging(settings)
     assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
     assert logging.getLogger("httpcore").getEffectiveLevel() >= logging.WARNING
+
+
+# ---------------------------------------------------------------------
+# Дежурный
+# ---------------------------------------------------------------------
+
+def test_дежурного_нет_по_умолчанию(settings):
+    assert settings.operators == frozenset()
+    assert access.who(settings, "555") == "stranger"
+
+
+def test_дежурный_с_правами_владелицы(tmp_path):
+    (tmp_path / ".env").write_text(
+        "NOTIFY_TG_CHAT=42\nNOTIFY_TG_GUESTS=7\nNOTIFY_TG_OPERATORS=555\n")
+    s = config.load({}, repo=tmp_path)
+    assert access.who(s, "555") == "owner"
+    assert access.who(s, "7") == "guest"
+    replies, _ = handle(s, "555", "/log")
+    assert not any("Это команда владелицы" in r for r in replies)

@@ -68,6 +68,10 @@ from_env() {
 NTFY_URL="${NOTIFY_NTFY_URL:-$(from_env NOTIFY_NTFY_URL)}"
 TG_TOKEN="${NOTIFY_TG_TOKEN:-$(from_env NOTIFY_TG_TOKEN)}"
 TG_CHAT="${NOTIFY_TG_CHAT:-$(from_env NOTIFY_TG_CHAT)}"
+# Дополнительные чаты тем же ботом, через запятую: дежурный на время, когда
+# владелица без связи. Получают все то же, что NOTIFY_TG_CHAT. Снять
+# дежурство значит стереть строку в .env, код трогать не нужно.
+TG_ALERT_CHATS="${NOTIFY_TG_ALERT_CHATS-$(from_env NOTIFY_TG_ALERT_CHATS)}"
 
 # Окно ограничения частоты: одно сообщение на тип события за N часов.
 #
@@ -134,6 +138,11 @@ fi
 TRANSPORTS=""
 [ -n "$NTFY_URL" ] && TRANSPORTS="ntfy"
 [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] && TRANSPORTS="${TRANSPORTS:+$TRANSPORTS }telegram"
+if [ -n "$TG_TOKEN" ]; then
+  for c in ${TG_ALERT_CHATS//,/ }; do
+    [ "$c" = "$TG_CHAT" ] || TRANSPORTS="${TRANSPORTS:+$TRANSPORTS }tg:$c"
+  done
+fi
 
 if [ -z "$TRANSPORTS" ]; then
   note "канал не настроен, сообщение осталось здесь («${KEY}»): $TEXT"
@@ -218,15 +227,17 @@ for TRANSPORT in $TRANSPORTS; do
       # Цель печатается урезанной: у ntfy секрет — само имя топика.
       TARGET="ntfy, топик $(printf '%s' "${NTFY_URL##*/}" | cut -c1-3)***"
       ;;
-    telegram)
+    telegram|tg:*)
+      CHAT="$TG_CHAT"
+      [ "$TRANSPORT" = telegram ] || CHAT="${TRANSPORT#tg:}"
       CODE="$(curl -sS -o /dev/null -w '%{http_code}' \
         --connect-timeout 5 --max-time 10 --retry 1 --retry-delay 3 \
-        -d "chat_id=$TG_CHAT" -d 'disable_web_page_preview=true' \
+        -d "chat_id=$CHAT" -d 'disable_web_page_preview=true' \
         -d 'parse_mode=HTML' \
         --data-urlencode "text=$(printf '%s' "$TEXT" | to_html)" \
         "https://api.telegram.org/bot$TG_TOKEN/sendMessage" 2>"$ERR_FILE")"
       # У телеграма секрет — всё после двоеточия в токене.
-      TARGET="телеграм, чат $TG_CHAT, бот ${TG_TOKEN%%:*}:***"
+      TARGET="телеграм, чат $CHAT, бот ${TG_TOKEN%%:*}:***"
       ;;
   esac
   CODE="${CODE:-000}"

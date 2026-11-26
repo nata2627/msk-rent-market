@@ -18,7 +18,10 @@ STALE_SECONDS = 900
 
 def who(settings: Settings, chat: str) -> str:
     # Чужой это не враг: бота находят поиском. Ему просто ничего не уходит.
-    if chat == settings.owner:
+    # Дежурный получает роль владелицы целиком: делить права на «можно
+    # смотреть журнал, но нельзя снять замок» значило бы оставить его
+    # без рук ровно тогда, когда он нужен.
+    if chat == settings.owner or chat in settings.operators:
         return "owner"
     if chat in settings.guests:
         return "guest"

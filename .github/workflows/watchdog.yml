@@ -20,6 +20,7 @@
 # обход или выгрузка падают.
 #
 # Секреты NOTIFY_TG_TOKEN и NOTIFY_TG_CHAT те же, что в .env бокса.
+# NOTIFY_TG_ALERT_CHATS необязателен: чаты дежурного через запятую.
 name: watchdog
 
 on:
@@ -42,6 +43,7 @@ jobs:
         env:
           TG_TOKEN: ${{ secrets.NOTIFY_TG_TOKEN }}
           TG_CHAT: ${{ secrets.NOTIFY_TG_CHAT }}
+          TG_ALERT_CHATS: ${{ secrets.NOTIFY_TG_ALERT_CHATS }}
           EVENT: ${{ github.event_name }}
           BEAT_LATE_H: ${{ vars.BEAT_LATE_H }}
         run: |

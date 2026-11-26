@@ -29,6 +29,10 @@ class Settings:
     box_repo: Path
     state_dir: Path
     log_file: Path
+    # Дежурный с правами владелицы на время, когда она без связи:
+    # /log, /unlock, /catchup и лечение машины. Снять значит стереть строку
+    # NOTIFY_TG_OPERATORS в .env и перезапустить бота.
+    operators: frozenset[str] = frozenset()
 
     @property
     def dev(self) -> bool:
@@ -56,6 +60,8 @@ def load(environ: Mapping[str, str] | None = None, repo: Path = REPO) -> Setting
         raise ValueError(f"RENT_BOT_ENV={env}: ожидается dev или prod")
     guests = frozenset(g.strip() for g in values.get("NOTIFY_TG_GUESTS", "").split(",")
                        if g.strip())
+    operators = frozenset(o.strip() for o in values.get("NOTIFY_TG_OPERATORS", "").split(",")
+                          if o.strip())
     # Состояние тестового бота отдельно от боевого: фильтры, отложенные и
     # отметка опроса у них свои, и проверка не должна портить боевые.
     state = "bot_dev" if env == "dev" else "bot"
@@ -69,4 +75,5 @@ def load(environ: Mapping[str, str] | None = None, repo: Path = REPO) -> Setting
         box_repo=box_repo(repo),
         state_dir=repo / "data" / state,
         log_file=repo / "data" / "logs" / log,
+        operators=operators,
     )
